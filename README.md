@@ -1,0 +1,45 @@
+# Server Services Manager
+
+A robust, web-based process manager for controlling server services and terminals.
+
+## Features
+
+- **Service Management**: Start, stop, restart, and monitor services.
+- **Web Terminal**: Integrated multi-tab terminal for direct server control.
+- **Real-time Updates**: Live status updates and logs via WebSockets.
+- **Responsive UI**: Modern, dark-themed interface built with Tailwind CSS.
+
+## Installation
+
+1.  Clone the repository:
+    ```bash
+    git clone https://github.com/yourusername/server-services-manager.git
+    cd server-services-manager
+    ```
+
+2.  Install dependencies:
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+## Usage
+
+1.  Start the server:
+    ```bash
+    python server.py
+    ```
+    Or use the startup script:
+    ```bash
+    ./start_process_manager.sh
+    ```
+
+2.  Open your browser and navigate to `http://localhost:5000` (or the configured port).
+
+## Configuration
+
+- **Services**: Define your services in `config.yaml`.
+- **Environment**: Use `.env` for environment variables (e.g., `PORT`, `SECRET_KEY`).
+
+## License
+
+MIT
