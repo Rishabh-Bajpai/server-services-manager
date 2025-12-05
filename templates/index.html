@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Process Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Custom scrollbar for terminal */
+        .terminal-scroll::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .terminal-scroll::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+
+        .terminal-scroll::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 4px;
+        }
+
+        .terminal-scroll::-webkit-scrollbar-thumb:hover {
+            background: #444;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-950 text-gray-100 min-h-screen p-8 font-sans">
+    <div id="app" class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <header class="mb-8 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-3 bg-blue-600 rounded-lg text-white">
+                    <i data-lucide="layout-dashboard" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold tracking-tight">Process Manager</h1>
+                    <p class="text-gray-400 text-sm">Control Center</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <button onclick="openModal()"
+                    class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    Add Service
+                </button>
+                <div id="connection-status"
+                    class="px-3 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-500">
+                    Disconnected
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Grid -->
+        <main id="program-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            <!-- Programs will be injected here -->
+        </main>
+    </div>
+
+    <!-- Modal -->
+    <div id="modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4">
+        <div class="bg-gray-900 text-gray-100 rounded-xl border border-gray-800 shadow-lg w-full max-w-md p-6 relative">
+            <button onclick="closeModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+
+            <h2 id="modal-title" class="text-xl font-bold mb-4">Add New Service</h2>
+
+            <form id="service-form" class="space-y-4">
+                <input type="hidden" id="original-name">
+                <div>
+                    <label class="block text-sm font-medium mb-1">Name</label>
+                    <input type="text" id="name" required
+                        class="w-full bg-gray-800 rounded-md border border-gray-700 p-2 text-sm focus:border-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Command</label>
+                    <input type="text" id="command" required placeholder="e.g. python main.py"
+                        class="w-full bg-gray-800 rounded-md border border-gray-700 p-2 text-sm font-mono focus:border-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Working Directory</label>
+                    <input type="text" id="cwd" required placeholder="/path/to/dir"
+                        class="w-full bg-gray-800 rounded-md border border-gray-700 p-2 text-sm font-mono focus:border-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Environment Variables</label>
+                    <textarea id="environment" placeholder="KEY=VALUE (one per line)"
+                        class="w-full bg-gray-800 rounded-md border border-gray-700 p-2 text-sm font-mono h-24 focus:border-blue-500 focus:outline-none"></textarea>
+                </div>
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="autostart" checked
+                        class="rounded bg-gray-800 border-gray-700 text-blue-600 focus:ring-blue-500">
+                    <label for="autostart" class="text-sm">Auto-start on launch</label>
+                </div>
+                <button type="submit"
+                    class="w-full bg-blue-600 text-white py-2 rounded-md font-medium hover:bg-blue-700 transition-colors">
+                    Save Service
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const socket = io({
+            transports: ['websocket'],
+            upgrade: false
+        });
+        const grid = document.getElementById('program-grid');
+        const connectionStatus = document.getElementById('connection-status');
+        let programsState = {}; // Store local state like auto-scroll per program
+
+        // Icons initialization
+        lucide.createIcons();
+
+        socket.on('connect', () => {
+            connectionStatus.textContent = 'System Online';
+            connectionStatus.className = 'px-3 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-500';
+        });
+
+        socket.on('disconnect', () => {
+            connectionStatus.textContent = 'Disconnected';
+            connectionStatus.className = 'px-3 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-500';
+        });
+
+        socket.on('update', (msg) => {
+            renderPrograms(msg.data);
+        });
+
+        function renderPrograms(programs) {
+            if (programs.length === 0) {
+                grid.innerHTML = '<div class="col-span-full text-center py-12 text-gray-500">No programs configured. Click "Add Service" to get started.</div>';
+                return;
+            }
+
+            // Diffing logic could be better, but for now we re-render if needed or update content
+            // To avoid losing scroll position/state, we try to update existing elements
+
+            programs.forEach(p => {
+                let card = document.getElementById(`card-${p.name}`);
+                if (!card) {
+                    card = createCard(p);
+                    grid.appendChild(card);
+                    // Initialize state
+                    programsState[p.name] = { autoScroll: true, collapsed: false };
+                } else {
+                    updateCard(card, p);
+                }
+            });
+
+            // Remove deleted
+            const currentNames = programs.map(p => p.name);
+            Array.from(grid.children).forEach(child => {
+                const name = child.id.replace('card-', '');
+                if (!currentNames.includes(name) && child.id.startsWith('card-')) {
+                    child.remove();
+                }
+            });
+
+            lucide.createIcons();
+        }
+
+        function getStatusColor(status) {
+            switch (status) {
+                case 'running': return 'text-green-500 bg-green-500/10 border-green-500/20';
+                case 'stopped': return 'text-gray-500 bg-gray-500/10 border-gray-500/20';
+                case 'starting': return 'text-blue-500 bg-blue-500/10 border-blue-500/20';
+                case 'stopping': return 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20';
+                case 'failed': return 'text-red-500 bg-red-500/10 border-red-500/20';
+                default: return 'text-gray-500';
+            }
+        }
+
+        function createCard(p) {
+            // Initialize state if new
+            if (!programsState[p.name]) {
+                programsState[p.name] = { autoScroll: true, collapsed: false };
+            }
+
+            const div = document.createElement('div');
+            div.id = `card-${p.name}`;
+            div.className = 'bg-gray-900 rounded-xl border border-gray-800 overflow-hidden flex flex-col transition-all duration-300';
+            // Height is dynamic based on collapse
+            div.style.height = programsState[p.name].collapsed ? 'auto' : '500px';
+
+            div.innerHTML = `
+                <div class="p-4 border-b border-gray-800 flex items-center justify-between bg-gray-900/50">
+                    <div class="flex items-center gap-3">
+                        <button onclick="toggleCollapse('${p.name}')" class="text-gray-400 hover:text-white transition-colors">
+                            <i data-lucide="${programsState[p.name].collapsed ? 'chevron-right' : 'chevron-down'}" class="w-5 h-5 collapse-icon"></i>
+                        </button>
+                        <div class="status-indicator w-2 h-2 rounded-full bg-gray-500"></div>
+                        <h3 class="font-semibold text-lg">${p.name}</h3>
+                    </div>
+                    <div class="status-badge px-2 py-1 rounded text-xs font-medium border uppercase tracking-wider">
+                        ${p.status}
+                    </div>
+                </div>
+                
+                <div class="terminal-container flex-1 bg-black p-4 overflow-y-auto font-mono text-sm terminal-scroll ${programsState[p.name].collapsed ? 'hidden' : ''}">
+                    <div class="logs text-green-400 whitespace-pre-wrap break-all"></div>
+                </div>
+
+                <div class="p-4 border-t border-gray-800 bg-gray-900/50 ${programsState[p.name].collapsed ? 'hidden' : ''}">
+                    <div class="flex items-center justify-between">
+                        <div class="text-xs text-gray-500">
+                            Restarts: <span class="restart-count">${p.restart_count}</span>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="toggleAutoScroll('${p.name}')" class="p-2 bg-gray-500/10 text-gray-400 rounded-md hover:bg-gray-500/20 transition-colors" title="Toggle Auto-scroll">
+                                <i data-lucide="${programsState[p.name].autoScroll ? 'lock' : 'unlock'}" class="w-4 h-4 autoscroll-icon"></i>
+                            </button>
+                            <div class="w-px h-8 bg-gray-800 mx-1"></div>
+                            <button onclick="control('${p.name}', 'start')" class="btn-start p-2 bg-green-500/10 text-green-500 rounded-md hover:bg-green-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Start">
+                                <i data-lucide="play" class="w-4 h-4"></i>
+                            </button>
+                            <button onclick="control('${p.name}', 'stop')" class="btn-stop p-2 bg-red-500/10 text-red-500 rounded-md hover:bg-red-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Stop">
+                                <i data-lucide="square" class="w-4 h-4"></i>
+                            </button>
+                            <button onclick="control('${p.name}', 'restart')" class="btn-restart p-2 bg-blue-500/10 text-blue-500 rounded-md hover:bg-blue-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Restart">
+                                <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+                            </button>
+                            <div class="w-px h-8 bg-gray-800 mx-1"></div>
+                            <button onclick="editService('${p.name}')" class="btn-edit p-2 bg-gray-500/10 text-gray-400 rounded-md hover:bg-gray-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Edit">
+                                <i data-lucide="pencil" class="w-4 h-4"></i>
+                            </button>
+                            <button onclick="deleteService('${p.name}')" class="btn-delete p-2 bg-red-500/10 text-red-500 rounded-md hover:bg-red-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Delete">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            return div;
+        }
+
+        function updateCard(card, p) {
+            // Update Status Badge
+            const badge = card.querySelector('.status-badge');
+            badge.className = `status-badge px-2 py-1 rounded text-xs font-medium border uppercase tracking-wider ${getStatusColor(p.status)}`;
+            badge.textContent = p.status;
+
+            // Update Status Indicator
+            const indicator = card.querySelector('.status-indicator');
+            indicator.className = `status-indicator w-2 h-2 rounded-full ${p.status === 'running' ? 'bg-green-500' : 'bg-gray-500'}`;
+
+            // Update Restarts
+            const restartCount = card.querySelector('.restart-count');
+            if (restartCount) restartCount.textContent = p.restart_count;
+
+            // State
+            const state = programsState[p.name];
+
+            // Update Collapse UI
+            const collapseIcon = card.querySelector('.collapse-icon');
+            if (collapseIcon) collapseIcon.setAttribute('data-lucide', state.collapsed ? 'chevron-right' : 'chevron-down');
+
+            card.style.height = state.collapsed ? 'auto' : '500px';
+
+            const terminal = card.querySelector('.terminal-container');
+            const footer = card.querySelector('.p-4.border-t');
+
+            if (state.collapsed) {
+                terminal.classList.add('hidden');
+                footer.classList.add('hidden');
+            } else {
+                terminal.classList.remove('hidden');
+                footer.classList.remove('hidden');
+
+                // Update Logs only if visible
+                const logsContainer = card.querySelector('.logs');
+                logsContainer.textContent = p.logs.join('\n');
+
+                // Auto-scroll
+                if (state.autoScroll) {
+                    terminal.scrollTop = terminal.scrollHeight;
+                }
+
+                // Update Auto-scroll icon
+                const lockIcon = card.querySelector('.autoscroll-icon');
+                if (lockIcon) lockIcon.setAttribute('data-lucide', state.autoScroll ? 'lock' : 'unlock');
+            }
+
+            // Button Logic
+            const btnStart = card.querySelector('.btn-start');
+            const btnStop = card.querySelector('.btn-stop');
+            const btnRestart = card.querySelector('.btn-restart');
+            const btnEdit = card.querySelector('.btn-edit');
+            const btnDelete = card.querySelector('.btn-delete');
+
+            const isRunning = p.status === 'running' || p.status === 'starting';
+            const isStopped = p.status === 'stopped' || p.status === 'failed';
+
+            if (btnStart) btnStart.disabled = isRunning;
+            if (btnStop) btnStop.disabled = isStopped;
+            if (btnRestart) btnRestart.disabled = isStopped; // As requested
+            if (btnEdit) btnEdit.disabled = !isStopped;
+            if (btnDelete) btnDelete.disabled = !isStopped;
+        }
+
+        function toggleCollapse(name) {
+            if (programsState[name]) {
+                programsState[name].collapsed = !programsState[name].collapsed;
+                // Trigger re-render or just update class? 
+                // Since we rely on updateCard for state, we can wait for next update or force one.
+                // Let's force update by finding card and calling updateCard with current data?
+                // We don't have current data easily. 
+                // But updateCard is called every second. 
+                // For immediate feedback, let's manually toggle classes.
+                const card = document.getElementById(`card-${name}`);
+                if (card) {
+                    // We need the program object to call updateCard properly, or we just hack it.
+                    // Better to wait for next tick? 1s is long.
+                    // Let's just toggle classes manually here to match updateCard logic.
+                    const state = programsState[name];
+                    const collapseIcon = card.querySelector('.collapse-icon');
+                    const terminalWrapper = card.querySelector('.terminal-wrapper');
+                    const terminal = card.querySelector('.terminal-container');
+                    const footer = card.querySelector('.p-4.border-t');
+
+                    card.style.height = state.collapsed ? 'auto' : '500px';
+                    if (collapseIcon) {
+                        collapseIcon.setAttribute('data-lucide', state.collapsed ? 'chevron-right' : 'chevron-down');
+                        lucide.createIcons();
+                    }
+
+                    if (state.collapsed) {
+                        if (terminalWrapper) terminalWrapper.classList.add('hidden');
+                        footer.classList.add('hidden');
+                    } else {
+                        if (terminalWrapper) terminalWrapper.classList.remove('hidden');
+                        footer.classList.remove('hidden');
+                        // Scroll to bottom if auto-scroll
+                        if (state.autoScroll) terminal.scrollTop = terminal.scrollHeight;
+                    }
+                }
+            }
+        }
+
+        function toggleAutoScroll(name) {
+            if (programsState[name]) {
+                programsState[name].autoScroll = !programsState[name].autoScroll;
+                // Immediate feedback
+                const card = document.getElementById(`card-${name}`);
+                const lockIcon = card.querySelector('.autoscroll-icon');
+                if (lockIcon) {
+                    lockIcon.setAttribute('data-lucide', programsState[name].autoScroll ? 'lock' : 'unlock');
+                    lucide.createIcons();
+                }
+            }
+        }
+
+        async function deleteService(name) {
+            if (!confirm(`Are you sure you want to delete service "${name}"?`)) return;
+
+            try {
+                const res = await fetch(`/programs/${name}`, { method: 'DELETE' });
+                if (!res.ok) {
+                    const err = await res.json();
+                    alert(err.error || 'Failed to delete');
+                }
+                // UI update will happen via websocket
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+
+        async function control(name, action) {
+            await fetch(`/programs/${name}/${action}`, { method: 'POST' });
+        }
+
+        // Modal Logic
+        const modal = document.getElementById('modal');
+        const form = document.getElementById('service-form');
+        let isEditing = false;
+
+        function openModal() {
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.getElementById('modal-title').textContent = 'Add New Service';
+            form.reset();
+            document.getElementById('name').disabled = false;
+            document.getElementById('original-name').value = '';
+            isEditing = false;
+        }
+
+        function closeModal() {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        async function editService(name) {
+            // Fetch current config? Or assume we have it? 
+            // We don't have full config in websocket update (only logs/status).
+            // We need to fetch it or store it. 
+            // Let's fetch from server or just use what we know?
+            // Actually, the websocket update doesn't have command/cwd.
+            // We should add an endpoint to get program details or include it in WS (heavy).
+            // Let's just add a GET /programs endpoint that returns full config?
+            // Or just fetch all programs once on load?
+
+            // For now, let's just fetch all programs to find this one.
+            const res = await fetch('/programs');
+            const data = await res.json();
+            // Wait, the GET /programs in app.py returns status/restart_count too, but maybe not config details?
+            // Let's check app.py... it returns name, status... 
+            // I need to update app.py to return full config for editing.
+
+            // Assuming app.py is updated to return config details in a separate endpoint or list.
+            // Let's assume I'll fix app.py to return full details in GET /programs or a new GET /programs/<name>
+
+            // Quick fix: I'll implement GET /programs/<name> in app.py
+            const pRes = await fetch(`/programs/${name}/config`);
+            if (!pRes.ok) {
+                alert("Could not fetch program details");
+                return;
+            }
+            const p = await pRes.json();
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.getElementById('modal-title').textContent = 'Edit Service';
+
+            document.getElementById('name').value = p.name;
+            document.getElementById('name').disabled = false; // Allow renaming
+            document.getElementById('original-name').value = p.name;
+            document.getElementById('command').value = p.command;
+            document.getElementById('cwd').value = p.cwd;
+            document.getElementById('autostart').checked = p.autostart;
+
+            // Env
+            const envStr = Object.entries(p.environment || {})
+                .map(([k, v]) => `${k}=${v}`)
+                .join('\n');
+            document.getElementById('environment').value = envStr;
+
+            isEditing = true;
+        }
+
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+
+            const envDict = {};
+            document.getElementById('environment').value.split('\n').forEach(line => {
+                const [key, ...val] = line.split('=');
+                if (key && val) envDict[key.trim()] = val.join('=').trim();
+            });
+
+            const data = {
+                name: document.getElementById('name').value,
+                command: document.getElementById('command').value,
+                cwd: document.getElementById('cwd').value,
+                autostart: document.getElementById('autostart').checked,
+                environment: envDict
+            };
+
+            const url = isEditing ? `/programs/${data.name}` : '/programs';
+            const method = isEditing ? 'PUT' : 'POST';
+
+            try {
+                const res = await fetch(url, {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    alert(err.error || 'Failed to save');
+                } else {
+                    closeModal();
+                }
+            } catch (err) {
+                alert(err.message);
+            }
+        };
+    </script>
+</body>
+
+</html>
