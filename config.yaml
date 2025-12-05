@@ -1,0 +1,11 @@
+programs:
+- autostart: true
+  command: conda run -n comfyui --no-capture-output python main.py --listen
+  cwd: /home/rishabh/ComfyUI
+  environment: {}
+  name: ComfyUI
+- autostart: false
+  command: localsend
+  cwd: /home/rishabh/Downloads
+  environment: {}
+  name: localsend
