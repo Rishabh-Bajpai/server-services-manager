@@ -4,10 +4,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Process Manager</title>
+    <title>Server Services Manager</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
     <style>
         /* Custom scrollbar for terminal */
         .terminal-scroll::-webkit-scrollbar {
@@ -29,16 +32,16 @@
     </style>
 </head>
 
-<body class="bg-gray-950 text-gray-100 min-h-screen p-8 font-sans">
-    <div id="app" class="max-w-7xl mx-auto">
+<body class="bg-gray-950 text-gray-100 h-screen font-sans overflow-hidden">
+    <div id="app" class="flex flex-col h-screen overflow-hidden">
         <!-- Header -->
-        <header class="mb-8 flex items-center justify-between">
+        <header class="flex-none p-8 pb-4 flex items-center justify-between bg-gray-950 z-10">
             <div class="flex items-center gap-3">
                 <div class="p-3 bg-blue-600 rounded-lg text-white">
                     <i data-lucide="layout-dashboard" class="w-6 h-6"></i>
                 </div>
                 <div>
-                    <h1 class="text-2xl font-bold tracking-tight">Process Manager</h1>
+                    <h1 class="text-2xl font-bold tracking-tight">Server Services Manager</h1>
                     <p class="text-gray-400 text-sm">Control Center</p>
                 </div>
             </div>
@@ -55,10 +58,42 @@
             </div>
         </header>
 
-        <!-- Main Grid -->
-        <main id="program-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            <!-- Programs will be injected here -->
-        </main>
+        <!-- Main Content (Split View) -->
+        <div class="flex-1 flex flex-col min-h-0 relative">
+
+            <!-- Services Pane (Top) -->
+            <div id="services-pane" class="flex-1 overflow-y-auto min-h-[100px] p-8 pt-0">
+                <main id="program-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                    <!-- Programs will be injected here -->
+                </main>
+            </div>
+
+            <!-- Resizer Handle -->
+            <div id="resizer"
+                class="h-2 bg-gray-900 border-y border-gray-800 cursor-row-resize hover:bg-blue-600/20 hover:border-blue-500/50 transition-colors flex items-center justify-center shrink-0 z-20">
+                <div class="w-16 h-1 rounded-full bg-gray-700"></div>
+            </div>
+
+            <!-- Terminal Pane (Bottom) -->
+            <div id="terminal-pane" class="h-[400px] min-h-[150px] bg-gray-950 flex flex-col p-8 pt-2">
+                <section class="flex-1 bg-gray-900 rounded-xl border border-gray-800 overflow-hidden flex flex-col">
+                    <div class="flex items-center justify-between bg-gray-900/50 border-b border-gray-800 p-2 shrink-0">
+                        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar" id="terminal-tabs">
+                            <!-- Tabs injected here -->
+                        </div>
+                        <button onclick="createNewTerminal()"
+                            class="p-2 hover:bg-gray-800 rounded-md text-gray-400 hover:text-white transition-colors"
+                            title="New Terminal">
+                            <i data-lucide="plus" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                    <div id="terminal-container" class="flex-1 bg-black relative">
+                        <!-- Terminals injected here -->
+                    </div>
+                </section>
+            </div>
+
+        </div>
     </div>
 
     <!-- Modal -->
@@ -106,6 +141,58 @@
     </div>
 
     <script>
+        // Resizing Logic
+        const resizer = document.getElementById('resizer');
+        const servicesPane = document.getElementById('services-pane');
+        const terminalPane = document.getElementById('terminal-pane');
+        const appContainer = document.querySelector('.flex-1.flex-col.min-h-0'); // The main container
+
+        let isResizing = false;
+
+        if (resizer) {
+            resizer.addEventListener('mousedown', (e) => {
+                isResizing = true;
+                document.body.style.cursor = 'row-resize';
+                resizer.classList.add('bg-blue-600/20');
+                e.preventDefault(); // Prevent text selection
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+
+                // Calculate new height for terminal pane from bottom
+                const containerRect = appContainer.getBoundingClientRect();
+                const newTerminalHeight = containerRect.bottom - e.clientY;
+
+                // Constraints
+                const MIN_TERMINAL_HEIGHT = 150;
+                const MAX_TERMINAL_HEIGHT = containerRect.height - 150; // Keep space for services
+
+                if (newTerminalHeight >= MIN_TERMINAL_HEIGHT && newTerminalHeight <= MAX_TERMINAL_HEIGHT) {
+                    terminalPane.style.height = `${newTerminalHeight}px`;
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (isResizing) {
+                    isResizing = false;
+                    document.body.style.cursor = '';
+                    resizer.classList.remove('bg-blue-600/20');
+
+                    // Trigger resize for terminals to refit
+                    if (typeof activeTerminalId !== 'undefined' && activeTerminalId && terminals[activeTerminalId]) {
+                        const session = terminals[activeTerminalId];
+                        session.fitAddon.fit();
+                        const dims = session.fitAddon.proposeDimensions();
+                        if (dims) {
+                            socket.emit('terminal_resize', { id: activeTerminalId, cols: dims.cols, rows: dims.rows });
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+    <script>
         const socket = io({
             transports: ['websocket'],
             upgrade: false
@@ -113,6 +200,11 @@
         const grid = document.getElementById('program-grid');
         const connectionStatus = document.getElementById('connection-status');
         let programsState = {}; // Store local state like auto-scroll per program
+
+        // Terminal State
+        let terminals = {}; // { id: { term: Terminal, fitAddon: FitAddon, container: HTMLElement } }
+        let activeTerminalId = null;
+        let terminalCount = 0;
 
         // Icons initialization
         lucide.createIcons();
@@ -129,6 +221,18 @@
 
         socket.on('update', (msg) => {
             renderPrograms(msg.data);
+        });
+
+        // Terminal Socket Events
+        socket.on('terminal_output', (msg) => {
+            const session = terminals[msg.id];
+            if (session) {
+                session.term.write(msg.data);
+            }
+        });
+
+        socket.on('terminal_closed', (msg) => {
+            removeTerminal(msg.id);
         });
 
         function renderPrograms(programs) {
@@ -478,6 +582,141 @@
                 alert(err.message);
             }
         };
+    </script>
+    <script>
+        // Terminal Logic
+
+        function createNewTerminal() {
+            terminalCount++;
+            const id = `term-${Date.now()}`;
+            const name = `Terminal ${terminalCount}`;
+
+            // Create Tab
+            const tab = document.createElement('button');
+            tab.id = `tab-${id}`;
+            tab.className = 'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700';
+            tab.onclick = () => switchTab(id);
+            tab.innerHTML = `
+                <i data-lucide="terminal-square" class="w-4 h-4"></i>
+                <span>${name}</span>
+                <span onclick="event.stopPropagation(); closeTerminal('${id}')" class="hover:text-red-400 p-0.5 rounded-full hover:bg-red-500/10 transition-colors">
+                    <i data-lucide="x" class="w-3 h-3"></i>
+                </span>
+            `;
+            document.getElementById('terminal-tabs').appendChild(tab);
+
+            // Create Container
+            const container = document.createElement('div');
+            container.id = `container-${id}`;
+            container.className = 'absolute inset-0 hidden';
+            document.getElementById('terminal-container').appendChild(container);
+
+            // Initialize xterm
+            const term = new Terminal({
+                theme: {
+                    background: '#000000',
+                    foreground: '#f3f4f6',
+                    cursor: '#ffffff',
+                    selectionBackground: 'rgba(255, 255, 255, 0.3)'
+                },
+                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                fontSize: 14,
+                cursorBlink: true
+            });
+
+            const fitAddon = new FitAddon.FitAddon();
+            term.loadAddon(fitAddon);
+            term.open(container);
+
+            // Store session
+            terminals[id] = { term, fitAddon, container, tab };
+
+            // Handle Input
+            term.onData(data => {
+                socket.emit('terminal_input', { id, data });
+            });
+
+            // Handle Resize
+            // We need to wait for visibility to fit properly
+
+            // Notify server
+            socket.emit('terminal_create', { id });
+
+            // Switch to new tab
+            switchTab(id);
+
+            lucide.createIcons();
+        }
+
+        function switchTab(id) {
+            if (activeTerminalId === id) return;
+
+            // Hide current
+            if (activeTerminalId && terminals[activeTerminalId]) {
+                terminals[activeTerminalId].container.classList.add('hidden');
+                terminals[activeTerminalId].tab.classList.remove('bg-gray-700', 'text-white');
+                terminals[activeTerminalId].tab.classList.add('bg-gray-800', 'text-gray-400');
+            }
+
+            // Show new
+            activeTerminalId = id;
+            const session = terminals[id];
+            if (session) {
+                session.container.classList.remove('hidden');
+                session.tab.classList.remove('bg-gray-800', 'text-gray-400');
+                session.tab.classList.add('bg-gray-700', 'text-white');
+
+                // Fit terminal
+                requestAnimationFrame(() => {
+                    session.fitAddon.fit();
+                    const dims = session.fitAddon.proposeDimensions();
+                    if (dims) {
+                        socket.emit('terminal_resize', { id, cols: dims.cols, rows: dims.rows });
+                    }
+                    session.term.focus();
+                });
+            }
+        }
+
+        function closeTerminal(id) {
+            socket.emit('terminal_close', { id });
+            removeTerminal(id);
+        }
+
+        function removeTerminal(id) {
+            const session = terminals[id];
+            if (!session) return;
+
+            // Cleanup DOM
+            session.tab.remove();
+            session.container.remove();
+            session.term.dispose();
+
+            delete terminals[id];
+
+            if (activeTerminalId === id) {
+                activeTerminalId = null;
+                // Switch to last available tab if any
+                const keys = Object.keys(terminals);
+                if (keys.length > 0) {
+                    switchTab(keys[keys.length - 1]);
+                }
+            }
+        }
+
+        // Window Resize Handler
+        window.addEventListener('resize', () => {
+            if (activeTerminalId && terminals[activeTerminalId]) {
+                const session = terminals[activeTerminalId];
+                session.fitAddon.fit();
+                const dims = session.fitAddon.proposeDimensions();
+                if (dims) {
+                    socket.emit('terminal_resize', { id: activeTerminalId, cols: dims.cols, rows: dims.rows });
+                }
+            }
+        });
+
+        // Initialize one terminal by default? Maybe not, let user choose.
     </script>
 </body>
 

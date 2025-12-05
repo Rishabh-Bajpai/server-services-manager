@@ -4,6 +4,7 @@ eventlet.monkey_patch()
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO, emit
 from app.process_manager import ProcessManager, ProgramConfig
+from app.terminal_manager import TerminalManager
 import logging
 import os
 import threading
@@ -18,6 +19,7 @@ app.config['SECRET_KEY'] = 'secret!'
 socketio = SocketIO(app, cors_allowed_origins="*", max_http_buffer_size=10*1024*1024)
 
 pm = ProcessManager()
+tm = TerminalManager(socketio)
 
 @app.route('/')
 def index():
@@ -127,6 +129,34 @@ def test_connect():
 @socketio.on('disconnect')
 def test_disconnect():
     logger.info('Client disconnected')
+
+# Terminal Events
+@socketio.on('terminal_create')
+def handle_terminal_create(data):
+    session_id = data.get('id')
+    if session_id:
+        tm.create_session(session_id)
+
+@socketio.on('terminal_input')
+def handle_terminal_input(data):
+    session_id = data.get('id')
+    input_data = data.get('data')
+    if session_id and input_data:
+        tm.write(session_id, input_data)
+
+@socketio.on('terminal_resize')
+def handle_terminal_resize(data):
+    session_id = data.get('id')
+    cols = data.get('cols')
+    rows = data.get('rows')
+    if session_id and cols and rows:
+        tm.resize(session_id, cols, rows)
+
+@socketio.on('terminal_close')
+def handle_terminal_close(data):
+    session_id = data.get('id')
+    if session_id:
+        tm.close(session_id)
 
 if __name__ == '__main__':
     # Load config and start programs
