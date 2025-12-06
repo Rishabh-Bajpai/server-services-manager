@@ -28,6 +28,7 @@ class TerminalSession:
             # Set some environment variables if needed
             env = os.environ.copy()
             env["TERM"] = "xterm-256color"
+            os.chdir(os.path.expanduser('~'))
             os.execvpe(self.cmd, [self.cmd], env)
         else:
             # Parent process

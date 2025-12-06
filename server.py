@@ -9,6 +9,8 @@ import logging
 import os
 import threading
 import time
+from werkzeug.utils import secure_filename
+from flask import send_file, send_from_directory
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -107,6 +109,91 @@ def control_program(name, action):
         return jsonify({"error": "Invalid action"}), 400
         
     return jsonify({"status": action, "name": name})
+
+# File Management Endpoints
+@app.route('/api/files', methods=['GET'])
+def list_files():
+    try:
+        path = request.args.get('path', '.')
+        # Simple security check to prevent traversing up too far if needed, 
+        # but for this tool we assume full access to the project dir is desired.
+        # We will root it to the current working directory.
+        base_dir = os.path.expanduser('~')
+        target_dir = os.path.abspath(os.path.join(base_dir, path))
+        
+        if not target_dir.startswith(base_dir):
+            return jsonify({"error": "Access denied"}), 403
+            
+        if not os.path.exists(target_dir):
+             return jsonify({"error": "Directory not found"}), 404
+
+        items = []
+        for entry in os.scandir(target_dir):
+            items.append({
+                "name": entry.name,
+                "is_dir": entry.is_dir(),
+                "size": entry.stat().st_size if not entry.is_dir() else 0,
+                "modified": entry.stat().st_mtime
+            })
+        
+        # Sort folders first, then files
+        items.sort(key=lambda x: (not x['is_dir'], x['name'].lower()))
+        
+        return jsonify({
+            "current_path": os.path.relpath(target_dir, base_dir),
+            "files": items
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/files/upload', methods=['POST'])
+def upload_file():
+    try:
+        if 'file' not in request.files:
+            return jsonify({"error": "No file part"}), 400
+        
+        file = request.files['file']
+        path = request.form.get('path', '.')
+        
+        if file.filename == '':
+            return jsonify({"error": "No selected file"}), 400
+            
+        if file:
+            filename = secure_filename(file.filename)
+            base_dir = os.path.expanduser('~')
+            target_dir = os.path.abspath(os.path.join(base_dir, path))
+            
+            if not target_dir.startswith(base_dir):
+                return jsonify({"error": "Access denied"}), 403
+
+            file.save(os.path.join(target_dir, filename))
+            return jsonify({"status": "uploaded", "filename": filename})
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/files/download', methods=['GET'])
+def download_file():
+    try:
+        path = request.args.get('path', '')
+        if not path:
+             return jsonify({"error": "No path specified"}), 400
+             
+        base_dir = os.path.expanduser('~')
+        target_path = os.path.abspath(os.path.join(base_dir, path))
+        
+        if not target_path.startswith(base_dir):
+            return jsonify({"error": "Access denied"}), 403
+            
+        if not os.path.exists(target_path):
+            return jsonify({"error": "File not found"}), 404
+            
+        if os.path.isdir(target_path):
+             return jsonify({"error": "Cannot download directory"}), 400
+
+        return send_file(target_path, as_attachment=True)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 def background_thread():
     """Example of how to send server generated events to clients."""
