@@ -15,7 +15,7 @@ A robust, web-based process manager for controlling server services and terminal
 
 1.  Clone the repository:
     ```bash
-    git clone https://github.com/yourusername/server-services-manager.git
+    git clone https://github.com/Rishabh-Bajpai/server-services-manager.git
     cd server-services-manager
     ```
 
