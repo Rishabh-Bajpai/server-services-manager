@@ -40,7 +40,7 @@ A robust, web-based process manager for controlling server services and terminal
    ./start_process_manager.sh
    ```
 
-2. Open your browser and navigate to `http://localhost:5000` (or the configured port).
+2. Open your browser and navigate to `http://localhost:8001` (or the configured port).
 
 ## Configuration
 
