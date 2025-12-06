@@ -8,6 +8,7 @@ A robust, web-based process manager for controlling server services and terminal
 
 - **Service Management**: Start, stop, restart, and monitor services.
 - **Web Terminal**: Integrated multi-tab terminal for direct server control.
+- **File Manager**: Upload and download files to/from the server.
 - **Real-time Updates**: Live status updates and logs via WebSockets.
 - **Responsive UI**: Modern, dark-themed interface built with Tailwind CSS.
 
