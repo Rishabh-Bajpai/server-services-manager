@@ -67,6 +67,8 @@ A robust, web-based process manager for controlling server services and terminal
   ```
 
 - **Environment**: Use `.env` for environment variables (e.g., `PORT`, `SECRET_KEY`).
+- **Autostart on boot**: Edit and add the startup script (start_process_manager.sh) to your system's startup applications.
+![Autostart Screenshot](resources/Autostart_screenshot.png)
 
 ## License
 
