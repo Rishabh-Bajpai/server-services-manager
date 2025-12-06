@@ -2,6 +2,8 @@
 
 A robust, web-based process manager for controlling server services and terminals.
 
+![App Screenshot](resources/readme_screenshot.png)
+
 ## Features
 
 - **Service Management**: Start, stop, restart, and monitor services.
