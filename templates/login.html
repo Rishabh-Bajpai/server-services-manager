@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Server Services Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body class="bg-gray-950 text-gray-100 h-screen flex items-center justify-center font-sans">
+    <div class="w-full max-w-md p-8 bg-gray-900 rounded-xl border border-gray-800 shadow-2xl">
+        <div class="flex flex-col items-center mb-8">
+            <div class="p-3 bg-blue-600 rounded-lg text-white mb-4">
+                <i data-lucide="lock" class="w-8 h-8"></i>
+            </div>
+            <h1 class="text-2xl font-bold tracking-tight">Access Restricted</h1>
+            <p class="text-gray-400 text-sm mt-1">Please enter your password to continue</p>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        {% for message in messages %}
+        <div
+            class="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3 text-red-500 text-sm">
+            <i data-lucide="alert-circle" class="w-4 h-4 shrink-0"></i>
+            {{ message }}
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <form action="/login" method="POST" class="space-y-6">
+            <div>
+                <label for="password" class="block text-sm font-medium mb-2 text-gray-300">Password</label>
+                <div class="relative">
+                    <input type="password" id="password" name="password" required autofocus
+                        class="w-full bg-gray-950 border border-gray-800 rounded-lg py-2.5 px-4 pl-11 text-gray-100 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 transition-colors placeholder-gray-600"
+                        placeholder="Enter password...">
+                    <i data-lucide="key" class="w-4 h-4 text-gray-500 absolute left-4 top-3"></i>
+                </div>
+            </div>
+
+            <button type="submit"
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2">
+                <span>Login</span>
+                <i data-lucide="arrow-right" class="w-4 h-4"></i>
+            </button>
+        </form>
+
+        <div class="mt-6 text-center">
+            <p class="text-xs text-gray-500">
+                Server Services Manager &copy; 2025
+            </p>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>

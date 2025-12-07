@@ -10,6 +10,7 @@ A robust, web-based process manager for controlling server services and terminal
 - **Web Terminal**: Integrated multi-tab terminal for direct server control.
 - **File Manager**: Upload and download files to/from the server.
 - **Real-time Updates**: Live status updates and logs via WebSockets.
+- **Authentication**: Simple password protection for access control.
 - **Responsive UI**: Modern, dark-themed interface built with Tailwind CSS.
 
 ## Installation
@@ -26,6 +27,16 @@ A robust, web-based process manager for controlling server services and terminal
    ```bash
    pip install -r requirements.txt
    ```
+
+3. Configure authentication:
+
+   Create a `.env` file in the root directory:
+
+   ```bash
+   echo "PASSWORD=your_secure_password" > .env
+   ```
+
+   > Default password is `admin` if not configured.
 
 ## Usage
 
@@ -67,7 +78,13 @@ A robust, web-based process manager for controlling server services and terminal
       name: <app>
   ```
 
-- **Environment**: Use `.env` for environment variables (e.g., `PORT`, `SECRET_KEY`).
+- **Environment**: Use `.env` to configure the application password and other secrets (optional).
+  
+  ```bash
+  PASSWORD=your_secure_password
+  SECRET_KEY=secret!
+  ```
+
 - **Autostart on boot**: Edit and add the startup script (start_process_manager.sh) to your system's startup applications.
 ![Autostart Screenshot](resources/Autostart_screenshot.png)
 
