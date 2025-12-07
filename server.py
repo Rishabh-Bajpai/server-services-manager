@@ -1,7 +1,7 @@
 import eventlet
 eventlet.monkey_patch()
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
 from flask_socketio import SocketIO, emit
 from app.process_manager import ProcessManager, ProgramConfig
 from app.terminal_manager import TerminalManager
@@ -11,6 +11,10 @@ import threading
 import time
 from werkzeug.utils import secure_filename
 from flask import send_file, send_from_directory
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -22,6 +26,33 @@ socketio = SocketIO(app, cors_allowed_origins="*", max_http_buffer_size=10*1024*
 
 pm = ProcessManager()
 tm = TerminalManager(socketio)
+
+@app.before_request
+def require_login():
+    allowed_routes = ['login', 'static']
+    if request.endpoint not in allowed_routes and 'logged_in' not in session:
+        return redirect(url_for('login'))
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        password = request.form.get('password')
+        # Default to 'admin' if not set in .env
+        env_password = os.getenv('PASSWORD', 'admin')
+        
+        if password == env_password:
+            session['logged_in'] = True
+            return redirect(url_for('index'))
+        else:
+            flash('Invalid password')
+            return redirect(url_for('login'))
+            
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.pop('logged_in', None)
+    return redirect(url_for('login'))
 
 @app.route('/')
 def index():
