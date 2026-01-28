@@ -146,25 +146,53 @@ def control_program(name, action):
 def list_files():
     try:
         path = request.args.get('path', '.')
-        # Simple security check to prevent traversing up too far if needed, 
-        # but for this tool we assume full access to the project dir is desired.
-        # We will root it to the current working directory.
-        base_dir = os.path.expanduser('~')
-        target_dir = os.path.abspath(os.path.join(base_dir, path))
+        
+        # Use simple expansion for base
+        base_dir_raw = os.path.expanduser('~')
+        base_dir = os.path.realpath(base_dir_raw)
+        
+        # Resolve target
+        target_dir_raw = os.path.join(base_dir, path)
+        target_dir = os.path.realpath(target_dir_raw)
+        
+        logger.info(f"List files request: path='{path}'")
+        logger.info(f"Base: raw='{base_dir_raw}', real='{base_dir}'")
+        logger.info(f"Target: raw='{target_dir_raw}', real='{target_dir}'")
         
         if not target_dir.startswith(base_dir):
-            return jsonify({"error": "Access denied"}), 403
+            logger.warning(f"Access denied: {target_dir} is not under {base_dir}")
+            return jsonify({
+                "error": "Access denied", 
+                "details": f"Target {target_dir} is not inside {base_dir}"
+            }), 403
             
         if not os.path.exists(target_dir):
-             return jsonify({"error": "Directory not found"}), 404
+             logger.warning(f"Directory not found: {target_dir}")
+             return jsonify({
+                 "error": "Directory not found",
+                 "details": f"Path {target_dir} does not exist"
+             }), 404
 
         items = []
         for entry in os.scandir(target_dir):
+            try:
+                # Safe access to file stats
+                is_dir = entry.is_dir()
+                stat = entry.stat()
+                size = stat.st_size if not is_dir else 0
+                modified = stat.st_mtime
+            except OSError as e:
+                # Handle broken symlinks or permission errors
+                logger.warning(f"Error accessing {entry.name}: {e}")
+                is_dir = False
+                size = 0
+                modified = 0
+
             items.append({
                 "name": entry.name,
-                "is_dir": entry.is_dir(),
-                "size": entry.stat().st_size if not entry.is_dir() else 0,
-                "modified": entry.stat().st_mtime
+                "is_dir": is_dir,
+                "size": size,
+                "modified": modified
             })
         
         # Sort folders first, then files
@@ -175,6 +203,7 @@ def list_files():
             "files": items
         })
     except Exception as e:
+        logger.error(f"Error listing files: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/files/upload', methods=['POST'])
@@ -286,6 +315,6 @@ if __name__ == '__main__':
     thread.start()
     
     try:
-        socketio.run(app, host='0.0.0.0', port=8001, allow_unsafe_werkzeug=True)
+        socketio.run(app, host='0.0.0.0', port=8881, allow_unsafe_werkzeug=True)
     except KeyboardInterrupt:
         pm.stop_all()
