@@ -10,8 +10,8 @@ from app.process_manager import ProcessManager, ProgramConfig
 from app.terminal_manager import TerminalManager
 import logging
 import os
-import threading
 import time
+import threading
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask import send_file, send_from_directory
@@ -67,6 +67,10 @@ def logout():
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/monitor')
+def monitor():
+    return render_template('monitor.html')
 
 @app.route('/programs', methods=['GET'])
 def get_programs():
@@ -364,6 +368,114 @@ def handle_terminal_close(data):
     if session_id:
         tm.close(session_id)
 
+_net_prev = {}
+_disk_io_prev = None
+
+def system_monitor_thread():
+    global _net_prev, _disk_io_prev
+    psutil.cpu_percent(interval=None)
+    psutil.cpu_percent(interval=None, percpu=True)
+
+    while True:
+        cpu_total = psutil.cpu_percent(interval=0)
+        cpu_cores = psutil.cpu_percent(interval=0, percpu=True)
+        mem = psutil.virtual_memory()
+        swap = psutil.swap_memory()
+        load = os.getloadavg()
+        boot = psutil.boot_time()
+
+        disks = []
+        for p in psutil.disk_partitions(all=False):
+            try:
+                u = psutil.disk_usage(p.mountpoint)
+                disks.append({
+                    "device": p.device,
+                    "mount": p.mountpoint,
+                    "fstype": p.fstype,
+                    "total": u.total,
+                    "used": u.used,
+                    "free": u.free,
+                    "percent": u.percent
+                })
+            except PermissionError:
+                pass
+
+        disk_io = psutil.disk_io_counters()
+        if _disk_io_prev is not None:
+            disk_read_speed = disk_io.read_bytes - _disk_io_prev.read_bytes
+            disk_write_speed = disk_io.write_bytes - _disk_io_prev.write_bytes
+        else:
+            disk_read_speed = 0
+            disk_write_speed = 0
+        _disk_io_prev = disk_io
+
+        net = []
+        net_counters = psutil.net_io_counters(pernic=True)
+        for iface, counters in net_counters.items():
+            if iface == 'lo':
+                continue
+            prev = _net_prev.get(iface)
+            sent_speed = counters.bytes_sent - prev.bytes_sent if prev else 0
+            recv_speed = counters.bytes_recv - prev.bytes_recv if prev else 0
+            net.append({
+                "interface": iface,
+                "sent_speed": sent_speed,
+                "recv_speed": recv_speed,
+                "bytes_sent": counters.bytes_sent,
+                "bytes_recv": counters.bytes_recv,
+                "packets_sent": counters.packets_sent,
+                "packets_recv": counters.packets_recv
+            })
+            _net_prev[iface] = counters
+
+        procs = []
+        for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent', 'status']):
+            try:
+                info = p.info
+                if info['cpu_percent'] is not None:
+                    procs.append({
+                        "pid": info['pid'],
+                        "name": info['name'],
+                        "cpu": round(info['cpu_percent'], 1),
+                        "memory": round(info['memory_percent'] or 0, 1),
+                        "status": info['status']
+                    })
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        procs.sort(key=lambda x: x['cpu'], reverse=True)
+        procs = procs[:15]
+
+        sys_info = os.uname()
+        socketio.emit('system_stats', {
+            "cpu": {
+                "percent": cpu_total,
+                "cores": cpu_cores,
+                "load": [round(l, 2) for l in load]
+            },
+            "memory": {
+                "total": mem.total,
+                "available": mem.available,
+                "used": mem.used,
+                "percent": mem.percent,
+                "swap_total": swap.total,
+                "swap_used": swap.used,
+                "swap_percent": swap.percent
+            },
+            "disks": disks,
+            "disk_io": {
+                "read_speed": disk_read_speed,
+                "write_speed": disk_write_speed
+            },
+            "network": net,
+            "processes": procs,
+            "system": {
+                "hostname": sys_info.nodename,
+                "kernel": sys_info.release,
+                "uptime": int(time.time() - boot)
+            }
+        })
+        socketio.sleep(2)
+
 def shutdown_handler(signum=None, frame=None):
     logger.info(f"Received signal {signum}. Shutting down...")
     pm.stop_all()
@@ -384,6 +496,10 @@ if __name__ == '__main__':
     # Start background thread for updates
     thread = threading.Thread(target=background_thread, daemon=True)
     thread.start()
+    
+    # Start system monitor thread
+    monitor_thread = threading.Thread(target=system_monitor_thread, daemon=True)
+    monitor_thread.start()
     
     logger.info(f"Server starting on 0.0.0.0:8881")
     try:
