@@ -3,8 +3,10 @@ import threading
 import os
 import time
 import signal
+import json
 import logging
 import yaml
+from collections import deque
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict
 from enum import Enum
@@ -20,6 +22,13 @@ class ProgramStatus(Enum):
     STOPPING = "stopping"
     FAILED = "failed"
 
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
 @dataclass
 class ProgramConfig:
     name: str
@@ -32,27 +41,30 @@ class Program:
     def __init__(self, config: ProgramConfig):
         self.config = config
         self.process: Optional[subprocess.Popen] = None
+        self._attached_pid: Optional[int] = None
         self.status = ProgramStatus.STOPPED
         self.restart_count = 0
         self.last_restart_time = 0
-        self.logs: List[str] = []
+        self.logs: deque = deque(maxlen=10000)
         self.max_logs = 10000
         self._stop_event = threading.Event()
+        self._lock = threading.Lock()
         self._monitor_thread: Optional[threading.Thread] = None
 
     def start(self):
-        if self.status in [ProgramStatus.RUNNING, ProgramStatus.STARTING]:
-            return
+        with self._lock:
+            if self.status in [ProgramStatus.RUNNING, ProgramStatus.STARTING]:
+                return
+            if self._monitor_thread and self._monitor_thread.is_alive():
+                self._monitor_thread.join(timeout=1)
 
-        self.status = ProgramStatus.STARTING
-        self._stop_event.clear()
+            self._stop_event.clear()
         
         env = os.environ.copy()
         env.update(self.config.environment)
 
         try:
             logger.info(f"Starting program: {self.config.name}")
-            # Use preexec_fn=os.setsid to create a new process group for clean killing
             self.process = subprocess.Popen(
                 self.config.command,
                 cwd=self.config.cwd,
@@ -61,12 +73,12 @@ class Program:
                 stderr=subprocess.PIPE,
                 env=env,
                 preexec_fn=os.setsid,
-                text=True, # Text mode for easier reading
-                bufsize=1  # Line buffered
+                text=True,
+                bufsize=1
             )
-            self.status = ProgramStatus.RUNNING
-            self.restart_count = 0 
-            self.last_restart_time = time.time()
+            with self._lock:
+                self.status = ProgramStatus.RUNNING
+                self.last_restart_time = time.time()
             
             self._monitor_thread = threading.Thread(target=self._monitor, daemon=True)
             self._monitor_thread.start()
@@ -74,33 +86,70 @@ class Program:
 
         except Exception as e:
             logger.error(f"Failed to start {self.config.name}: {e}")
-            self.status = ProgramStatus.FAILED
+            with self._lock:
+                self.status = ProgramStatus.FAILED
             self.log(f"Error starting program: {e}")
 
-    def stop(self):
-        if self.status == ProgramStatus.STOPPED:
-            return
-
-        self.status = ProgramStatus.STOPPING
-        self._stop_event.set()
-        
+    def _get_pid(self) -> Optional[int]:
         if self.process:
-            logger.info(f"Stopping {self.config.name}...")
-            try:
-                # Send SIGTERM to process group
-                os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
-                try:
-                    self.process.wait(timeout=5.0)
-                except subprocess.TimeoutExpired:
-                    logger.warning(f"Force killing {self.config.name}")
-                    os.killpg(os.getpgid(self.process.pid), signal.SIGKILL)
-            except ProcessLookupError:
-                pass # Already dead
-            
-            self.process = None
+            return self.process.pid
+        if self._attached_pid:
+            return self._attached_pid
+        return None
+
+    def _is_pid_alive(self, pid: int) -> bool:
+        return _pid_alive(pid)
+
+    def stop(self):
+        with self._lock:
+            if self.status == ProgramStatus.STOPPED:
+                return
+            self._stop_event.set()
         
-        self.status = ProgramStatus.STOPPED
+        pid = self._get_pid()
+        if pid:
+            logger.info(f"Stopping {self.config.name} (PID: {pid})...")
+            try:
+                pgid = os.getpgid(pid)
+                os.killpg(pgid, signal.SIGTERM)
+                for _ in range(5):
+                    if not self._is_pid_alive(pid):
+                        break
+                    time.sleep(1)
+                else:
+                    logger.warning(f"Force killing {self.config.name}")
+                    try:
+                        os.killpg(pgid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+            except ProcessLookupError:
+                pass
+            except OSError:
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                    for _ in range(5):
+                        if not _pid_alive(pid):
+                            break
+                        time.sleep(1)
+                    else:
+                        os.kill(pid, signal.SIGKILL)
+                except OSError:
+                    pass
+        
+        with self._lock:
+            self.process = None
+            self._attached_pid = None
+            self.status = ProgramStatus.STOPPED
+            self.restart_count = 0
         logger.info(f"Stopped {self.config.name}")
+
+    def attach(self, pid: int):
+        self._attached_pid = pid
+        self._stop_event.clear()
+        self.status = ProgramStatus.RUNNING
+        self.log(f"Re-attached to running process (PID: {pid})")
+        self._monitor_thread = threading.Thread(target=self._monitor_attached, daemon=True)
+        self._monitor_thread.start()
 
     def restart(self):
         self.stop()
@@ -148,6 +197,24 @@ class Program:
         # Auto-restart logic
         self._handle_restart()
 
+    def _monitor_attached(self):
+        while self.status == ProgramStatus.RUNNING:
+            if self._stop_event.is_set():
+                self.status = ProgramStatus.STOPPED
+                return
+            pid = self._attached_pid
+            if pid is None or not self._is_pid_alive(pid):
+                try:
+                    os.waitpid(pid, os.WNOHANG)
+                except OSError:
+                    pass
+                self.status = ProgramStatus.FAILED
+                self.log(f"Process exited (PID: {pid})")
+                self._attached_pid = None
+                self._handle_restart()
+                return
+            time.sleep(1)
+
     def _handle_restart(self):
         if self._stop_event.is_set():
             return
@@ -179,10 +246,11 @@ class Program:
 
     def log(self, message: str):
         self.logs.append(message)
-        if len(self.logs) > self.max_logs:
-            self.logs.pop(0)
 
 class ProcessManager:
+    STATE_DIR = os.path.expanduser("~/.server-services-manager")
+    STATE_FILE = os.path.join(STATE_DIR, "state.json")
+
     def __init__(self):
         self.programs: Dict[str, Program] = {}
         self.config_path = "config.yaml"
@@ -206,6 +274,56 @@ class ProcessManager:
             )
             self.programs[config.name] = Program(config)
 
+    def save_state(self):
+        state = []
+        for p in self.programs.values():
+            pid = p._get_pid()
+            if pid and p._is_pid_alive(pid):
+                state.append({
+                    "name": p.config.name,
+                    "pid": pid,
+                    "command": p.config.command,
+                    "cwd": p.config.cwd,
+                    "autostart": p.config.autostart,
+                    "environment": p.config.environment
+                })
+        os.makedirs(self.STATE_DIR, exist_ok=True)
+        with open(self.STATE_FILE, "w") as f:
+            json.dump({"programs": state}, f)
+        logger.info(f"Saved state for {len(state)} running programs")
+
+    def load_state_and_reattach(self):
+        try:
+            with open(self.STATE_FILE, "r") as f:
+                state = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return
+
+        reattached = 0
+        for entry in state.get("programs", []):
+            pid = entry["pid"]
+            name = entry["name"]
+            if not _pid_alive(pid):
+                logger.info(f"PID {pid} ({name}) no longer alive, skipping re-attach")
+                continue
+            if name not in self.programs:
+                logger.info(f"Program '{name}' from state has no config, skipping")
+                continue
+            program = self.programs[name]
+            program.attach(pid)
+            reattached += 1
+            logger.info(f"Re-attached to {name} (PID: {pid})")
+
+        if reattached:
+            logger.info(f"Re-attached to {reattached} running programs")
+        else:
+            logger.info("No running programs to re-attach to")
+
+        try:
+            os.remove(self.STATE_FILE)
+        except OSError:
+            pass
+
     def start_all(self):
         for program in self.programs.values():
             if program.config.autostart:
@@ -213,7 +331,7 @@ class ProcessManager:
 
     def stop_all(self):
         logger.info("Stopping all programs...")
-        # Threading makes this synchronous effectively if we wait
+        self.save_state()
         for program in self.programs.values():
             program.stop()
 

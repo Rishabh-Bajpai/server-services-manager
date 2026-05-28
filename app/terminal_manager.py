@@ -5,6 +5,10 @@ import subprocess
 import threading
 import time
 import logging
+import signal
+import fcntl
+import termios
+import struct
 from typing import Dict, Optional
 
 logger = logging.getLogger("TerminalManager")
@@ -20,18 +24,14 @@ class TerminalSession:
         self.thread = None
 
     def start(self):
-        # Create a new PTY
         self.pid, self.fd = pty.fork()
         
         if self.pid == 0:
-            # Child process
-            # Set some environment variables if needed
             env = os.environ.copy()
             env["TERM"] = "xterm-256color"
             os.chdir(os.path.expanduser('~'))
             os.execvpe(self.cmd, [self.cmd], env)
         else:
-            # Parent process
             self.active = True
             self.thread = threading.Thread(target=self._read_loop, daemon=True)
             self.thread.start()
@@ -40,16 +40,15 @@ class TerminalSession:
     def _read_loop(self):
         while self.active:
             try:
-                # Wait for data to be available
                 r, _, _ = select.select([self.fd], [], [], 0.1)
                 if self.fd in r:
-                    data = os.read(self.fd, 1024)
+                    data = os.read(self.fd, 4096)
                     if not data:
                         break
-                    # Emit data to specific room or client
-                    # We'll emit to the client who owns this session
-                    # For simplicity in this v1, we might just emit to a room named after session_id
-                    self.socketio.emit('terminal_output', {'id': self.id, 'data': data.decode('utf-8', errors='ignore')})
+                    self.socketio.emit('terminal_output', {
+                        'id': self.id,
+                        'data': data.decode('utf-8', errors='ignore')
+                    })
             except OSError:
                 break
             except Exception as e:
@@ -68,9 +67,6 @@ class TerminalSession:
     def resize(self, cols: int, rows: int):
         if self.active and self.fd:
             try:
-                import fcntl
-                import termios
-                import struct
                 winsize = struct.pack("HHHH", rows, cols, 0, 0)
                 fcntl.ioctl(self.fd, termios.TIOCSWINSZ, winsize)
             except Exception as e:
@@ -92,7 +88,7 @@ class TerminalSession:
 
         if self.pid:
             try:
-                os.kill(self.pid, 9) # Force kill if needed, or wait
+                os.kill(self.pid, signal.SIGKILL)
                 os.waitpid(self.pid, os.WNOHANG)
             except OSError:
                 pass
@@ -107,7 +103,7 @@ class TerminalManager:
 
     def create_session(self, session_id: str):
         if session_id in self.sessions:
-            return # Already exists
+            return
             
         session = TerminalSession(session_id, self.socketio)
         session.start()

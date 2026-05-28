@@ -1,3 +1,6 @@
+import signal
+import sys
+
 import eventlet
 eventlet.monkey_patch()
 
@@ -10,8 +13,10 @@ import os
 import threading
 import time
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
 from flask import send_file, send_from_directory
 from dotenv import load_dotenv
+import psutil
 
 # Load environment variables
 load_dotenv()
@@ -21,26 +26,31 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("FlaskAPI")
 
 app = Flask(__name__, template_folder='templates')
-app.config['SECRET_KEY'] = 'secret!'
-socketio = SocketIO(app, cors_allowed_origins="*", max_http_buffer_size=10*1024*1024)
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', os.urandom(24).hex())
+socketio = SocketIO(app, cors_allowed_origins=os.getenv('CORS_ORIGIN', '*'), max_http_buffer_size=10*1024*1024)
 
 pm = ProcessManager()
 tm = TerminalManager(socketio)
 
+_password_hash = generate_password_hash(os.getenv('PASSWORD', 'admin'))
+
 @app.before_request
 def require_login():
-    allowed_routes = ['login', 'static']
+    allowed_routes = ['login', 'static', 'health']
     if request.endpoint not in allowed_routes and 'logged_in' not in session:
         return redirect(url_for('login'))
 
+@app.route('/health')
+def health():
+    return jsonify({"status": "ok"})
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    global _password_hash
     if request.method == 'POST':
         password = request.form.get('password')
-        # Default to 'admin' if not set in .env
-        env_password = os.getenv('PASSWORD', 'admin')
         
-        if password == env_password:
+        if check_password_hash(_password_hash, password):
             session['logged_in'] = True
             return redirect(url_for('index'))
         else:
@@ -140,6 +150,32 @@ def control_program(name, action):
         return jsonify({"error": "Invalid action"}), 400
         
     return jsonify({"status": action, "name": name})
+
+@app.route('/programs/<name>/logs', methods=['GET'])
+def get_logs(name):
+    program = pm.get_program(name)
+    if not program:
+        return jsonify({"error": "Program not found"}), 404
+    return jsonify({"logs": list(program.logs)})
+
+@app.route('/programs/<name>/logs/download', methods=['GET'])
+def download_logs(name):
+    program = pm.get_program(name)
+    if not program:
+        return jsonify({"error": "Program not found"}), 404
+    log_text = "\n".join(program.logs)
+    return (log_text, 200, {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Content-Disposition": f'attachment; filename="{name}.log"'
+    })
+
+@app.route('/programs/<name>/logs', methods=['DELETE'])
+def clear_logs(name):
+    program = pm.get_program(name)
+    if not program:
+        return jsonify({"error": "Program not found"}), 404
+    program.logs.clear()
+    return jsonify({"status": "cleared"})
 
 # File Management Endpoints
 @app.route('/api/files', methods=['GET'])
@@ -255,17 +291,40 @@ def download_file():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+_process_cache = {}
+
 def background_thread():
-    """Example of how to send server generated events to clients."""
+    global _process_cache
     while True:
         programs_data = []
         for p in pm.get_all_programs():
+            cpu = None
+            memory = None
+            pid = p._get_pid()
+            if pid:
+                try:
+                    if pid not in _process_cache:
+                        _process_cache[pid] = psutil.Process(pid)
+                    proc = _process_cache[pid]
+                    cpu = proc.cpu_percent(interval=0)
+                    if cpu is None:
+                        cpu = 0.0
+                    memory = proc.memory_percent()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    _process_cache.pop(pid, None)
             programs_data.append({
                 "name": p.config.name,
                 "status": p.status.value,
-                "logs": p.logs[-100:], # Temporarily reduce to 100 to debug payload size
-                "restart_count": p.restart_count
+                "logs": list(p.logs)[-100:],
+                "restart_count": p.restart_count,
+                "cpu": cpu,
+                "memory": memory
             })
+        # Clean stale cache entries (PIDs no longer tracked)
+        tracked_pids = {p._get_pid() for p in pm.get_all_programs() if p._get_pid()}
+        stale = [pid for pid in _process_cache if pid not in tracked_pids]
+        for pid in stale:
+            _process_cache.pop(pid, None)
         socketio.emit('update', {'data': programs_data})
         socketio.sleep(1)
 
@@ -305,16 +364,29 @@ def handle_terminal_close(data):
     if session_id:
         tm.close(session_id)
 
+def shutdown_handler(signum=None, frame=None):
+    logger.info(f"Received signal {signum}. Shutting down...")
+    pm.stop_all()
+    for sid in list(tm.sessions.keys()):
+        tm.close(sid)
+    logger.info("Shutdown complete.")
+    sys.exit(0)
+
 if __name__ == '__main__':
-    # Load config and start programs
+    signal.signal(signal.SIGTERM, shutdown_handler)
+    signal.signal(signal.SIGINT, shutdown_handler)
+    
+    # Load config, re-attach to surviving processes, then start new ones
     pm.load_config()
+    pm.load_state_and_reattach()
     pm.start_all()
     
     # Start background thread for updates
     thread = threading.Thread(target=background_thread, daemon=True)
     thread.start()
     
+    logger.info(f"Server starting on 0.0.0.0:8881")
     try:
         socketio.run(app, host='0.0.0.0', port=8881, allow_unsafe_werkzeug=True)
     except KeyboardInterrupt:
-        pm.stop_all()
+        shutdown_handler()
