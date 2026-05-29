@@ -348,7 +348,7 @@ def upload_file():
         if file:
             filename = secure_filename(file.filename)
             base_dir = os.path.expanduser('~')
-            target_dir = os.path.abspath(os.path.join(base_dir, path))
+            target_dir = os.path.realpath(os.path.join(base_dir, path))
             
             if not target_dir.startswith(base_dir):
                 return jsonify({"error": "Access denied"}), 403
@@ -367,7 +367,7 @@ def download_file():
              return jsonify({"error": "No path specified"}), 400
              
         base_dir = os.path.expanduser('~')
-        target_path = os.path.abspath(os.path.join(base_dir, path))
+        target_path = os.path.realpath(os.path.join(base_dir, path))
         
         if not target_path.startswith(base_dir):
             return jsonify({"error": "Access denied"}), 403
@@ -403,7 +403,7 @@ def background_thread():
                         cpu = 0.0
                     cpu = round(cpu / num_cores, 1)
                     memory = proc.memory_percent()
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                     _process_cache.pop(pid, None)
             programs_data.append({
                 "name": p.config.name,
@@ -494,8 +494,8 @@ def system_monitor_thread():
 
         disk_io = psutil.disk_io_counters()
         if _disk_io_prev is not None:
-            disk_read_speed = disk_io.read_bytes - _disk_io_prev.read_bytes
-            disk_write_speed = disk_io.write_bytes - _disk_io_prev.write_bytes
+            disk_read_speed = (disk_io.read_bytes - _disk_io_prev.read_bytes) / 2
+            disk_write_speed = (disk_io.write_bytes - _disk_io_prev.write_bytes) / 2
         else:
             disk_read_speed = 0
             disk_write_speed = 0
@@ -507,8 +507,8 @@ def system_monitor_thread():
             if iface == 'lo':
                 continue
             prev = _net_prev.get(iface)
-            sent_speed = counters.bytes_sent - prev.bytes_sent if prev else 0
-            recv_speed = counters.bytes_recv - prev.bytes_recv if prev else 0
+            sent_speed = (counters.bytes_sent - prev.bytes_sent) / 2 if prev else 0
+            recv_speed = (counters.bytes_recv - prev.bytes_recv) / 2 if prev else 0
             net.append({
                 "interface": iface,
                 "sent_speed": sent_speed,
@@ -549,9 +549,9 @@ def system_monitor_thread():
                         "memory": round(memory, 1),
                         "status": status
                     })
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                     _proc_cpu_cache.pop(pid, None)
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
         stale = [pid for pid in _proc_cpu_cache if pid not in seen_pids]
         for pid in stale:
@@ -610,7 +610,13 @@ def system_monitor_thread():
         })
         socketio.sleep(2)
 
+_shutdown_called = False
+
 def shutdown_handler(signum=None, frame=None):
+    global _shutdown_called
+    if _shutdown_called:
+        return
+    _shutdown_called = True
     logger.info(f"Received signal {signum}. Shutting down...")
     pm.stop_all()
     for sid in list(tm.sessions.keys()):
