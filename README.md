@@ -48,6 +48,20 @@ bash install-service.sh
 journalctl --user -u server-services-manager -f
 ```
 
+## Screenshots
+
+### Desktop
+
+| Dashboard | System Monitor | Control Panel |
+|-----------|---------------|---------------|
+| ![Desktop](resources/dashboard-desktop.png) | ![Monitor](resources/monitor-desktop.png) | ![Control](resources/control-desktop.png) |
+
+### Mobile
+
+| Dashboard | System Monitor | Control Panel |
+|-----------|---------------|---------------|
+| ![Dashboard Mobile](resources/dashboard-mobile.png) | ![Monitor Mobile](resources/monitor-mobile.png) | ![Control Mobile](resources/control-mobile.png) |
+
 ## Configuration
 
 ### Environment Variables (`.env`)
@@ -88,19 +102,13 @@ commands:
 
 Available icons: any [Lucide icon](https://lucide.dev/icons) name.
 
-## Screenshots
-
-| Dashboard | System Monitor | Control Panel |
-|---|---|---|
-| Service cards with live logs | CPU/Memory/Network charts | Quick-action commands |
-
 ## Pages
 
 | Route | Page | Description |
 |-------|------|-------------|
 | `/` | Dashboard | Manage services, view logs, terminal |
-| `/monitor` | System Monitor | Real-time CPU (per-core + avg), RAM, swap, disk, network, processes |
-| `/control` | Control Panel | Quick system commands (reboot, suspend, disk check, etc.) |
+| `/monitor` | System Monitor | Real-time CPU/Memory/Network charts, processes |
+| `/control` | Control Panel | Quick system commands |
 
 ## Tech Stack
 
