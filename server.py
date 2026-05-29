@@ -17,6 +17,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask import send_file, send_from_directory
 from dotenv import load_dotenv
 import psutil
+import subprocess
 
 # Load environment variables
 load_dotenv()
@@ -71,6 +72,92 @@ def index():
 @app.route('/monitor')
 def monitor():
     return render_template('monitor.html')
+
+@app.route('/control')
+def control():
+    custom_commands = []
+    config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')
+    if os.path.exists(config_path):
+        try:
+            with open(config_path) as f:
+                cfg = yaml.safe_load(f)
+                if cfg and 'commands' in cfg:
+                    custom_commands = cfg['commands']
+        except Exception:
+            pass
+    return render_template('control.html', commands=custom_commands)
+
+WHITELIST_COMMANDS = {
+    "lock":       {"cmd": "loginctl lock-session",          "auth": False, "icon": "lock"},
+    "suspend":    {"cmd": "systemctl suspend",               "auth": True,  "icon": "moon"},
+    "hibernate":  {"cmd": "systemctl hibernate",            "auth": True,  "icon": "bed"},
+    "reboot":     {"cmd": "systemctl reboot",               "auth": True,  "icon": "power"},
+    "shutdown":   {"cmd": "systemctl poweroff",             "auth": True,  "icon": "power-off"},
+    "disk":       {"cmd": "df -h /",                        "auth": False, "icon": "hard-drive"},
+    "memory":     {"cmd": "free -h",                        "auth": False, "icon": "memory-stick"},
+    "uptime":     {"cmd": "uptime",                         "auth": False, "icon": "clock"},
+    "temp":       {"cmd": "",                                "auth": False, "icon": "thermometer"},
+    "net-restart":{"cmd": "systemctl restart NetworkManager","auth": False, "icon": "wifi-off"},
+    "net-ip":     {"cmd": "ip -4 addr show | grep inet | awk '{print $NF\" \"$2}'", "auth": False, "icon": "globe"},
+}
+
+@app.route('/api/control/run', methods=['POST'])
+def control_run():
+    data = request.get_json() or {}
+    command_id = data.get('command')
+    password = data.get('password', '')
+
+    if command_id in WHITELIST_COMMANDS:
+        entry = WHITELIST_COMMANDS[command_id]
+        cmd = entry['cmd']
+    else:
+        config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')
+        found = None
+        if os.path.exists(config_path):
+            try:
+                with open(config_path) as f:
+                    cfg = yaml.safe_load(f)
+                    if cfg and 'commands' in cfg:
+                        for c in cfg['commands']:
+                            if c.get('id') == command_id:
+                                found = c
+                                break
+            except Exception:
+                pass
+        if found:
+            entry = found
+            cmd = found.get('command', '')
+        else:
+            return jsonify({"error": "Unknown command"}), 400
+
+    if entry.get('auth', False):
+        if not password:
+            return jsonify({"error": "auth_required"}), 401
+        if not check_password_hash(_password_hash, password):
+            return jsonify({"error": "Invalid password"}), 403
+
+    if command_id == 'temp':
+        temp = None
+        try:
+            temps = psutil.sensors_temperatures()
+            for key in ('coretemp', 'k10temp', 'cpu-thermal', 'cpu_thermal', 'thinkpad', 'acpitz'):
+                if key in temps:
+                    temp = round(temps[key][0].current, 1)
+                    break
+        except Exception:
+            pass
+        if temp is not None:
+            return jsonify({"ok": True, "output": f"CPU Temperature: {temp}°C"})
+        return jsonify({"ok": True, "output": "No temperature sensor available"})
+
+    try:
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+        output = result.stdout.strip() or result.stderr.strip() or "Done (no output)"
+        return jsonify({"ok": True, "output": output})
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Command timed out"}), 504
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/programs', methods=['GET'])
 def get_programs():
