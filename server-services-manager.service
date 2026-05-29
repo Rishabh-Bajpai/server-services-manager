@@ -4,15 +4,14 @@ After=network.target
 
 [Service]
 Type=simple
-User=%i
-WorkingDirectory=/path/to/server-services-manager
-ExecStart=/usr/bin/python3 /path/to/server-services-manager/server.py
+WorkingDirectory=%%PROJECT_DIR%%
+EnvironmentFile=%%PROJECT_DIR%%/.env
+Environment=PYTHONPATH=%%PROJECT_DIR%%
+ExecStart=%%PYTHON_PATH%% %%PROJECT_DIR%%/server.py
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
-Environment=PATH=/usr/bin:/usr/local/bin
-EnvironmentFile=-/path/to/server-services-manager/.env
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

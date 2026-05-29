@@ -6,6 +6,10 @@ pip install -r requirements.txt
 echo "PASSWORD=your_secure_password" > .env   # also supports SECRET_KEY, CORS_ORIGIN
 ./start.sh                                     # starts on port 8881, logs to server.log
 ./stop.sh                                      # uses .server.pid
+
+# Or run as a persistent systemd service:
+bash install-service.sh
+journalctl --user -u server-services-manager -f
 ```
 
 ## Architecture
