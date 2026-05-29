@@ -166,46 +166,45 @@
 <body class="bg-[var(--bg-primary)] text-[var(--text-primary)] h-screen overflow-hidden">
     <div id="app" class="flex flex-col h-screen overflow-hidden">
         <!-- Header -->
-        <header class="flex-none px-6 py-4 flex items-center justify-between border-b border-[var(--border-subtle)] glass-effect z-10">
-            <div class="flex items-center gap-4">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+        <header class="flex-none px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border-subtle)] glass-effect z-10">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
                     <i data-lucide="layout-dashboard" class="w-5 h-5 text-white"></i>
                 </div>
                 <div>
-                    <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">Server Services Manager</h1>
-                    <p class="text-[var(--text-muted)] text-xs font-medium">Control Center</p>
+                    <h1 class="text-lg sm:text-xl font-bold tracking-tight bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">Server Services Manager</h1>
+                    <p class="text-[var(--text-muted)] text-xs font-medium hidden sm:block">Control Center</p>
                 </div>
             </div>
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2 flex-wrap justify-end">
                 <a href="/monitor"
-                    class="flex items-center gap-2 px-4 py-2 bg-[var(--accent-green)]/10 text-[var(--accent-green)] border border-[var(--accent-green)]/20 rounded-lg hover:bg-[var(--accent-green)]/20 transition-all text-sm font-medium btn-glow">
+                    class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-green)]/10 text-[var(--accent-green)] border border-[var(--accent-green)]/20 rounded-lg hover:bg-[var(--accent-green)]/20 transition-all text-sm font-medium">
                     <i data-lucide="activity" class="w-4 h-4"></i>
-                    Monitor
+                    <span class="hidden sm:inline">Monitor</span>
                 </a>
                 <a href="/control"
-                    class="flex items-center gap-2 px-4 py-2 bg-[var(--accent-orange)]/10 text-[var(--accent-orange)] border border-[var(--accent-orange)]/20 rounded-lg hover:bg-[var(--accent-orange)]/20 transition-all text-sm font-medium">
+                    class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-orange)]/10 text-[var(--accent-orange)] border border-[var(--accent-orange)]/20 rounded-lg hover:bg-[var(--accent-orange)]/20 transition-all text-sm font-medium">
                     <i data-lucide="gamepad-2" class="w-4 h-4"></i>
-                    Control
+                    <span class="hidden sm:inline">Control</span>
                 </a>
                 <button onclick="openFileManager()"
-                    class="flex items-center gap-2 px-4 py-2 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 hover:border-[var(--border-active)] transition-all text-sm font-medium">
+                    class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
                     <i data-lucide="folder" class="w-4 h-4"></i>
-                    Files
+                    <span class="hidden sm:inline">Files</span>
                 </button>
                 <button onclick="openModal()"
-                    class="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all text-sm font-medium shadow-lg shadow-blue-500/25 btn-glow">
+                    class="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all text-sm font-medium shadow-lg shadow-blue-500/25">
                     <i data-lucide="plus" class="w-4 h-4"></i>
-                    Add Service
+                    <span class="hidden sm:inline">Add Service</span>
                 </button>
                 <a href="/logout"
-                    class="flex items-center gap-2 px-4 py-2 bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20 rounded-lg hover:bg-[var(--accent-red)]/20 transition-all text-sm font-medium">
+                    class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20 rounded-lg hover:bg-[var(--accent-red)]/20 transition-all text-sm font-medium">
                     <i data-lucide="log-out" class="w-4 h-4"></i>
-                    Logout
+                    <span class="hidden sm:inline">Logout</span>
                 </a>
                 <div id="connection-status"
                     class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20">
                     <span class="w-2 h-2 rounded-full bg-current status-running"></span>
-                    Disconnected
                 </div>
             </div>
         </header>
@@ -214,7 +213,7 @@
         <div class="flex-1 flex flex-col min-h-0 relative">
 
             <!-- Services Pane (Top) -->
-            <div id="services-pane" class="flex-1 overflow-y-auto min-h-[250px] p-6 flex flex-col">
+            <div id="services-pane" class="flex-1 overflow-y-auto min-h-[250px] p-3 sm:p-6 flex flex-col">
                 <main id="program-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                     <!-- Programs will be injected here -->
                 </main>
@@ -227,7 +226,7 @@
             </div>
 
             <!-- Terminal Pane (Bottom) -->
-            <div id="terminal-pane" class="h-[280px] min-h-[150px] bg-[var(--bg-primary)] flex flex-col p-6 pt-2">
+            <div id="terminal-pane" class="h-[280px] min-h-[150px] bg-[var(--bg-primary)] flex flex-col p-3 sm:p-6 pt-2">
                 <section class="flex-1 bg-[var(--bg-card)] rounded-2xl border border-[var(--border-subtle)] overflow-hidden flex flex-col shadow-xl">
                     <div class="flex items-center justify-between border-b border-[var(--border-subtle)] px-3 py-2 shrink-0 bg-[var(--bg-secondary)]">
                         <div class="flex items-center gap-1 overflow-x-auto no-scrollbar" id="terminal-tabs">
