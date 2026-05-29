@@ -7,27 +7,157 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --border-subtle: #1e1e2a;
+            --border-active: #2d2d3a;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --accent-orange: #f97316;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+
+        * { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        code, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+
+        body {
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(ellipse at top left, rgba(16, 185, 129, 0.03) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(59, 130, 246, 0.03) 0%, transparent 50%);
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        @keyframes bar-glow { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.2); } }
+
+        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+        .bar-animate { animation: bar-glow 3s ease-in-out infinite; }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 1rem;
+            transition: all 0.3s ease;
+        }
+        .card:hover {
+            border-color: var(--border-active);
+            box-shadow: 0 4px 20px -4px rgba(0,0,0,0.3);
+        }
+
+        .section-icon {
+            width: 2rem;
+            height: 2rem;
+            border-radius: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .progress-track {
+            background: var(--bg-secondary);
+            border-radius: 9999px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 9999px;
+            transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .core-chip {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            padding: 0.625rem;
+            transition: all 0.2s ease;
+        }
+        .core-chip:hover {
+            border-color: var(--border-active);
+            background: rgba(255,255,255,0.03);
+        }
+
+        .net-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            padding: 0.875rem;
+            transition: all 0.2s ease;
+        }
+        .net-card:hover {
+            border-color: var(--border-active);
+        }
+
+        .proc-row {
+            transition: background 0.15s ease;
+        }
+        .proc-row:hover {
+            background: rgba(255,255,255,0.03);
+        }
+
+        .status-badge {
+            font-size: 0.625rem;
+            font-weight: 600;
+            padding: 0.125rem 0.5rem;
+            border-radius: 9999px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .disk-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem 0;
+        }
+        .disk-row + .disk-row {
+            border-top: 1px solid var(--border-subtle);
+        }
+    </style>
 </head>
-<body class="bg-gray-950 text-gray-100 min-h-screen font-sans">
+<body class="bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-screen">
     <div class="max-w-7xl mx-auto p-6">
         <!-- Header -->
-        <header class="flex items-center justify-between mb-6">
-            <div class="flex items-center gap-3">
-                <div class="p-3 bg-emerald-600 rounded-lg text-white">
-                    <i data-lucide="activity" class="w-6 h-6"></i>
+        <header class="flex items-center justify-between mb-6 animate-fade-in">
+            <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                    <i data-lucide="activity" class="w-5 h-5 text-white"></i>
                 </div>
                 <div>
-                    <h1 class="text-2xl font-bold tracking-tight">System Monitor</h1>
-                    <p class="text-gray-400 text-sm">Real-time host metrics</p>
+                    <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">System Monitor</h1>
+                    <p class="text-[var(--text-muted)] text-xs font-medium">Real-time host metrics</p>
                 </div>
             </div>
-            <div class="flex items-center gap-4">
-                <span id="connection-badge" class="px-3 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-500">Connected</span>
-                <a href="/" class="flex items-center gap-2 px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors text-sm font-medium">
+            <div class="flex items-center gap-3">
+                <span id="connection-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-[var(--accent-green)]/10 text-[var(--accent-green)] border border-[var(--accent-green)]/20">
+                    <span class="w-2 h-2 rounded-full bg-current pulse-dot"></span>
+                    Connected
+                </span>
+                <a href="/" class="flex items-center gap-2 px-4 py-2 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 hover:border-[var(--border-active)] transition-all text-sm font-medium">
                     <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
                     Dashboard
                 </a>
-                <a href="/logout" class="flex items-center gap-2 px-4 py-2 bg-red-600/10 text-red-500 border border-red-600/20 rounded-md hover:bg-red-600/20 transition-colors text-sm font-medium">
+                <a href="/logout" class="flex items-center gap-2 px-4 py-2 bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20 rounded-lg hover:bg-[var(--accent-red)]/20 transition-all text-sm font-medium">
                     <i data-lucide="log-out" class="w-4 h-4"></i>
                     Logout
                 </a>
@@ -37,127 +167,141 @@
         <!-- Top Row: System Info + CPU -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
             <!-- System Info -->
-            <div class="bg-gray-900 rounded-xl border border-gray-800 p-5">
-                <div class="flex items-center gap-2 text-gray-400 mb-3">
-                    <i data-lucide="info" class="w-4 h-4"></i>
-                    <span class="text-sm font-medium uppercase tracking-wider">System</span>
+            <div class="card p-5 animate-fade-in" style="animation-delay: 0.05s">
+                <div class="flex items-center gap-2 mb-4">
+                    <div class="section-icon bg-[var(--accent-cyan)]/10">
+                        <i data-lucide="server" class="w-4 h-4 text-[var(--accent-cyan)]"></i>
+                    </div>
+                    <span class="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">System</span>
                 </div>
-                <div class="space-y-2 text-sm">
-                    <div class="flex justify-between">
-                        <span class="text-gray-500">Hostname</span>
-                        <span class="font-mono" id="sys-hostname">--</span>
+                <div class="space-y-3 text-sm">
+                    <div class="flex justify-between items-center">
+                        <span class="text-[var(--text-muted)]">Hostname</span>
+                        <span class="font-mono text-[var(--text-primary)]" id="sys-hostname">--</span>
                     </div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-500">Kernel</span>
-                        <span class="font-mono" id="sys-kernel">--</span>
+                    <div class="flex justify-between items-center">
+                        <span class="text-[var(--text-muted)]">Kernel</span>
+                        <span class="font-mono text-[var(--text-primary)] text-xs" id="sys-kernel">--</span>
                     </div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-500">Uptime</span>
-                        <span class="font-mono" id="sys-uptime">--</span>
+                    <div class="flex justify-between items-center">
+                        <span class="text-[var(--text-muted)]">Uptime</span>
+                        <span class="font-mono text-[var(--accent-green)]" id="sys-uptime">--</span>
                     </div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-500">Load Average</span>
-                        <span class="font-mono" id="sys-load">--</span>
+                    <div class="flex justify-between items-center">
+                        <span class="text-[var(--text-muted)]">Load Average</span>
+                        <span class="font-mono text-[var(--text-primary)]" id="sys-load">--</span>
                     </div>
                 </div>
             </div>
 
             <!-- CPU -->
-            <div class="bg-gray-900 rounded-xl border border-gray-800 p-5 lg:col-span-2">
-                <div class="flex items-center justify-between mb-3">
-                    <div class="flex items-center gap-2 text-gray-400">
-                        <i data-lucide="cpu" class="w-4 h-4"></i>
-                        <span class="text-sm font-medium uppercase tracking-wider">CPU</span>
+            <div class="card p-5 lg:col-span-2 animate-fade-in" style="animation-delay: 0.1s">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <div class="section-icon bg-[var(--accent-green)]/10">
+                            <i data-lucide="cpu" class="w-4 h-4 text-[var(--accent-green)]"></i>
+                        </div>
+                        <span class="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">CPU</span>
                     </div>
-                    <span class="text-2xl font-bold font-mono" id="cpu-total">--%</span>
+                    <span class="text-3xl font-bold font-mono" id="cpu-total">--%</span>
                 </div>
-                <div class="h-2 bg-gray-800 rounded-full mb-3 overflow-hidden">
-                    <div id="cpu-bar" class="h-full bg-emerald-500 rounded-full transition-all duration-500" style="width:0%"></div>
+                <div class="progress-track h-2.5 mb-4">
+                    <div id="cpu-bar" class="progress-fill bg-gradient-to-r from-emerald-500 to-emerald-400 bar-animate" style="width:0%"></div>
                 </div>
-                <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2" id="cpu-cores"></div>
+                <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2" id="cpu-cores"></div>
             </div>
         </div>
 
-        <!-- Memory -->
+        <!-- Memory + Swap -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-            <div class="bg-gray-900 rounded-xl border border-gray-800 p-5">
-                <div class="flex items-center justify-between mb-3">
-                    <div class="flex items-center gap-2 text-gray-400">
-                        <i data-lucide="memory-stick" class="w-4 h-4"></i>
-                        <span class="text-sm font-medium uppercase tracking-wider">Memory</span>
+            <div class="card p-5 animate-fade-in" style="animation-delay: 0.15s">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <div class="section-icon bg-[var(--accent-blue)]/10">
+                            <i data-lucide="memory-stick" class="w-4 h-4 text-[var(--accent-blue)]"></i>
+                        </div>
+                        <span class="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Memory</span>
                     </div>
-                    <span class="text-sm font-mono" id="mem-text">--</span>
+                    <span class="text-lg font-bold font-mono" id="mem-text">--%</span>
                 </div>
-                <div class="h-3 bg-gray-800 rounded-full mb-1 overflow-hidden">
-                    <div id="mem-bar" class="h-full bg-blue-500 rounded-full transition-all duration-500" style="width:0%"></div>
+                <div class="progress-track h-3 mb-3">
+                    <div id="mem-bar" class="progress-fill bg-gradient-to-r from-blue-500 to-blue-400 bar-animate" style="width:0%"></div>
                 </div>
-                <div class="flex justify-between text-xs text-gray-500">
-                    <span>Used: <span class="font-mono" id="mem-used">--</span></span>
-                    <span>Available: <span class="font-mono" id="mem-avail">--</span></span>
-                    <span>Total: <span class="font-mono" id="mem-total">--</span></span>
+                <div class="flex justify-between text-xs text-[var(--text-muted)]">
+                    <span>Used: <span class="font-mono text-[var(--text-secondary)]" id="mem-used">--</span></span>
+                    <span>Free: <span class="font-mono text-[var(--text-secondary)]" id="mem-avail">--</span></span>
+                    <span>Total: <span class="font-mono text-[var(--text-secondary)]" id="mem-total">--</span></span>
                 </div>
             </div>
-            <div class="bg-gray-900 rounded-xl border border-gray-800 p-5">
-                <div class="flex items-center justify-between mb-3">
-                    <div class="flex items-center gap-2 text-gray-400">
-                        <i data-lucide="hard-drive" class="w-4 h-4"></i>
-                        <span class="text-sm font-medium uppercase tracking-wider">Swap</span>
+            <div class="card p-5 animate-fade-in" style="animation-delay: 0.2s">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <div class="section-icon bg-[var(--accent-purple)]/10">
+                            <i data-lucide="hard-drive" class="w-4 h-4 text-[var(--accent-purple)]"></i>
+                        </div>
+                        <span class="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Swap</span>
                     </div>
-                    <span class="text-sm font-mono" id="swap-text">--</span>
+                    <span class="text-lg font-bold font-mono" id="swap-text">--%</span>
                 </div>
-                <div class="h-3 bg-gray-800 rounded-full mb-1 overflow-hidden">
-                    <div id="swap-bar" class="h-full bg-purple-500 rounded-full transition-all duration-500" style="width:0%"></div>
+                <div class="progress-track h-3 mb-3">
+                    <div id="swap-bar" class="progress-fill bg-gradient-to-r from-purple-500 to-purple-400 bar-animate" style="width:0%"></div>
                 </div>
-                <div class="flex justify-between text-xs text-gray-500">
-                    <span>Used: <span class="font-mono" id="swap-used">--</span></span>
-                    <span>Total: <span class="font-mono" id="swap-total">--</span></span>
+                <div class="flex justify-between text-xs text-[var(--text-muted)]">
+                    <span>Used: <span class="font-mono text-[var(--text-secondary)]" id="swap-used">--</span></span>
+                    <span>Total: <span class="font-mono text-[var(--text-secondary)]" id="swap-total">--</span></span>
                 </div>
             </div>
         </div>
 
         <!-- Disks -->
-        <div class="bg-gray-900 rounded-xl border border-gray-800 p-5 mb-4">
-            <div class="flex items-center gap-2 text-gray-400 mb-4">
-                <i data-lucide="hard-drive" class="w-4 h-4"></i>
-                <span class="text-sm font-medium uppercase tracking-wider">Disks</span>
-                <span class="ml-auto text-xs text-gray-600 flex items-center gap-3">
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span> Read</span>
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-orange-500 inline-block"></span> Write</span>
-                    <span id="disk-io-speed">--</span>
-                </span>
+        <div class="card p-5 mb-4 animate-fade-in" style="animation-delay: 0.25s">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-2">
+                    <div class="section-icon bg-[var(--accent-orange)]/10">
+                        <i data-lucide="hard-drive" class="w-4 h-4 text-[var(--accent-orange)]"></i>
+                    </div>
+                    <span class="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Disks</span>
+                </div>
+                <div class="flex items-center gap-4 text-xs text-[var(--text-muted)]">
+                    <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[var(--accent-green)]"></span> Read</span>
+                    <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[var(--accent-orange)]"></span> Write</span>
+                    <span class="font-mono" id="disk-io-speed">--</span>
+                </div>
             </div>
-            <div class="space-y-3" id="disks-container"></div>
+            <div id="disks-container"></div>
         </div>
 
         <!-- Network + Processes -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-            <!-- Network -->
-            <div class="bg-gray-900 rounded-xl border border-gray-800 p-5">
-                <div class="flex items-center gap-2 text-gray-400 mb-3">
-                    <i data-lucide="wifi" class="w-4 h-4"></i>
-                    <span class="text-sm font-medium uppercase tracking-wider">Network</span>
+            <div class="card p-5 animate-fade-in" style="animation-delay: 0.3s">
+                <div class="flex items-center gap-2 mb-4">
+                    <div class="section-icon bg-[var(--accent-cyan)]/10">
+                        <i data-lucide="wifi" class="w-4 h-4 text-[var(--accent-cyan)]"></i>
+                    </div>
+                    <span class="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Network</span>
                 </div>
-                <div id="net-container" class="space-y-3"></div>
+                <div id="net-container" class="space-y-2"></div>
             </div>
 
-            <!-- Processes -->
-            <div class="bg-gray-900 rounded-xl border border-gray-800 p-5">
-                <div class="flex items-center gap-2 text-gray-400 mb-3">
-                    <i data-lucide="list" class="w-4 h-4"></i>
-                    <span class="text-sm font-medium uppercase tracking-wider">Top Processes</span>
+            <div class="card p-5 animate-fade-in" style="animation-delay: 0.35s">
+                <div class="flex items-center gap-2 mb-4">
+                    <div class="section-icon bg-[var(--accent-yellow)]/10">
+                        <i data-lucide="list" class="w-4 h-4 text-[var(--accent-yellow)]"></i>
+                    </div>
+                    <span class="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Top Processes</span>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm text-left">
-                        <thead class="text-gray-500 text-xs uppercase">
-                            <tr>
-                                <th class="pb-2">PID</th>
-                                <th class="pb-2">Name</th>
-                                <th class="pb-2 text-right">CPU</th>
-                                <th class="pb-2 text-right">MEM</th>
-                                <th class="pb-2">State</th>
+                        <thead>
+                            <tr class="text-[var(--text-muted)] text-xs uppercase border-b border-[var(--border-subtle)]">
+                                <th class="pb-2 font-semibold">PID</th>
+                                <th class="pb-2 font-semibold">Name</th>
+                                <th class="pb-2 text-right font-semibold">CPU</th>
+                                <th class="pb-2 text-right font-semibold">MEM</th>
+                                <th class="pb-2 font-semibold">State</th>
                             </tr>
                         </thead>
-                        <tbody id="procs-body" class="divide-y divide-gray-800 font-mono"></tbody>
+                        <tbody id="procs-body" class="font-mono text-xs"></tbody>
                     </table>
                 </div>
             </div>
@@ -171,12 +315,12 @@
         const badge = document.getElementById('connection-badge');
 
         socket.on('connect', () => {
-            badge.textContent = 'Connected';
-            badge.className = 'px-3 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-500';
+            badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-current pulse-dot"></span>Connected';
+            badge.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-[var(--accent-green)]/10 text-[var(--accent-green)] border border-[var(--accent-green)]/20';
         });
         socket.on('disconnect', () => {
-            badge.textContent = 'Disconnected';
-            badge.className = 'px-3 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-500';
+            badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-current"></span>Disconnected';
+            badge.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20';
         });
 
         function fmtBytes(bytes) {
@@ -202,6 +346,18 @@
             return parts.join(' ');
         }
 
+        function getBarColor(pct) {
+            if (pct > 85) return 'from-red-500 to-red-400';
+            if (pct > 60) return 'from-yellow-500 to-yellow-400';
+            return 'from-emerald-500 to-emerald-400';
+        }
+
+        function getBarColorSolid(pct) {
+            if (pct > 85) return 'bg-red-500';
+            if (pct > 60) return 'bg-yellow-500';
+            return 'bg-emerald-500';
+        }
+
         socket.on('system_stats', (s) => {
             // System Info
             document.getElementById('sys-hostname').textContent = s.system.hostname;
@@ -212,21 +368,20 @@
             // CPU
             const cpuPct = s.cpu.percent;
             document.getElementById('cpu-total').textContent = cpuPct.toFixed(1) + '%';
-            document.getElementById('cpu-bar').style.width = cpuPct + '%';
-            if (cpuPct > 80) document.getElementById('cpu-bar').className = 'h-full bg-red-500 rounded-full transition-all duration-500';
-            else if (cpuPct > 50) document.getElementById('cpu-bar').className = 'h-full bg-yellow-500 rounded-full transition-all duration-500';
-            else document.getElementById('cpu-bar').className = 'h-full bg-emerald-500 rounded-full transition-all duration-500';
+            document.getElementById('cpu-total').className = `text-3xl font-bold font-mono ${cpuPct > 80 ? 'text-[var(--accent-red)]' : cpuPct > 50 ? 'text-[var(--accent-yellow)]' : 'text-[var(--accent-green)]'}`;
+            const cpuBar = document.getElementById('cpu-bar');
+            cpuBar.style.width = cpuPct + '%';
+            cpuBar.className = `progress-fill bg-gradient-to-r ${getBarColor(cpuPct)} bar-animate`;
 
             // Per-core
             const coresDiv = document.getElementById('cpu-cores');
             let coresHtml = '';
             s.cpu.cores.forEach((c, i) => {
-                const color = c > 80 ? 'bg-red-500' : c > 50 ? 'bg-yellow-500' : 'bg-emerald-500';
-                coresHtml += `<div class="bg-gray-800 rounded p-2">
-                    <div class="text-xs text-gray-400 mb-1">Core ${i}</div>
-                    <div class="text-lg font-bold font-mono">${c.toFixed(0)}%</div>
-                    <div class="h-1 bg-gray-700 rounded-full mt-1 overflow-hidden">
-                        <div class="h-full ${color} rounded-full transition-all duration-500" style="width:${c}%"></div>
+                coresHtml += `<div class="core-chip">
+                    <div class="text-[10px] text-[var(--text-muted)] mb-1 font-medium">Core ${i}</div>
+                    <div class="text-base font-bold font-mono ${c > 80 ? 'text-[var(--accent-red)]' : c > 50 ? 'text-[var(--accent-yellow)]' : 'text-[var(--accent-green)]'}">${c.toFixed(0)}%</div>
+                    <div class="h-1 bg-[var(--bg-primary)] rounded-full mt-1.5 overflow-hidden">
+                        <div class="h-full bg-gradient-to-r ${getBarColor(c)} rounded-full transition-all duration-500" style="width:${c}%"></div>
                     </div>
                 </div>`;
             });
@@ -235,6 +390,7 @@
             // Memory
             const mem = s.memory;
             document.getElementById('mem-text').textContent = mem.percent.toFixed(1) + '%';
+            document.getElementById('mem-text').className = `text-lg font-bold font-mono ${mem.percent > 85 ? 'text-[var(--accent-red)]' : mem.percent > 60 ? 'text-[var(--accent-yellow)]' : 'text-[var(--accent-blue)]'}`;
             document.getElementById('mem-bar').style.width = mem.percent + '%';
             document.getElementById('mem-used').textContent = fmtBytes(mem.used);
             document.getElementById('mem-avail').textContent = fmtBytes(mem.available);
@@ -242,20 +398,23 @@
 
             // Swap
             document.getElementById('swap-text').textContent = mem.swap_percent.toFixed(1) + '%';
+            document.getElementById('swap-text').className = `text-lg font-bold font-mono ${mem.swap_percent > 85 ? 'text-[var(--accent-red)]' : mem.swap_percent > 60 ? 'text-[var(--accent-yellow)]' : 'text-[var(--accent-purple)]'}`;
             document.getElementById('swap-bar').style.width = mem.swap_percent + '%';
             document.getElementById('swap-used').textContent = fmtBytes(mem.swap_used);
             document.getElementById('swap-total').textContent = fmtBytes(mem.swap_total);
 
             // Disks
             const diskContainer = document.getElementById('disks-container');
-            diskContainer.innerHTML = s.disks.map(d => `<div class="flex items-center gap-3">
-                <div class="w-32 text-xs text-gray-400 truncate" title="${d.device}">${d.mount}</div>
-                <div class="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
-                    <div class="h-full ${d.percent > 85 ? 'bg-red-500' : 'bg-emerald-500'} rounded-full transition-all duration-500" style="width:${d.percent}%"></div>
+            diskContainer.innerHTML = s.disks.map(d => `
+                <div class="disk-row">
+                    <div class="w-28 text-xs text-[var(--text-muted)] truncate font-medium" title="${d.device}">${d.mount}</div>
+                    <div class="flex-1 progress-track h-2">
+                        <div class="progress-fill bg-gradient-to-r ${getBarColor(d.percent)} transition-all duration-500" style="width:${d.percent}%"></div>
+                    </div>
+                    <div class="w-32 text-xs text-[var(--text-muted)] text-right font-mono">${fmtBytes(d.used)} / ${fmtBytes(d.total)}</div>
+                    <div class="w-14 text-xs text-right font-mono font-semibold ${d.percent > 85 ? 'text-[var(--accent-red)]' : 'text-[var(--text-secondary)]'}">${d.percent}%</div>
                 </div>
-                <div class="w-24 text-xs text-gray-500 text-right font-mono">${fmtBytes(d.used)} / ${fmtBytes(d.total)}</div>
-                <div class="w-12 text-xs text-right font-mono ${d.percent > 85 ? 'text-red-400' : 'text-gray-400'}">${d.percent}%</div>
-            </div>`).join('');
+            `).join('');
 
             // Disk IO
             document.getElementById('disk-io-speed').textContent =
@@ -263,25 +422,37 @@
 
             // Network
             const netDiv = document.getElementById('net-container');
-            netDiv.innerHTML = s.network.map(n => `<div class="bg-gray-800/50 rounded-lg p-3">
-                <div class="flex items-center justify-between mb-1">
-                    <span class="text-sm font-medium">${n.interface}</span>
+            netDiv.innerHTML = s.network.map(n => `
+                <div class="net-card">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-semibold text-[var(--text-primary)]">${n.interface}</span>
+                        <i data-lucide="network" class="w-3.5 h-3.5 text-[var(--text-muted)]"></i>
+                    </div>
+                    <div class="flex justify-between text-xs font-mono">
+                        <span class="flex items-center gap-1 text-[var(--accent-green)]">
+                            <i data-lucide="arrow-down" class="w-3 h-3"></i>
+                            ${fmtSpeed(n.recv_speed)}
+                        </span>
+                        <span class="flex items-center gap-1 text-[var(--accent-orange)]">
+                            <i data-lucide="arrow-up" class="w-3 h-3"></i>
+                            ${fmtSpeed(n.sent_speed)}
+                        </span>
+                    </div>
                 </div>
-                <div class="flex justify-between text-xs">
-                    <span class="text-emerald-400">&#8595; ${fmtSpeed(n.recv_speed)}</span>
-                    <span class="text-orange-400">&#8593; ${fmtSpeed(n.sent_speed)}</span>
-                </div>
-            </div>`).join('');
+            `).join('');
+            lucide.createIcons();
 
             // Processes
             const tbody = document.getElementById('procs-body');
-            tbody.innerHTML = s.processes.map(p => `<tr class="hover:bg-gray-800/50">
-                <td class="py-1 text-gray-500">${p.pid}</td>
-                <td class="py-1 truncate max-w-[120px]">${p.name}</td>
-                <td class="py-1 text-right ${p.cpu > 20 ? 'text-red-400' : 'text-gray-300'}">${p.cpu}%</td>
-                <td class="py-1 text-right text-gray-400">${p.memory}%</td>
-                <td class="py-1 text-xs"><span class="px-1.5 py-0.5 rounded ${p.status === 'running' ? 'bg-green-500/10 text-green-400' : 'bg-gray-500/10 text-gray-400'}">${p.status}</span></td>
-            </tr>`).join('');
+            tbody.innerHTML = s.processes.map(p => `
+                <tr class="proc-row border-b border-[var(--border-subtle)] last:border-0">
+                    <td class="py-2 text-[var(--text-muted)]">${p.pid}</td>
+                    <td class="py-2 text-[var(--text-primary)] truncate max-w-[120px] font-medium">${p.name}</td>
+                    <td class="py-2 text-right font-semibold ${p.cpu > 20 ? 'text-[var(--accent-red)]' : 'text-[var(--text-secondary)]'}">${p.cpu}%</td>
+                    <td class="py-2 text-right text-[var(--text-secondary)]">${p.memory}%</td>
+                    <td class="py-2"><span class="status-badge ${p.status === 'running' ? 'bg-[var(--accent-green)]/10 text-[var(--accent-green)] border border-[var(--accent-green)]/20' : 'bg-white/5 text-[var(--text-muted)] border border-[var(--border-subtle)]'}">${p.status}</span></td>
+                </tr>
+            `).join('');
         });
     </script>
 </body>
