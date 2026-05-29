@@ -299,6 +299,7 @@ _process_cache = {}
 
 def background_thread():
     global _process_cache
+    num_cores = psutil.cpu_count() or 1
     while True:
         programs_data = []
         for p in pm.get_all_programs():
@@ -313,6 +314,7 @@ def background_thread():
                     cpu = proc.cpu_percent(interval=0)
                     if cpu is None:
                         cpu = 0.0
+                    cpu = round(cpu / num_cores, 1)
                     memory = proc.memory_percent()
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     _process_cache.pop(pid, None)
@@ -371,8 +373,11 @@ def handle_terminal_close(data):
 _net_prev = {}
 _disk_io_prev = None
 
+_proc_cpu_cache = {}
+
 def system_monitor_thread():
-    global _net_prev, _disk_io_prev
+    global _net_prev, _disk_io_prev, _proc_cpu_cache
+    num_cores = psutil.cpu_count() or 1
     psutil.cpu_percent(interval=None)
     psutil.cpu_percent(interval=None, percpu=True)
 
@@ -429,28 +434,70 @@ def system_monitor_thread():
             _net_prev[iface] = counters
 
         procs = []
-        for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent', 'status']):
+        seen_pids = set()
+        for p in psutil.process_iter(['pid', 'name', 'status']):
             try:
-                info = p.info
-                if info['cpu_percent'] is not None:
+                pid = p.info['pid']
+                seen_pids.add(pid)
+                name = p.info['name']
+                status = p.info['status']
+                try:
+                    if pid not in _proc_cpu_cache:
+                        _proc_cpu_cache[pid] = psutil.Process(pid)
+                        _proc_cpu_cache[pid].cpu_percent()
+                        cpu = 0.0
+                        memory = 0.0
+                    else:
+                        proc = _proc_cpu_cache[pid]
+                        cpu = proc.cpu_percent(interval=0)
+                        if cpu is None:
+                            cpu = 0.0
+                        memory = proc.memory_percent()
+                        if memory is None:
+                            memory = 0.0
                     procs.append({
-                        "pid": info['pid'],
-                        "name": info['name'],
-                        "cpu": round(info['cpu_percent'], 1),
-                        "memory": round(info['memory_percent'] or 0, 1),
-                        "status": info['status']
+                        "pid": pid,
+                        "name": name,
+                        "cpu": round(cpu / num_cores, 1),
+                        "memory": round(memory, 1),
+                        "status": status
                     })
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    _proc_cpu_cache.pop(pid, None)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
+        stale = [pid for pid in _proc_cpu_cache if pid not in seen_pids]
+        for pid in stale:
+            _proc_cpu_cache.pop(pid, None)
         procs.sort(key=lambda x: x['cpu'], reverse=True)
         procs = procs[:15]
+
+        # CPU Temperature (graceful fallback if sensors unavailable)
+        cpu_temp = None
+        try:
+            temps = psutil.sensors_temperatures()
+            if 'coretemp' in temps:
+                cpu_temp = round(max(t.current for t in temps['coretemp']), 1)
+            elif 'k10temp' in temps:
+                cpu_temp = round(temps['k10temp'][0].current, 1)
+            elif 'cpu-thermal' in temps:
+                cpu_temp = round(temps['cpu-thermal'][0].current, 1)
+            elif 'cpu_thermal' in temps:
+                cpu_temp = round(temps['cpu_thermal'][0].current, 1)
+            elif 'thinkpad' in temps:
+                cpu_temp = round(temps['thinkpad'][0].current, 1)
+            elif 'acpitz' in temps:
+                cpu_temp = round(temps['acpitz'][0].current, 1)
+        except (AttributeError, FileNotFoundError, KeyError, IndexError, TypeError):
+            cpu_temp = None
 
         sys_info = os.uname()
         socketio.emit('system_stats', {
             "cpu": {
                 "percent": cpu_total,
                 "cores": cpu_cores,
-                "load": [round(l, 2) for l in load]
+                "load": [round(l, 2) for l in load],
+                "temperature": cpu_temp
             },
             "memory": {
                 "total": mem.total,
