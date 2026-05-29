@@ -200,7 +200,8 @@ class Program:
     def _monitor_attached(self):
         while self.status == ProgramStatus.RUNNING:
             if self._stop_event.is_set():
-                self.status = ProgramStatus.STOPPED
+                with self._lock:
+                    self.status = ProgramStatus.STOPPED
                 return
             pid = self._attached_pid
             if pid is None or not self._is_pid_alive(pid):
@@ -208,9 +209,10 @@ class Program:
                     os.waitpid(pid, os.WNOHANG)
                 except OSError:
                     pass
-                self.status = ProgramStatus.FAILED
+                with self._lock:
+                    self.status = ProgramStatus.FAILED
+                    self._attached_pid = None
                 self.log(f"Process exited (PID: {pid})")
-                self._attached_pid = None
                 self._handle_restart()
                 return
             time.sleep(1)
@@ -301,8 +303,11 @@ class ProcessManager:
 
         reattached = 0
         for entry in state.get("programs", []):
-            pid = entry["pid"]
-            name = entry["name"]
+            pid = entry.get("pid")
+            name = entry.get("name")
+            if pid is None or name is None:
+                logger.warning(f"Skipping malformed state entry: {entry}")
+                continue
             if not _pid_alive(pid):
                 logger.info(f"PID {pid} ({name}) no longer alive, skipping re-attach")
                 continue
