@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control Panel - Server Services Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --border-subtle: #1e1e2a;
+            --border-active: #2d2d3a;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --accent-orange: #f97316;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+
+        * { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        code, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+
+        body {
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(ellipse at top left, rgba(239, 68, 68, 0.03) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(59, 130, 246, 0.03) 0%, transparent 50%);
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse-btn { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.1); } 50% { box-shadow: 0 0 20px 4px rgba(255,255,255,0.05); } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes toastIn { from { opacity: 0; transform: translateY(-10px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes toastOut { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(-10px) scale(0.95); } }
+
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        .animate-slide-up { animation: slideUp 0.4s ease-out forwards; }
+
+        .cmd-btn {
+            position: relative;
+            border-radius: 1rem;
+            padding: 1.25rem;
+            border: 1px solid var(--border-subtle);
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            min-height: 100px;
+            user-select: none;
+        }
+        .cmd-btn:active { transform: scale(0.96); }
+        .cmd-btn.executing { pointer-events: none; animation: pulse-btn 0.8s ease-in-out infinite; }
+        .cmd-btn .spinner { display: none; width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.15); border-top-color: currentColor; border-radius: 50%; animation: spin 0.6s linear infinite; }
+        .cmd-btn.executing .spinner { display: block; }
+        .cmd-btn.executing .btn-label { display: none; }
+        .cmd-btn.executing .btn-icon { display: none; }
+
+        .cmd-btn.power { background: rgba(239,68,68,0.06); }
+        .cmd-btn.power:hover { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.3); }
+        .cmd-btn.power .btn-icon { color: var(--accent-red); }
+
+        .cmd-btn.system { background: rgba(59,130,246,0.06); }
+        .cmd-btn.system:hover { background: rgba(59,130,246,0.12); border-color: rgba(59,130,246,0.3); }
+        .cmd-btn.system .btn-icon { color: var(--accent-blue); }
+
+        .cmd-btn.network { background: rgba(6,182,212,0.06); }
+        .cmd-btn.network:hover { background: rgba(6,182,212,0.12); border-color: rgba(6,182,212,0.3); }
+        .cmd-btn.network .btn-icon { color: var(--accent-cyan); }
+
+        .cmd-btn.custom { background: rgba(139,92,246,0.06); }
+        .cmd-btn.custom:hover { background: rgba(139,92,246,0.12); border-color: rgba(139,92,246,0.3); }
+        .cmd-btn.custom .btn-icon { color: var(--accent-purple); }
+
+        .cmd-btn .btn-label { font-size: 0.8125rem; font-weight: 600; text-align: center; color: var(--text-primary); }
+        .btn-icon { width: 2rem; height: 2rem; transition: transform 0.2s ease; }
+        .cmd-btn:hover .btn-icon { transform: scale(1.1); }
+
+        .section-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            padding: 0 0.25rem;
+        }
+        .section-label .line {
+            flex: 1;
+            height: 1px;
+            background: var(--border-subtle);
+        }
+
+        .modal-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.65);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+            padding: 1rem;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 1.25rem;
+            padding: 1.5rem;
+            width: 100%;
+            max-width: 24rem;
+            box-shadow: 0 20px 60px -12px rgba(0,0,0,0.5);
+            animation: slideUp 0.25s ease-out;
+        }
+        .modal-box h2 { font-size: 1.125rem; font-weight: 700; margin-bottom: 0.5rem; }
+        .modal-box p { font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+
+        .modal-box input[type="password"] {
+            width: 100%;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            padding: 0.75rem 1rem;
+            font-size: 0.875rem;
+            color: var(--text-primary);
+            outline: none;
+            transition: border-color 0.2s;
+            margin-bottom: 1rem;
+        }
+        .modal-box input[type="password"]:focus { border-color: var(--accent-blue); }
+
+        .modal-actions { display: flex; gap: 0.75rem; }
+        .modal-actions button {
+            flex: 1;
+            padding: 0.75rem;
+            border-radius: 0.75rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .modal-actions .btn-cancel { background: rgba(255,255,255,0.06); color: var(--text-secondary); }
+        .modal-actions .btn-cancel:hover { background: rgba(255,255,255,0.1); }
+        .modal-actions .btn-danger { background: var(--accent-red); color: white; }
+        .modal-actions .btn-danger:hover { background: #dc2626; }
+        .modal-actions .btn-primary { background: var(--accent-blue); color: white; }
+        .modal-actions .btn-primary:hover { background: #2563eb; }
+
+        #toast-container {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            pointer-events: none;
+        }
+        .toast {
+            padding: 0.75rem 1.25rem;
+            border-radius: 0.75rem;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            pointer-events: auto;
+            animation: toastIn 0.25s ease-out;
+            max-width: 24rem;
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: 0 8px 24px -8px rgba(0,0,0,0.4);
+        }
+        .toast.success { background: rgba(16,185,129,0.9); color: white; }
+        .toast.error { background: rgba(239,68,68,0.9); color: white; }
+        .toast.info { background: rgba(59,130,246,0.9); color: white; }
+        .toast.out { animation: toastOut 0.2s ease-in forwards; }
+
+        #output-drawer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--bg-card);
+            border-top: 1px solid var(--border-subtle);
+            border-radius: 1.25rem 1.25rem 0 0;
+            padding: 1.5rem;
+            z-index: 40;
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            max-height: 50vh;
+            overflow-y: auto;
+        }
+        #output-drawer.open { transform: translateY(0); }
+        #output-drawer pre {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            white-space: pre-wrap;
+            word-break: break-all;
+            line-height: 1.6;
+            margin-top: 0.75rem;
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border-radius: 0.75rem;
+            border: 1px solid var(--border-subtle);
+        }
+    </style>
+</head>
+<body class="bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-screen">
+    <div class="max-w-5xl mx-auto p-6">
+        <!-- Header -->
+        <header class="flex items-center justify-between mb-8 animate-fade-in">
+            <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center shadow-lg shadow-red-500/20">
+                    <i data-lucide="gamepad-2" class="w-5 h-5 text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">Control Panel</h1>
+                    <p class="text-[var(--text-muted)] text-xs font-medium">Quick system commands</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <a href="/" class="flex items-center gap-2 px-4 py-2 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 hover:border-[var(--border-active)] transition-all text-sm font-medium">
+                    <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+                    Dashboard
+                </a>
+                <a href="/monitor" class="flex items-center gap-2 px-4 py-2 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 hover:border-[var(--border-active)] transition-all text-sm font-medium">
+                    <i data-lucide="activity" class="w-4 h-4"></i>
+                    Monitor
+                </a>
+                <a href="/logout" class="flex items-center gap-2 px-4 py-2 bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20 rounded-lg hover:bg-[var(--accent-red)]/20 transition-all text-sm font-medium">
+                    <i data-lucide="log-out" class="w-4 h-4"></i>
+                    Logout
+                </a>
+            </div>
+        </header>
+
+        <!-- Power Section -->
+        <div class="flex items-center gap-3 mb-4 section-label animate-fade-in" style="animation-delay:0.05s">
+            <span class="line"></span>
+            <span>Power</span>
+            <span class="line"></span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-8" id="power-group"></div>
+
+        <!-- System Section -->
+        <div class="flex items-center gap-3 mb-4 section-label animate-fade-in" style="animation-delay:0.1s">
+            <span class="line"></span>
+            <span>System</span>
+            <span class="line"></span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-8" id="system-group"></div>
+
+        <!-- Network Section -->
+        <div class="flex items-center gap-3 mb-4 section-label animate-fade-in" style="animation-delay:0.15s">
+            <span class="line"></span>
+            <span>Network</span>
+            <span class="line"></span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-8" id="network-group"></div>
+
+        <!-- Custom Commands Section -->
+        <div class="flex items-center gap-3 mb-4 section-label animate-fade-in" style="animation-delay:0.2s" id="custom-section">
+            <span class="line"></span>
+            <span>Custom</span>
+            <span class="line"></span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-8" id="custom-group"></div>
+    </div>
+
+    <!-- Output Drawer -->
+    <div id="output-drawer">
+        <div class="flex items-center justify-between mb-2">
+            <h3 class="text-sm font-bold text-[var(--text-primary)]">Output</h3>
+            <button onclick="closeOutput()" class="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-[var(--text-muted)] hover:bg-white/10 hover:text-[var(--text-primary)] transition-all">
+                <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+        </div>
+        <div class="text-[10px] text-[var(--text-muted)] font-medium" id="output-command-name"></div>
+        <pre id="output-content"></pre>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div class="modal-overlay" id="confirm-modal">
+        <div class="modal-box">
+            <h2 id="confirm-title">Confirm Action</h2>
+            <p id="confirm-message">Are you sure?</p>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeConfirm()">Cancel</button>
+                <button class="btn-danger" id="confirm-execute" onclick="executeConfirmed()">Execute</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auth Modal -->
+    <div class="modal-overlay" id="auth-modal">
+        <div class="modal-box">
+            <h2 id="auth-title">Authentication Required</h2>
+            <p id="auth-message">Enter your password to execute this command.</p>
+            <input type="password" id="auth-password" placeholder="Enter password..." autocomplete="off">
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeAuth()">Cancel</button>
+                <button class="btn-primary" id="auth-execute" onclick="executeAuthed()">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+
+    <script>
+        lucide.createIcons();
+
+        const COMMANDS = {
+            "power": [
+                { id: "lock",       label: "Lock",       icon: "lock",        group: "power" },
+                { id: "suspend",    label: "Suspend",    icon: "moon",        group: "power" },
+                { id: "hibernate",  label: "Hibernate",  icon: "bed",         group: "power" },
+                { id: "reboot",     label: "Reboot",     icon: "power",       group: "power" },
+                { id: "shutdown",   label: "Shutdown",   icon: "power-off",   group: "power" },
+            ],
+            "system": [
+                { id: "disk",       label: "Disk Usage", icon: "hard-drive",    group: "system" },
+                { id: "memory",     label: "Memory",     icon: "memory-stick",  group: "system" },
+                { id: "uptime",     label: "Uptime",     icon: "clock",         group: "system" },
+                { id: "temp",       label: "CPU Temp",   icon: "thermometer",   group: "system" },
+            ],
+            "network": [
+                { id: "net-ip",     label: "IP Addr",    icon: "globe",       group: "network" },
+                { id: "net-restart",label: "Net Restart",icon: "wifi-off",    group: "network" },
+            ]
+        };
+
+        // Custom commands from server (passed via template)
+        const CUSTOM_COMMANDS = {{ commands | tojson | safe }};
+
+        let pendingCommand = null;
+        let pendingLabel = '';
+
+        function renderButtons() {
+            const groups = ['power', 'system', 'network'];
+            groups.forEach(g => {
+                const container = document.getElementById(g + '-group');
+                container.innerHTML = COMMANDS[g].map(cmd => {
+                    const auth = cmd.id === 'suspend' || cmd.id === 'hibernate' || cmd.id === 'reboot' || cmd.id === 'shutdown';
+                    return `<div class="cmd-btn ${g}" onclick="handleCommand('${cmd.id}', '${cmd.label}', ${auth})" title="${cmd.label}">
+                        <i data-lucide="${cmd.icon}" class="btn-icon"></i>
+                        <span class="btn-label">${cmd.label}</span>
+                        <div class="spinner"></div>
+                    </div>`;
+                }).join('');
+                lucide.createIcons();
+            });
+
+            // Custom commands
+            const customContainer = document.getElementById('custom-group');
+            const customSection = document.getElementById('custom-section');
+            if (CUSTOM_COMMANDS && CUSTOM_COMMANDS.length > 0) {
+                customSection.style.display = 'flex';
+                customContainer.innerHTML = CUSTOM_COMMANDS.map(cmd => {
+                    const icon = cmd.icon || 'terminal';
+                    const auth = cmd.auth || false;
+                    return `<div class="cmd-btn custom" onclick="handleCommand('${cmd.id}', '${cmd.name}', ${auth})" title="${cmd.name}">
+                        <i data-lucide="${icon}" class="btn-icon"></i>
+                        <span class="btn-label">${cmd.name}</span>
+                        <div class="spinner"></div>
+                    </div>`;
+                }).join('');
+                lucide.createIcons();
+            } else {
+                customSection.style.display = 'none';
+            }
+        }
+
+        function toast(message, type) {
+            const container = document.getElementById('toast-container');
+            const el = document.createElement('div');
+            el.className = 'toast ' + type;
+            el.textContent = message;
+            container.appendChild(el);
+            setTimeout(() => {
+                el.classList.add('out');
+                setTimeout(() => el.remove(), 200);
+            }, 3000);
+        }
+
+        function showOutput(commandName, output) {
+            document.getElementById('output-command-name').textContent = commandName;
+            document.getElementById('output-content').textContent = output;
+            document.getElementById('output-drawer').classList.add('open');
+            lucide.createIcons();
+        }
+
+        function closeOutput() {
+            document.getElementById('output-drawer').classList.remove('open');
+        }
+
+        function closeConfirm() {
+            document.getElementById('confirm-modal').classList.remove('active');
+            pendingCommand = null;
+        }
+
+        function closeAuth() {
+            document.getElementById('auth-modal').classList.remove('active');
+            document.getElementById('auth-password').value = '';
+            pendingCommand = null;
+        }
+
+        let executingBtn = null;
+
+        function setExecuting(btn, executing) {
+            if (!btn) return;
+            if (executing) {
+                btn.classList.add('executing');
+            } else {
+                btn.classList.remove('executing');
+            }
+        }
+
+        function handleCommand(id, label, needsAuth) {
+            const btn = event.currentTarget;
+            const run = (password) => {
+                setExecuting(btn, true);
+                fetch('/api/control/run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: id, password: password || '' })
+                })
+                .then(r => r.json().then(data => ({ ok: r.ok, data })))
+                .then(({ ok, data }) => {
+                    setExecuting(btn, false);
+                    if (!ok) {
+                        if (data.error === 'auth_required') {
+                            pendingCommand = { id, label, passwordNeeded: true };
+                            pendingLabel = label;
+                            document.getElementById('auth-title').textContent = label;
+                            document.getElementById('auth-message').textContent = 'Enter your password to execute "' + label + '".';
+                            document.getElementById('auth-password').value = '';
+                            document.getElementById('auth-modal').classList.add('active');
+                            setTimeout(() => document.getElementById('auth-password').focus(), 100);
+                            return;
+                        }
+                        toast(data.error || 'Command failed', 'error');
+                        return;
+                    }
+                    if (data.output) {
+                        showOutput(label, data.output);
+                    }
+                    toast(label + ' executed', 'success');
+                })
+                .catch(err => {
+                    setExecuting(btn, false);
+                    toast(err.message, 'error');
+                });
+            };
+
+            if (needsAuth) {
+                pendingCommand = { id, label, passwordNeeded: false };
+                pendingLabel = label;
+                document.getElementById('confirm-title').textContent = label;
+                document.getElementById('confirm-message').textContent = 'Are you sure you want to "' + label + '"?';
+                document.getElementById('confirm-modal').classList.add('active');
+                document.getElementById('confirm-execute').onclick = () => {
+                    closeConfirm();
+                    run();
+                };
+            } else {
+                run();
+            }
+        }
+
+        function executeConfirmed() {
+            if (!pendingCommand) return;
+            closeConfirm();
+            const { id, label } = pendingCommand;
+            pendingCommand = null;
+            handleCommand(id, label, false);
+        }
+
+        function executeAuthed() {
+            if (!pendingCommand) return;
+            const { id, label } = pendingCommand;
+            const password = document.getElementById('auth-password').value;
+            closeAuth();
+            pendingCommand = null;
+            const btn = document.querySelector(`.cmd-btn [onclick*="${id}"]`)?.closest('.cmd-btn');
+            if (btn) setExecuting(btn, true);
+            fetch('/api/control/run', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ command: id, password })
+            })
+            .then(r => r.json().then(data => ({ ok: r.ok, data })))
+            .then(({ ok, data }) => {
+                if (btn) setExecuting(btn, false);
+                if (!ok) { toast(data.error || 'Command failed', 'error'); return; }
+                if (data.output) showOutput(label, data.output);
+                toast(label + ' executed', 'success');
+            })
+            .catch(err => { if (btn) setExecuting(btn, false); toast(err.message, 'error'); });
+        }
+
+        document.getElementById('auth-password').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') executeAuthed();
+        });
+
+        renderButtons();
+    </script>
+</body>
+</html>
