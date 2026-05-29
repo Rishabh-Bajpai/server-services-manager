@@ -74,7 +74,13 @@ journalctl --user -u server-services-manager -f
 
 ### Services (`config.yaml`)
 
-Services can be added via the web UI or manually in `config.yaml`:
+Add services via the GUI as shown below:
+
+<p align="center">
+  <img src="resources/Config_screenshot.png" alt="Add Service Form" width="500"/>
+</p>
+
+Services can also be added manually in `config.yaml`:
 
 ```yaml
 programs:
