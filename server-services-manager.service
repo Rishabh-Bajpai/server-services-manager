@@ -1,0 +1,17 @@
+[Unit]
+Description=Server Services Manager
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%%PROJECT_DIR%%
+EnvironmentFile=%%PROJECT_DIR%%/.env
+Environment=PYTHONPATH=%%PROJECT_DIR%%
+ExecStart=%%PYTHON_PATH%% %%PROJECT_DIR%%/server.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

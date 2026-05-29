@@ -30,3 +30,6 @@ coverage.xml
 .DS_Store
 .env
 config.yaml
+plan.md
+.server.pid
+server.log

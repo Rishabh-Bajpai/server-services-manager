@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Monitor - Server Services Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --border-subtle: #1e1e2a;
+            --border-active: #2d2d3a;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --accent-orange: #f97316;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+
+        * { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        code, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+
+        body {
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(ellipse at top left, rgba(16, 185, 129, 0.03) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(59, 130, 246, 0.03) 0%, transparent 50%);
+        }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        @keyframes bar-glow { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.2); } }
+
+        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+        .bar-animate { animation: bar-glow 3s ease-in-out infinite; }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 1rem;
+            transition: all 0.3s ease;
+        }
+        .card:hover {
+            border-color: var(--border-active);
+            box-shadow: 0 4px 20px -4px rgba(0,0,0,0.3);
+        }
+
+        .section-icon {
+            width: 2rem;
+            height: 2rem;
+            border-radius: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .progress-track { background: var(--bg-secondary); border-radius: 9999px; overflow: hidden; }
+        .progress-fill { height: 100%; border-radius: 9999px; transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+
+        .status-badge {
+            font-size: 0.625rem; font-weight: 600; padding: 0.125rem 0.5rem;
+            border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.05em;
+        }
+
+        .proc-row { transition: background 0.15s ease; }
+        .proc-row:hover { background: rgba(255,255,255,0.03); }
+
+        .sort-btn { cursor: pointer; user-select: none; }
+        .sort-btn:hover { color: var(--text-primary); }
+        .sort-btn .sort-arrow { display: inline-block; margin-left: 2px; font-size: 10px; opacity: 0.3; }
+        .sort-btn.sorted .sort-arrow { opacity: 1; color: var(--accent-blue); }
+
+        .chart-container { position: relative; height: 120px; }
+    </style>
+</head>
+<body class="bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-screen">
+    <div class="max-w-7xl mx-auto p-3 sm:p-6">
+        <!-- Header -->
+        <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6 animate-fade-in">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                    <i data-lucide="activity" class="w-5 h-5 text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg sm:text-xl font-bold tracking-tight bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">System Monitor</h1>
+                    <p class="text-[var(--text-muted)] text-xs font-medium hidden sm:block">Real-time host metrics</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap justify-end">
+                <span id="connection-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-[var(--accent-green)]/10 text-[var(--accent-green)] border border-[var(--accent-green)]/20">
+                    <span class="w-2 h-2 rounded-full bg-current pulse-dot"></span>
+                    <span class="hidden sm:inline">Connected</span>
+                </span>
+                <a href="/" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
+                    <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Dashboard</span>
+                </a>
+                <a href="/control" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
+                    <i data-lucide="gamepad-2" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Control</span>
+                </a>
+                <a href="/logout" class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20 rounded-lg hover:bg-[var(--accent-red)]/20 transition-all text-sm font-medium">
+                    <i data-lucide="log-out" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Logout</span>
+                </a>
+            </div>
+        </header>
+
+        <!-- Top Row: System Info + CPU -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+            <!-- System Info -->
+            <div class="card p-3 sm:p-5 animate-fade-in" style="animation-delay: 0.05s">
+                <div class="flex items-center gap-2 mb-4">
+                    <div class="section-icon bg-[var(--accent-cyan)]/10">
+                        <i data-lucide="server" class="w-4 h-4 text-[var(--accent-cyan)]"></i>
+                    </div>
+                    <span class="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">System</span>
+                </div>
+                <div class="space-y-3 text-sm">
+                    <div class="flex justify-between items-center">
+                        <span class="text-[var(--text-muted)]">Hostname</span>
+                        <span class="font-mono text-[var(--text-primary)]" id="sys-hostname">--</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-[var(--text-muted)]">Kernel</span>
+                        <span class="font-mono text-[var(--text-primary)] text-xs" id="sys-kernel">--</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-[var(--text-muted)]">Uptime</span>
+                        <span class="font-mono text-[var(--accent-green)]" id="sys-uptime">--</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-[var(--text-muted)]">Load Average</span>
+                        <span class="font-mono text-[var(--text-primary)]" id="sys-load">--</span>
+                    </div>
+                    <div class="flex justify-between items-center hidden" id="temp-row">
+                        <span class="text-[var(--text-muted)]">CPU Temp</span>
+                        <span class="font-mono" id="sys-temp">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CPU Chart -->
+            <div class="card p-5 lg:col-span-2 animate-fade-in" style="animation-delay: 0.1s">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-2">
+                        <div class="section-icon bg-[var(--accent-green)]/10">
+                            <i data-lucide="cpu" class="w-4 h-4 text-[var(--accent-green)]"></i>
+                        </div>
+                        <span class="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">CPU</span>
+                    </div>
+                    <span class="text-2xl font-bold font-mono" id="cpu-total">--%</span>
+                </div>
+                <div class="progress-track h-2 mb-3">
+                    <div id="cpu-bar" class="progress-fill bg-gradient-to-r from-emerald-500 to-emerald-400 bar-animate" style="width:0%"></div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="cpu-chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Memory + Swap + Network Chart -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+            <!-- Memory Chart -->
+            <div class="card p-3 sm:p-5 animate-fade-in" style="animation-delay: 0.15s">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-2">
+                        <div class="section-icon bg-[var(--accent-blue)]/10">
+                            <i data-lucide="memory-stick" class="w-4 h-4 text-[var(--accent-blue)]"></i>
+                        </div>
+                        <span class="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Memory</span>
+                    </div>
+                    <span class="text-lg font-bold font-mono" id="mem-text">--%</span>
+                </div>
+                <div class="progress-track h-2.5 mb-2">
+                    <div id="mem-bar" class="progress-fill bg-gradient-to-r from-blue-500 to-blue-400 bar-animate" style="width:0%"></div>
+                </div>
+                <div class="flex justify-between text-[10px] text-[var(--text-muted)] mb-2">
+                    <span>Used: <span class="font-mono" id="mem-used">--</span></span>
+                    <span>Free: <span class="font-mono" id="mem-avail">--</span></span>
+                    <span>Total: <span class="font-mono" id="mem-total">--</span></span>
+                </div>
+                <div class="chart-container" style="height:80px">
+                    <canvas id="mem-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Swap -->
+            <div class="card p-3 sm:p-5 animate-fade-in" style="animation-delay: 0.2s">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-2">
+                        <div class="section-icon bg-[var(--accent-purple)]/10">
+                            <i data-lucide="hard-drive" class="w-4 h-4 text-[var(--accent-purple)]"></i>
+                        </div>
+                        <span class="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Swap</span>
+                    </div>
+                    <span class="text-lg font-bold font-mono" id="swap-text">--%</span>
+                </div>
+                <div class="progress-track h-2.5 mb-2">
+                    <div id="swap-bar" class="progress-fill bg-gradient-to-r from-purple-500 to-purple-400 bar-animate" style="width:0%"></div>
+                </div>
+                <div class="flex justify-between text-[10px] text-[var(--text-muted)] mb-3">
+                    <span>Used: <span class="font-mono" id="swap-used">--</span></span>
+                    <span>Total: <span class="font-mono" id="swap-total">--</span></span>
+                </div>
+                <!-- Disks aggregate -->
+                <div class="border-t border-[var(--border-subtle)] pt-3 mt-auto">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="section-icon bg-[var(--accent-orange)]/10" style="width:1.5rem;height:1.5rem">
+                            <i data-lucide="hard-drive" class="w-3 h-3 text-[var(--accent-orange)]"></i>
+                        </div>
+                        <span class="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Disks</span>
+                        <span class="ml-auto font-mono text-[var(--accent-orange)]" id="disk-total-pct">--%</span>
+                    </div>
+                    <div class="progress-track h-2 mb-1.5">
+                        <div id="disk-bar" class="progress-fill bg-gradient-to-r from-orange-500 to-orange-400" style="width:0%"></div>
+                    </div>
+                    <div class="flex justify-between text-[10px] text-[var(--text-muted)]">
+                        <span id="disk-used">--</span>
+                        <span id="disk-total">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Network Chart -->
+            <div class="card p-3 sm:p-5 animate-fade-in" style="animation-delay: 0.25s">
+                <div class="flex items-center gap-2 mb-3">
+                    <div class="section-icon bg-[var(--accent-cyan)]/10">
+                        <i data-lucide="wifi" class="w-4 h-4 text-[var(--accent-cyan)]"></i>
+                    </div>
+                    <span class="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Network</span>
+                </div>
+                <div class="grid grid-cols-2 gap-3 mb-3">
+                    <div class="flex items-center gap-2">
+                        <div class="w-7 h-7 rounded-lg bg-[var(--accent-green)]/10 flex items-center justify-center">
+                            <i data-lucide="arrow-down" class="w-3.5 h-3.5 text-[var(--accent-green)]"></i>
+                        </div>
+                        <div>
+                            <div class="text-[9px] text-[var(--text-muted)] uppercase font-semibold tracking-wider">Down</div>
+                            <div class="text-sm font-bold font-mono text-[var(--accent-green)]" id="net-recv-total">--</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="w-7 h-7 rounded-lg bg-[var(--accent-orange)]/10 flex items-center justify-center">
+                            <i data-lucide="arrow-up" class="w-3.5 h-3.5 text-[var(--accent-orange)]"></i>
+                        </div>
+                        <div>
+                            <div class="text-[9px] text-[var(--text-muted)] uppercase font-semibold tracking-wider">Up</div>
+                            <div class="text-sm font-bold font-mono text-[var(--accent-orange)]" id="net-sent-total">--</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="chart-container" style="height:80px">
+                    <canvas id="net-chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Disk IO -->
+        <div class="card p-3 sm:p-4 mb-4 animate-fade-in" style="animation-delay: 0.28s">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <div class="section-icon bg-[var(--accent-yellow)]/10" style="width:1.5rem;height:1.5rem">
+                        <i data-lucide="activity" class="w-3 h-3 text-[var(--accent-yellow)]"></i>
+                    </div>
+                    <span class="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Disk I/O</span>
+                </div>
+                <div class="flex items-center gap-4 text-xs">
+                    <span class="flex items-center gap-1.5 text-[var(--text-muted)]"><span class="w-2 h-2 rounded-full bg-[var(--accent-green)]"></span> Read <span class="font-mono text-[var(--text-secondary)]" id="disk-read-speed">--</span></span>
+                    <span class="flex items-center gap-1.5 text-[var(--text-muted)]"><span class="w-2 h-2 rounded-full bg-[var(--accent-orange)]"></span> Write <span class="font-mono text-[var(--text-secondary)]" id="disk-write-speed">--</span></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Processes -->
+        <div class="card p-3 sm:p-5 animate-fade-in" style="animation-delay: 0.3s">
+            <div class="flex items-center gap-2 mb-4">
+                <div class="section-icon bg-[var(--accent-yellow)]/10">
+                    <i data-lucide="list" class="w-4 h-4 text-[var(--accent-yellow)]"></i>
+                </div>
+                <span class="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Top Processes</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left">
+                    <thead>
+                        <tr class="text-[var(--text-muted)] text-xs uppercase border-b border-[var(--border-subtle)]">
+                            <th class="pb-2 font-semibold"><span class="sort-btn" data-col="pid" data-type="num">PID <span class="sort-arrow">▲</span></span></th>
+                            <th class="pb-2 font-semibold"><span class="sort-btn" data-col="name" data-type="str">Name <span class="sort-arrow">▲</span></span></th>
+                            <th class="pb-2 text-right font-semibold"><span class="sort-btn" data-col="cpu" data-type="num">CPU <span class="sort-arrow">▲</span></span></th>
+                            <th class="pb-2 text-right font-semibold"><span class="sort-btn" data-col="memory" data-type="num">MEM <span class="sort-arrow">▲</span></span></th>
+                            <th class="pb-2 font-semibold"><span class="sort-btn" data-col="status" data-type="str">State <span class="sort-arrow">▲</span></span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="procs-body" class="font-mono text-xs"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        const socket = io({ transports: ['websocket'], upgrade: false });
+        const badge = document.getElementById('connection-badge');
+
+        socket.on('connect', () => {
+            badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-current pulse-dot"></span>Connected';
+            badge.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-[var(--accent-green)]/10 text-[var(--accent-green)] border border-[var(--accent-green)]/20';
+        });
+        socket.on('disconnect', () => {
+            badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-current"></span>Disconnected';
+            badge.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20';
+        });
+
+        const MAX_POINTS = 60;
+        const timeLabels = [];
+        const cpuAvgHistory = [];
+        const memHistory = [];
+        const netRecvHistory = [];
+        const netSentHistory = [];
+        let cpuCoreHistories = [];
+
+        let sortCol = 'cpu';
+        let sortDir = 'desc';
+        let processesData = [];
+
+        Chart.defaults.font.family = "'JetBrains Mono', monospace";
+        Chart.defaults.font.size = 10;
+        Chart.defaults.color = '#64748b';
+
+        const coreColors = [
+            '#3b82f6','#8b5cf6','#f59e0b','#ef4444','#06b6d4','#ec4899',
+            '#14b8a6','#f97316','#6366f1','#84cc16','#e879f9','#22d3ee',
+            '#a78bfa','#fb923c','#4ade80','#f472b6','#38bdf8','#fbbf24',
+            '#c084fc','#34d399','#fb7185','#2dd4bf','#a3e635','#e2e8f0'
+        ];
+
+        function makeChartConfig(datasets, yMax) {
+            return {
+                type: 'line',
+                data: { labels: timeLabels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 200 },
+                    interaction: { intersect: false, mode: 'index' },
+                    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                    scales: {
+                        x: { display: false },
+                        y: { display: false, min: 0, max: yMax, beginAtZero: true }
+                    },
+                    elements: { point: { radius: 0 }, line: { tension: 0.3 } }
+                }
+            };
+        }
+
+        let cpuChart;
+        function initCpuChart(numCores) {
+            const datasets = [];
+            for (let i = 0; i < numCores; i++) {
+                cpuCoreHistories[i] = [];
+                datasets.push({
+                    data: cpuCoreHistories[i],
+                    borderColor: coreColors[i % coreColors.length] + '55',
+                    borderWidth: 1,
+                    fill: false
+                });
+            }
+            datasets.push({
+                data: cpuAvgHistory,
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16,185,129,0.12)',
+                borderWidth: 2,
+                fill: true
+            });
+            cpuChart = new Chart(document.getElementById('cpu-chart'), makeChartConfig(datasets, 100));
+        }
+
+        const memChart = new Chart(document.getElementById('mem-chart'), makeChartConfig([{
+            data: memHistory,
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59,130,246,0.1)',
+            borderWidth: 1.5,
+            fill: true
+        }], 100));
+
+        const netChart = new Chart(document.getElementById('net-chart'), makeChartConfig([
+            { data: netRecvHistory, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', borderWidth: 1.5, fill: true },
+            { data: netSentHistory, borderColor: '#f97316', backgroundColor: 'rgba(249,115,22,0.08)', borderWidth: 1.5, fill: true }
+        ], undefined));
+
+        function pushHistory(arr, val) {
+            arr.push(val);
+            if (arr.length > MAX_POINTS) arr.shift();
+        }
+
+        function fmtBytes(bytes) {
+            if (!bytes || bytes === 0) return '0 B';
+            const k = 1024;
+            const s = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + s[i];
+        }
+        function fmtSpeed(bps) { return fmtBytes(bps) + '/s'; }
+        function fmtUptime(seconds) {
+            const d = Math.floor(seconds / 86400);
+            const h = Math.floor((seconds % 86400) / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            let p = [];
+            if (d > 0) p.push(d + 'd');
+            if (h > 0 || d > 0) p.push(h + 'h');
+            p.push(m + 'm');
+            return p.join(' ');
+        }
+        function getBarColor(pct) {
+            if (pct > 85) return 'from-red-500 to-red-400';
+            if (pct > 60) return 'from-yellow-500 to-yellow-400';
+            return 'from-emerald-500 to-emerald-400';
+        }
+
+        function updateTable() {
+            const sorted = [...processesData].sort((a, b) => {
+                let va = a[sortCol], vb = b[sortCol];
+                if (typeof va === 'string') { va = va.toLowerCase(); vb = vb.toLowerCase(); }
+                if (va < vb) return sortDir === 'asc' ? -1 : 1;
+                if (va > vb) return sortDir === 'asc' ? 1 : -1;
+                return 0;
+            });
+            const tbody = document.getElementById('procs-body');
+            tbody.innerHTML = sorted.map(p => `
+                <tr class="proc-row border-b border-[var(--border-subtle)] last:border-0">
+                    <td class="py-2 text-[var(--text-muted)]">${p.pid}</td>
+                    <td class="py-2 text-[var(--text-primary)] truncate max-w-[120px] font-medium">${p.name}</td>
+                    <td class="py-2 text-right font-semibold ${p.cpu > 50 ? 'text-[var(--accent-red)]' : p.cpu > 20 ? 'text-[var(--accent-yellow)]' : 'text-[var(--text-secondary)]'}">${p.cpu.toFixed(1)}%</td>
+                    <td class="py-2 text-right text-[var(--text-secondary)]">${p.memory.toFixed(1)}%</td>
+                    <td class="py-2"><span class="status-badge ${p.status === 'running' ? 'bg-[var(--accent-green)]/10 text-[var(--accent-green)] border border-[var(--accent-green)]/20' : 'bg-white/5 text-[var(--text-muted)] border border-[var(--border-subtle)]'}">${p.status}</span></td>
+                </tr>
+            `).join('');
+        }
+
+        document.querySelectorAll('.sort-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const col = btn.dataset.col;
+                if (sortCol === col) {
+                    sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+                } else {
+                    sortCol = col;
+                    sortDir = btn.dataset.type === 'str' ? 'asc' : 'desc';
+                }
+                document.querySelectorAll('.sort-btn').forEach(b => {
+                    b.classList.remove('sorted');
+                    b.querySelector('.sort-arrow').textContent = '▲';
+                });
+                btn.classList.add('sorted');
+                btn.querySelector('.sort-arrow').textContent = sortDir === 'asc' ? '▲' : '▼';
+                updateTable();
+            });
+        });
+
+        let cpuChartInitialized = false;
+
+        socket.on('system_stats', (s) => {
+            try {
+            if (!s || !s.cpu || !s.memory) return;
+            const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            pushHistory(timeLabels, now);
+            if (timeLabels.length > MAX_POINTS) timeLabels.shift();
+
+            // System Info
+            document.getElementById('sys-hostname').textContent = s.system.hostname;
+            document.getElementById('sys-kernel').textContent = s.system.kernel;
+            document.getElementById('sys-uptime').textContent = fmtUptime(s.system.uptime);
+            document.getElementById('sys-load').textContent = s.cpu.load.map(l => l.toFixed(1)).join(' / ');
+
+            // CPU Temperature (optional, graceful fallback)
+            const tempEl = document.getElementById('sys-temp');
+            const tempRow = document.getElementById('temp-row');
+            if (s.cpu.temperature !== null && s.cpu.temperature !== undefined) {
+                const t = s.cpu.temperature;
+                tempEl.textContent = t + '°C';
+                tempEl.className = `font-mono ${t > 80 ? 'text-[var(--accent-red)]' : t > 60 ? 'text-[var(--accent-yellow)]' : 'text-[var(--accent-green)]'}`;
+                tempRow.classList.remove('hidden');
+            } else {
+                tempRow.classList.add('hidden');
+            }
+
+            // CPU — per-core lines + averaged area
+            const cores = s.cpu.cores || [];
+            if (!cpuChartInitialized && cores.length > 0) {
+                initCpuChart(cores.length);
+                cpuChartInitialized = true;
+            }
+            if (cpuChartInitialized && cores.length > 0) {
+                for (let i = 0; i < cores.length; i++) {
+                    pushHistory(cpuCoreHistories[i], cores[i]);
+                }
+                const cpuAvg = cores.reduce((a, b) => a + b, 0) / cores.length;
+                pushHistory(cpuAvgHistory, cpuAvg);
+                cpuChart.data.labels = timeLabels;
+                cpuChart.update('none');
+            }
+
+            const cpuPct = typeof s.cpu.percent === 'number' ? s.cpu.percent : 0;
+            document.getElementById('cpu-total').textContent = cpuPct.toFixed(1) + '%';
+            document.getElementById('cpu-total').className = `text-2xl font-bold font-mono ${cpuPct > 80 ? 'text-[var(--accent-red)]' : cpuPct > 50 ? 'text-[var(--accent-yellow)]' : 'text-[var(--accent-green)]'}`;
+            const cpuBar = document.getElementById('cpu-bar');
+            cpuBar.style.width = cpuPct + '%';
+            cpuBar.className = `progress-fill bg-gradient-to-r ${getBarColor(cpuPct)} bar-animate`;
+
+            // Memory
+            const mem = s.memory;
+            document.getElementById('mem-text').textContent = mem.percent.toFixed(1) + '%';
+            document.getElementById('mem-text').className = `text-lg font-bold font-mono ${mem.percent > 85 ? 'text-[var(--accent-red)]' : mem.percent > 60 ? 'text-[var(--accent-yellow)]' : 'text-[var(--accent-blue)]'}`;
+            document.getElementById('mem-bar').style.width = mem.percent + '%';
+            document.getElementById('mem-used').textContent = fmtBytes(mem.used);
+            document.getElementById('mem-avail').textContent = fmtBytes(mem.available);
+            document.getElementById('mem-total').textContent = fmtBytes(mem.total);
+            pushHistory(memHistory, mem.percent);
+            memChart.data.labels = timeLabels;
+            memChart.update('none');
+
+            // Swap
+            document.getElementById('swap-text').textContent = mem.swap_percent.toFixed(1) + '%';
+            document.getElementById('swap-text').className = `text-lg font-bold font-mono ${mem.swap_percent > 85 ? 'text-[var(--accent-red)]' : mem.swap_percent > 60 ? 'text-[var(--accent-yellow)]' : 'text-[var(--accent-purple)]'}`;
+            document.getElementById('swap-bar').style.width = mem.swap_percent + '%';
+            document.getElementById('swap-used').textContent = fmtBytes(mem.swap_used);
+            document.getElementById('swap-total').textContent = fmtBytes(mem.swap_total);
+
+            // Disks — aggregate physical only
+            const disks = s.disks || [];
+            const physicalDisks = disks.filter(d =>
+                d && !d.mount.startsWith('/snap/') &&
+                !d.mount.startsWith('/boot/efi') &&
+                !d.device.startsWith('/dev/loop')
+            );
+            const diskUsed = physicalDisks.reduce((sum, d) => sum + d.used, 0);
+            const diskTotal = physicalDisks.reduce((sum, d) => sum + d.total, 0);
+            const diskPct = diskTotal > 0 ? ((diskUsed / diskTotal) * 100).toFixed(1) : 0;
+            document.getElementById('disk-total-pct').textContent = diskPct + '%';
+            document.getElementById('disk-bar').style.width = diskPct + '%';
+            document.getElementById('disk-bar').className = `progress-fill bg-gradient-to-r ${getBarColor(diskPct)}`;
+            document.getElementById('disk-used').textContent = fmtBytes(diskUsed) + ' used';
+            document.getElementById('disk-total').textContent = fmtBytes(diskTotal) + ' total';
+
+            // Disk IO
+            if (s.disk_io) {
+                document.getElementById('disk-read-speed').textContent = fmtSpeed(s.disk_io.read_speed || 0);
+                document.getElementById('disk-write-speed').textContent = fmtSpeed(s.disk_io.write_speed || 0);
+            }
+
+            // Network — aggregate physical only
+            const netArr = s.network || [];
+            const physicalNet = netArr.filter(n =>
+                !n.interface.startsWith('docker') &&
+                !n.interface.startsWith('veth') &&
+                !n.interface.startsWith('br-') &&
+                !n.interface.startsWith('virbr')
+            );
+            const netRecv = physicalNet.reduce((sum, n) => sum + n.recv_speed, 0);
+            const netSent = physicalNet.reduce((sum, n) => sum + n.sent_speed, 0);
+            document.getElementById('net-recv-total').textContent = fmtSpeed(netRecv);
+            document.getElementById('net-sent-total').textContent = fmtSpeed(netSent);
+            pushHistory(netRecvHistory, netRecv / 1024);
+            pushHistory(netSentHistory, netSent / 1024);
+            netChart.data.labels = timeLabels;
+            netChart.update('none');
+
+            // Processes
+            if (s.processes) {
+                processesData = s.processes;
+                updateTable();
+            }
+            } catch (e) {
+                console.error('Monitor update error:', e);
+            }
+        });
+    </script>
+</body>
+</html>

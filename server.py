@@ -1,3 +1,6 @@
+import signal
+import sys
+
 import eventlet
 eventlet.monkey_patch()
 
@@ -7,11 +10,14 @@ from app.process_manager import ProcessManager, ProgramConfig
 from app.terminal_manager import TerminalManager
 import logging
 import os
-import threading
 import time
+import threading
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
 from flask import send_file, send_from_directory
 from dotenv import load_dotenv
+import psutil
+import subprocess
 
 # Load environment variables
 load_dotenv()
@@ -21,26 +27,31 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("FlaskAPI")
 
 app = Flask(__name__, template_folder='templates')
-app.config['SECRET_KEY'] = 'secret!'
-socketio = SocketIO(app, cors_allowed_origins="*", max_http_buffer_size=10*1024*1024)
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', os.urandom(24).hex())
+socketio = SocketIO(app, cors_allowed_origins=os.getenv('CORS_ORIGIN', '*'), max_http_buffer_size=10*1024*1024)
 
 pm = ProcessManager()
 tm = TerminalManager(socketio)
 
+_password_hash = generate_password_hash(os.getenv('PASSWORD', 'admin'))
+
 @app.before_request
 def require_login():
-    allowed_routes = ['login', 'static']
+    allowed_routes = ['login', 'static', 'health']
     if request.endpoint not in allowed_routes and 'logged_in' not in session:
         return redirect(url_for('login'))
 
+@app.route('/health')
+def health():
+    return jsonify({"status": "ok"})
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    global _password_hash
     if request.method == 'POST':
         password = request.form.get('password')
-        # Default to 'admin' if not set in .env
-        env_password = os.getenv('PASSWORD', 'admin')
         
-        if password == env_password:
+        if check_password_hash(_password_hash, password):
             session['logged_in'] = True
             return redirect(url_for('index'))
         else:
@@ -57,6 +68,96 @@ def logout():
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/monitor')
+def monitor():
+    return render_template('monitor.html')
+
+@app.route('/control')
+def control():
+    custom_commands = []
+    config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')
+    if os.path.exists(config_path):
+        try:
+            with open(config_path) as f:
+                cfg = yaml.safe_load(f)
+                if cfg and 'commands' in cfg:
+                    custom_commands = cfg['commands']
+        except Exception:
+            pass
+    return render_template('control.html', commands=custom_commands)
+
+WHITELIST_COMMANDS = {
+    "lock":       {"cmd": "loginctl lock-session",          "auth": False, "icon": "lock"},
+    "suspend":    {"cmd": "systemctl suspend",               "auth": True,  "icon": "moon"},
+    "hibernate":  {"cmd": "systemctl hibernate",            "auth": True,  "icon": "bed"},
+    "reboot":     {"cmd": "systemctl reboot",               "auth": True,  "icon": "power"},
+    "shutdown":   {"cmd": "systemctl poweroff",             "auth": True,  "icon": "power-off"},
+    "disk":       {"cmd": "df -h /",                        "auth": False, "icon": "hard-drive"},
+    "memory":     {"cmd": "free -h",                        "auth": False, "icon": "memory-stick"},
+    "uptime":     {"cmd": "uptime",                         "auth": False, "icon": "clock"},
+    "temp":       {"cmd": "",                                "auth": False, "icon": "thermometer"},
+    "net-restart":{"cmd": "systemctl restart NetworkManager","auth": False, "icon": "wifi-off"},
+    "net-ip":     {"cmd": "ip -4 addr show | grep inet | awk '{print $NF\" \"$2}'", "auth": False, "icon": "globe"},
+}
+
+@app.route('/api/control/run', methods=['POST'])
+def control_run():
+    data = request.get_json() or {}
+    command_id = data.get('command')
+    password = data.get('password', '')
+
+    if command_id in WHITELIST_COMMANDS:
+        entry = WHITELIST_COMMANDS[command_id]
+        cmd = entry['cmd']
+    else:
+        config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')
+        found = None
+        if os.path.exists(config_path):
+            try:
+                with open(config_path) as f:
+                    cfg = yaml.safe_load(f)
+                    if cfg and 'commands' in cfg:
+                        for c in cfg['commands']:
+                            if c.get('id') == command_id:
+                                found = c
+                                break
+            except Exception:
+                pass
+        if found:
+            entry = found
+            cmd = found.get('command', '')
+        else:
+            return jsonify({"error": "Unknown command"}), 400
+
+    if entry.get('auth', False):
+        if not password:
+            return jsonify({"error": "auth_required"}), 401
+        if not check_password_hash(_password_hash, password):
+            return jsonify({"error": "Invalid password"}), 403
+
+    if command_id == 'temp':
+        temp = None
+        try:
+            temps = psutil.sensors_temperatures()
+            for key in ('coretemp', 'k10temp', 'cpu-thermal', 'cpu_thermal', 'thinkpad', 'acpitz'):
+                if key in temps:
+                    temp = round(temps[key][0].current, 1)
+                    break
+        except Exception:
+            pass
+        if temp is not None:
+            return jsonify({"ok": True, "output": f"CPU Temperature: {temp}°C"})
+        return jsonify({"ok": True, "output": "No temperature sensor available"})
+
+    try:
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+        output = result.stdout.strip() or result.stderr.strip() or "Done (no output)"
+        return jsonify({"ok": True, "output": output})
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Command timed out"}), 504
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/programs', methods=['GET'])
 def get_programs():
@@ -141,6 +242,32 @@ def control_program(name, action):
         
     return jsonify({"status": action, "name": name})
 
+@app.route('/programs/<name>/logs', methods=['GET'])
+def get_logs(name):
+    program = pm.get_program(name)
+    if not program:
+        return jsonify({"error": "Program not found"}), 404
+    return jsonify({"logs": list(program.logs)})
+
+@app.route('/programs/<name>/logs/download', methods=['GET'])
+def download_logs(name):
+    program = pm.get_program(name)
+    if not program:
+        return jsonify({"error": "Program not found"}), 404
+    log_text = "\n".join(program.logs)
+    return (log_text, 200, {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Content-Disposition": f'attachment; filename="{name}.log"'
+    })
+
+@app.route('/programs/<name>/logs', methods=['DELETE'])
+def clear_logs(name):
+    program = pm.get_program(name)
+    if not program:
+        return jsonify({"error": "Program not found"}), 404
+    program.logs.clear()
+    return jsonify({"status": "cleared"})
+
 # File Management Endpoints
 @app.route('/api/files', methods=['GET'])
 def list_files():
@@ -221,7 +348,7 @@ def upload_file():
         if file:
             filename = secure_filename(file.filename)
             base_dir = os.path.expanduser('~')
-            target_dir = os.path.abspath(os.path.join(base_dir, path))
+            target_dir = os.path.realpath(os.path.join(base_dir, path))
             
             if not target_dir.startswith(base_dir):
                 return jsonify({"error": "Access denied"}), 403
@@ -240,7 +367,7 @@ def download_file():
              return jsonify({"error": "No path specified"}), 400
              
         base_dir = os.path.expanduser('~')
-        target_path = os.path.abspath(os.path.join(base_dir, path))
+        target_path = os.path.realpath(os.path.join(base_dir, path))
         
         if not target_path.startswith(base_dir):
             return jsonify({"error": "Access denied"}), 403
@@ -255,17 +382,42 @@ def download_file():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+_process_cache = {}
+
 def background_thread():
-    """Example of how to send server generated events to clients."""
+    global _process_cache
+    num_cores = psutil.cpu_count() or 1
     while True:
         programs_data = []
         for p in pm.get_all_programs():
+            cpu = None
+            memory = None
+            pid = p._get_pid()
+            if pid:
+                try:
+                    if pid not in _process_cache:
+                        _process_cache[pid] = psutil.Process(pid)
+                    proc = _process_cache[pid]
+                    cpu = proc.cpu_percent(interval=0)
+                    if cpu is None:
+                        cpu = 0.0
+                    cpu = round(cpu / num_cores, 1)
+                    memory = proc.memory_percent()
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    _process_cache.pop(pid, None)
             programs_data.append({
                 "name": p.config.name,
                 "status": p.status.value,
-                "logs": p.logs[-100:], # Temporarily reduce to 100 to debug payload size
-                "restart_count": p.restart_count
+                "logs": list(p.logs)[-100:],
+                "restart_count": p.restart_count,
+                "cpu": cpu,
+                "memory": memory
             })
+        # Clean stale cache entries (PIDs no longer tracked)
+        tracked_pids = {p._get_pid() for p in pm.get_all_programs() if p._get_pid()}
+        stale = [pid for pid in _process_cache if pid not in tracked_pids]
+        for pid in stale:
+            _process_cache.pop(pid, None)
         socketio.emit('update', {'data': programs_data})
         socketio.sleep(1)
 
@@ -305,16 +457,192 @@ def handle_terminal_close(data):
     if session_id:
         tm.close(session_id)
 
+_net_prev = {}
+_disk_io_prev = None
+
+_proc_cpu_cache = {}
+
+def system_monitor_thread():
+    global _net_prev, _disk_io_prev, _proc_cpu_cache
+    num_cores = psutil.cpu_count() or 1
+    psutil.cpu_percent(interval=None)
+    psutil.cpu_percent(interval=None, percpu=True)
+
+    while True:
+        cpu_total = psutil.cpu_percent(interval=0)
+        cpu_cores = psutil.cpu_percent(interval=0, percpu=True)
+        mem = psutil.virtual_memory()
+        swap = psutil.swap_memory()
+        load = os.getloadavg()
+        boot = psutil.boot_time()
+
+        disks = []
+        for p in psutil.disk_partitions(all=False):
+            try:
+                u = psutil.disk_usage(p.mountpoint)
+                disks.append({
+                    "device": p.device,
+                    "mount": p.mountpoint,
+                    "fstype": p.fstype,
+                    "total": u.total,
+                    "used": u.used,
+                    "free": u.free,
+                    "percent": u.percent
+                })
+            except PermissionError:
+                pass
+
+        disk_io = psutil.disk_io_counters()
+        if _disk_io_prev is not None:
+            disk_read_speed = (disk_io.read_bytes - _disk_io_prev.read_bytes) / 2
+            disk_write_speed = (disk_io.write_bytes - _disk_io_prev.write_bytes) / 2
+        else:
+            disk_read_speed = 0
+            disk_write_speed = 0
+        _disk_io_prev = disk_io
+
+        net = []
+        net_counters = psutil.net_io_counters(pernic=True)
+        for iface, counters in net_counters.items():
+            if iface == 'lo':
+                continue
+            prev = _net_prev.get(iface)
+            sent_speed = (counters.bytes_sent - prev.bytes_sent) / 2 if prev else 0
+            recv_speed = (counters.bytes_recv - prev.bytes_recv) / 2 if prev else 0
+            net.append({
+                "interface": iface,
+                "sent_speed": sent_speed,
+                "recv_speed": recv_speed,
+                "bytes_sent": counters.bytes_sent,
+                "bytes_recv": counters.bytes_recv,
+                "packets_sent": counters.packets_sent,
+                "packets_recv": counters.packets_recv
+            })
+            _net_prev[iface] = counters
+
+        procs = []
+        seen_pids = set()
+        for p in psutil.process_iter(['pid', 'name', 'status']):
+            try:
+                pid = p.info['pid']
+                seen_pids.add(pid)
+                name = p.info['name']
+                status = p.info['status']
+                try:
+                    if pid not in _proc_cpu_cache:
+                        _proc_cpu_cache[pid] = psutil.Process(pid)
+                        _proc_cpu_cache[pid].cpu_percent()
+                        cpu = 0.0
+                        memory = 0.0
+                    else:
+                        proc = _proc_cpu_cache[pid]
+                        cpu = proc.cpu_percent(interval=0)
+                        if cpu is None:
+                            cpu = 0.0
+                        memory = proc.memory_percent()
+                        if memory is None:
+                            memory = 0.0
+                    procs.append({
+                        "pid": pid,
+                        "name": name,
+                        "cpu": round(cpu / num_cores, 1),
+                        "memory": round(memory, 1),
+                        "status": status
+                    })
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    _proc_cpu_cache.pop(pid, None)
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+        stale = [pid for pid in _proc_cpu_cache if pid not in seen_pids]
+        for pid in stale:
+            _proc_cpu_cache.pop(pid, None)
+        procs.sort(key=lambda x: x['cpu'], reverse=True)
+        procs = procs[:15]
+
+        # CPU Temperature (graceful fallback if sensors unavailable)
+        cpu_temp = None
+        try:
+            temps = psutil.sensors_temperatures()
+            if 'coretemp' in temps:
+                cpu_temp = round(max(t.current for t in temps['coretemp']), 1)
+            elif 'k10temp' in temps:
+                cpu_temp = round(temps['k10temp'][0].current, 1)
+            elif 'cpu-thermal' in temps:
+                cpu_temp = round(temps['cpu-thermal'][0].current, 1)
+            elif 'cpu_thermal' in temps:
+                cpu_temp = round(temps['cpu_thermal'][0].current, 1)
+            elif 'thinkpad' in temps:
+                cpu_temp = round(temps['thinkpad'][0].current, 1)
+            elif 'acpitz' in temps:
+                cpu_temp = round(temps['acpitz'][0].current, 1)
+        except (AttributeError, FileNotFoundError, KeyError, IndexError, TypeError):
+            cpu_temp = None
+
+        sys_info = os.uname()
+        socketio.emit('system_stats', {
+            "cpu": {
+                "percent": cpu_total,
+                "cores": cpu_cores,
+                "load": [round(l, 2) for l in load],
+                "temperature": cpu_temp
+            },
+            "memory": {
+                "total": mem.total,
+                "available": mem.available,
+                "used": mem.used,
+                "percent": mem.percent,
+                "swap_total": swap.total,
+                "swap_used": swap.used,
+                "swap_percent": swap.percent
+            },
+            "disks": disks,
+            "disk_io": {
+                "read_speed": disk_read_speed,
+                "write_speed": disk_write_speed
+            },
+            "network": net,
+            "processes": procs,
+            "system": {
+                "hostname": sys_info.nodename,
+                "kernel": sys_info.release,
+                "uptime": int(time.time() - boot)
+            }
+        })
+        socketio.sleep(2)
+
+_shutdown_called = False
+
+def shutdown_handler(signum=None, frame=None):
+    global _shutdown_called
+    if _shutdown_called:
+        return
+    _shutdown_called = True
+    logger.info(f"Received signal {signum}. Shutting down...")
+    pm.stop_all()
+    for sid in list(tm.sessions.keys()):
+        tm.close(sid)
+    logger.info("Shutdown complete.")
+    sys.exit(0)
+
 if __name__ == '__main__':
-    # Load config and start programs
+    signal.signal(signal.SIGTERM, shutdown_handler)
+    signal.signal(signal.SIGINT, shutdown_handler)
+    
+    # Load config, re-attach to surviving processes, then start new ones
     pm.load_config()
+    pm.load_state_and_reattach()
     pm.start_all()
     
     # Start background thread for updates
     thread = threading.Thread(target=background_thread, daemon=True)
     thread.start()
     
+    # Start system monitor thread
+    monitor_thread = threading.Thread(target=system_monitor_thread, daemon=True)
+    monitor_thread.start()
+    
+    logger.info(f"Server starting on 0.0.0.0:8881")
     try:
         socketio.run(app, host='0.0.0.0', port=8881, allow_unsafe_werkzeug=True)
     except KeyboardInterrupt:
-        pm.stop_all()
+        shutdown_handler()

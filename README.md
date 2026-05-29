@@ -1,93 +1,142 @@
 # Server Services Manager
 
-A robust, web-based process manager for controlling server services and terminals.
+> A web-based process manager with a real-time system monitor, PTY terminal, file manager, and control panel for Linux servers.
 
-![App Screenshot](resources/readme_screenshot.png)
+<p align="center">
+  <a href="https://www.python.org/downloads/">
+    <img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python Version"/>
+  </a>
+  <a href="LICENSE.md">
+    <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"/>
+  </a>
+</p>
+
+---
 
 ## Features
 
-- **Service Management**: Start, stop, restart, and monitor services.
-- **Web Terminal**: Integrated multi-tab terminal for direct server control.
-- **File Manager**: Upload and download files to/from the server.
-- **Real-time Updates**: Live status updates and logs via WebSockets.
-- **Authentication**: Simple password protection for access control.
-- **Responsive UI**: Modern, dark-themed interface built with Tailwind CSS.
+- **Service Management** — Start, stop, restart, and monitor services with auto-restart on failure
+- **System Monitor** — Real-time CPU (per-core + averaged chart), memory, swap, disk I/O, network usage, and top processes with sortable columns
+- **Control Panel** — Steam Deck–style quick-action buttons for reboot, suspend, lock, disk/memory checks, and custom user-defined commands
+- **Web Terminal** — Multi-tab PTY terminal for direct shell access
+- **File Manager** — Browse, upload, and download files on the server
+- **Real-time Updates** — Live status and logs via WebSockets
+- **Process Recovery** — Survives manager restarts; re-attaches to running services automatically
+- **Authentication** — Password-protected access with hashed credentials
+- **Responsive UI** — Dark-themed, resizable panes, desktop and mobile-friendly
 
-## Installation
+## Quick Start
 
-1. Clone the repository:
+```bash
+git clone https://github.com/Rishabh-Bajpai/server-services-manager.git
+cd server-services-manager
+pip install -r requirements.txt
+cp .env.example .env          # then set a secure password
+./start.sh
+```
 
-   ```bash
-   git clone https://github.com/Rishabh-Bajpai/server-services-manager.git
-   cd server-services-manager
-   ```
+Open **http://localhost:8881** and log in with your password.
 
-2. Install dependencies:
+Stop with `./stop.sh`.
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+## Install as a Service (recommended)
 
-3. Configure authentication:
+For auto-start on boot and automatic crash recovery:
 
-   Create a `.env` file in the root directory:
+```bash
+bash install-service.sh
+journalctl --user -u server-services-manager -f
+```
 
-   ```bash
-   echo "PASSWORD=your_secure_password" > .env
-   ```
+## Screenshots
 
-   > Default password is `admin` if not configured.
+### Desktop
 
-## Usage
+| Dashboard | System Monitor | Control Panel |
+|-----------|---------------|---------------|
+| ![Desktop](resources/dashboard-desktop.png) | ![Monitor](resources/monitor-desktop.png) | ![Control](resources/control-desktop.png) |
 
-1. Start the server:
+### Mobile
 
-   ```bash
-   python server.py
-   ```
-
-   Or use the startup script:
-
-   ```bash
-   ./start_process_manager.sh
-   ```
-
-2. Open your browser and navigate to `http://localhost:8001` (or the configured port).
+| Dashboard | System Monitor | Control Panel |
+|-----------|---------------|---------------|
+| ![Dashboard Mobile](resources/dashboard-mobile.png) | ![Monitor Mobile](resources/monitor-mobile.png) | ![Control Mobile](resources/control-mobile.png) |
 
 ## Configuration
 
-- **Services**: Define your services via the GUI as shown below:
-  
-  ![Configuration Screenshot](resources/Config_screenshot.png)
+### Environment Variables (`.env`)
 
-  Alternatively, define your services manually in `config.yaml`.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PASSWORD` | `admin` | Login password |
+| `SECRET_KEY` | Auto-generated | Flask session signing key |
+| `CORS_ORIGIN` | `*` | Allowed CORS origin |
 
-  Example `config.yaml`:
+### Services (`config.yaml`)
 
-  ```yaml
-  programs:
-    - autostart: true
-      command: conda run -n comfyui --no-capture-output python main.py --listen
-      cwd: /home/rishabh/ComfyUI
-      environment: {}
-      name: ComfyUI
-    - autostart: false
-      command: localsend
-      cwd: /home/rishabh/Downloads
-      environment: {}
-      name: localsend
-  ```
+Add services via the GUI as shown below:
 
-- **Environment**: Use `.env` to configure the application password and other secrets (optional).
-  
-  ```bash
-  PASSWORD=your_secure_password
-  SECRET_KEY=secret!
-  ```
+<p align="center">
+  <img src="resources/Config_screenshot.png" alt="Add Service Form" width="500"/>
+</p>
 
-- **Autostart on boot**: Edit and add the startup script (start_process_manager.sh) to your system's startup applications.
-![Autostart Screenshot](resources/Autostart_screenshot.png)
+Services can also be added manually in `config.yaml`:
+
+```yaml
+programs:
+  - name: My Service
+    command: python my_app.py
+    cwd: /home/user/my_app
+    autostart: true
+    environment:
+      MY_VAR: value
+```
+
+### Custom Control Panel Commands
+
+You can add your own commands to the control panel via `config.yaml`:
+
+```yaml
+commands:
+  - id: my-update
+    name: "Update System"
+    command: "apt update && apt upgrade -y"
+    icon: refresh-cw
+    auth: true
+    # ^ requires password re-entry before executing
+```
+
+Available icons: any [Lucide icon](https://lucide.dev/icons) name.
+
+## Pages
+
+| Route | Page | Description |
+|-------|------|-------------|
+| `/` | Dashboard | Manage services, view logs, terminal |
+| `/monitor` | System Monitor | Real-time CPU/Memory/Network charts, processes |
+| `/control` | Control Panel | Quick system commands |
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Backend | Python, Flask, Flask-SocketIO, Eventlet, psutil |
+| Frontend | Vanilla JS, Tailwind CSS, Chart.js, xterm.js, Lucide icons |
+| Real-time | WebSockets (Socket.IO) |
+
+## Developing
+
+```bash
+# Install deps
+pip install -r requirements.txt
+
+# Run tests
+python -m pytest tests/ -v --tb=short
+
+# Run with auto-reload
+FLASK_DEBUG=1 python server.py
+```
 
 ## License
 
-MIT
+MIT &copy; 2025 Rishabh Bajpai
