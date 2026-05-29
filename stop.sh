@@ -2,6 +2,14 @@
 DIR="$(cd "$(dirname "$0")" && pwd)"
 PIDFILE="$DIR/.server.pid"
 
+# Check if running as systemd user service first
+if systemctl --user is-active server-services-manager &>/dev/null; then
+    echo "Stopping systemd service..."
+    systemctl --user stop server-services-manager
+    echo "Server stopped."
+    exit 0
+fi
+
 if [ -f "$PIDFILE" ]; then
     PID=$(cat "$PIDFILE")
     echo "Stopping server (PID: $PID)..."
