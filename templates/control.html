@@ -148,7 +148,8 @@
         }
         .modal-box input[type="password"]:focus { border-color: var(--accent-blue); }
 
-        .modal-actions { display: flex; gap: 0.75rem; }
+        .modal-actions { display: flex; flex-direction: column; gap: 0.75rem; }
+        @media (min-width: 480px) { .modal-actions { flex-direction: row; } }
         .modal-actions button {
             flex: 1;
             padding: 0.75rem;
@@ -225,10 +226,10 @@
     </style>
 </head>
 <body class="bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-screen">
-    <div class="max-w-5xl mx-auto p-6">
+    <div class="max-w-5xl mx-auto p-4 sm:p-6">
         <!-- Header -->
-        <header class="flex items-center justify-between mb-8 animate-fade-in">
-            <div class="flex items-center gap-4">
+        <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8 animate-fade-in">
+            <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center shadow-lg shadow-red-500/20">
                     <i data-lucide="gamepad-2" class="w-5 h-5 text-white"></i>
                 </div>
@@ -237,18 +238,18 @@
                     <p class="text-[var(--text-muted)] text-xs font-medium">Quick system commands</p>
                 </div>
             </div>
-            <div class="flex items-center gap-3">
-                <a href="/" class="flex items-center gap-2 px-4 py-2 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 hover:border-[var(--border-active)] transition-all text-sm font-medium">
+            <div class="flex items-center gap-2">
+                <a href="/" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
                     <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
-                    Dashboard
+                    <span class="hidden sm:inline">Dashboard</span>
                 </a>
-                <a href="/monitor" class="flex items-center gap-2 px-4 py-2 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 hover:border-[var(--border-active)] transition-all text-sm font-medium">
+                <a href="/monitor" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
                     <i data-lucide="activity" class="w-4 h-4"></i>
-                    Monitor
+                    <span class="hidden sm:inline">Monitor</span>
                 </a>
-                <a href="/logout" class="flex items-center gap-2 px-4 py-2 bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20 rounded-lg hover:bg-[var(--accent-red)]/20 transition-all text-sm font-medium">
+                <a href="/logout" class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20 rounded-lg hover:bg-[var(--accent-red)]/20 transition-all text-sm font-medium">
                     <i data-lucide="log-out" class="w-4 h-4"></i>
-                    Logout
+                    <span class="hidden sm:inline">Logout</span>
                 </a>
             </div>
         </header>
@@ -259,7 +260,7 @@
             <span>Power</span>
             <span class="line"></span>
         </div>
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-8" id="power-group"></div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6 sm:mb-8" id="power-group"></div>
 
         <!-- System Section -->
         <div class="flex items-center gap-3 mb-4 section-label animate-fade-in" style="animation-delay:0.1s">
@@ -267,7 +268,7 @@
             <span>System</span>
             <span class="line"></span>
         </div>
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-8" id="system-group"></div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6 sm:mb-8" id="system-group"></div>
 
         <!-- Network Section -->
         <div class="flex items-center gap-3 mb-4 section-label animate-fade-in" style="animation-delay:0.15s">
@@ -275,7 +276,7 @@
             <span>Network</span>
             <span class="line"></span>
         </div>
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-8" id="network-group"></div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6 sm:mb-8" id="network-group"></div>
 
         <!-- Custom Commands Section -->
         <div class="flex items-center gap-3 mb-4 section-label animate-fade-in" style="animation-delay:0.2s" id="custom-section">
