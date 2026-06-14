@@ -163,21 +163,32 @@ The repo is public, so anything that pins to the user's specific
 machine — home directory paths, conda env names, program names
 they run, file contents of `config.yaml`, or the actual app
 password — must not be committed. The `tools/` directory has
-two scripts to keep that discipline:
+the scripts to keep that discipline:
 
+- `tools/secrets.txt` (gitignored) — the user-local list of
+  patterns to detect and scrub. Copy `tools/secrets.txt.example`
+  here and add your specifics. Both the guard and the scrubber
+  load this file at startup; the tool source itself contains
+  no pattern strings, so the public repo doesn't leak them.
 - `tools/check-secrets.py [staged|all]` — scan the working tree
-  for the same patterns that the cleanup uses; exit non-zero if
-  any match. Wired into `.github/workflows/test.yml` so PRs
-  fail the check.
-- `tools/clean-history.sh [--all]` — rewrite git history to
-  scrub sensitive strings from blob content, commit messages,
-  and remove `config.yaml` / `config_example.yaml` /
-  `start_process_manager.sh` from every commit. Run only when
-  a leak is found in an old commit.
+  for the patterns; exit non-zero if any match. Wired into
+  `.github/workflows/test.yml` so PRs fail the check. The tool
+  itself and the secrets file are excluded from the scan to
+  avoid false positives.
+- `tools/scrub.py` — text-replacement driver used by the
+  history-rewrite script. Loads the same patterns as
+  `check-secrets.py` and runs the same regex substitutions.
+- `tools/clean-history.sh [--all]` — `git filter-branch` driver
+  that scrubs blob content and commit messages through
+  `scrub.py`, then removes `config.yaml` / `config_example.yaml`
+  / `start_process_manager.sh` from every commit. Run only
+  when a leak is found in an old commit. By default rewrites
+  only the current branch; pass `--all` to rewrite every
+  branch.
 
-The pattern lists in `tools/scrub.py` and `tools/check-secrets.py`
-must stay in sync. To add a new pattern, update both files in
-the same commit.
+Adding a new pattern: edit `tools/secrets.txt.example` (so a
+new contributor knows the format) and your local
+`tools/secrets.txt`.
 
 ## Testing
 ```bash
