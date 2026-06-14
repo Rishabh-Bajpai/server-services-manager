@@ -38,3 +38,8 @@ server.log
 start_process_manager.sh
 *.local.sh
 *.local.yaml
+
+# User-specific secret patterns (this file would expose the
+# user's home dir, conda env name, and program names).
+tools/secrets.txt
+~/.config/ssm/secrets.txt

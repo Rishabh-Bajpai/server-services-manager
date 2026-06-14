@@ -2,37 +2,51 @@
 """Scrub sensitive data from text.
 
 Used by ``tools/clean-history.sh`` as a tree filter and as a
-message filter. The REPLACEMENTS list should be kept in sync
-with ``tools/check-secrets.py`` so anything flagged as a leak
-by the pre-commit guard can be cleaned from history by the
-same regex.
+message filter. The REPLACEMENTS list is loaded from
+``tools/secrets.txt`` (gitignored — the user's actual
+home directory, conda env name, and program names live there,
+not in this file). See ``tools/secrets.txt.example`` for the
+file format.
 """
 import os
 import re
 import sys
 
-REPLACEMENTS = [
-    ("/home/rishabh/ComfyUI", "/home/user/<app>"),
-    ("/home/rishabh/Downloads", "/home/user/Downloads"),
-    ("/home/rishabh/server-files", "/path/to/server-files"),
-    ("/home/rishabh/github_projects/server-services-manager", "<repo-dir>"),
-    ("/home/rishabh", "/home/user"),
-    ("conda run -n comfyui", "conda run -n <env>"),
-    ("conda activate process-manager", "conda activate <env>"),
-    ('"name: comfyui"', '"name: <app>"'),
-    ("name: comfyui", "name: <app>"),
-    ("name: ComfyUI", "name: <app>"),
-    ("name: localsend", "name: <app>"),
-    ('"name: localsend"', '"name: <app>"'),
-    ('"user:rishabh"', '"user:testuser"'),
-    ("user:rishabh", "user:testuser"),
-    ("ComfyUI", "<app>"),
-    ("localsend", "<app>"),
-    ("comfyui", "<app>"),
-    ("process-manager", "<env>"),
-    ("AAaa813@123", "<REDACTED-PASSWORD>"),
-    ("813@", "<REDACTED-PASSWORD>"),
-]
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _load_replacements():
+    """Load (pattern, replacement) pairs from the user-local
+    secrets.txt. Falls back to an empty list (no scrubbing) if
+    the file is missing.
+    """
+    candidates = [
+        os.path.join(THIS_DIR, "secrets.txt"),
+        os.path.expanduser("~/.config/ssm/secrets.txt"),
+    ]
+    out = []
+    for path in candidates:
+        if not os.path.isfile(path):
+            continue
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "->" in line:
+                    pattern, _, replacement = line.partition("->")
+                    out.append((pattern.strip(), replacement.strip()))
+                else:
+                    # Detect-only: replace with a generic placeholder
+                    out.append((line, "<REDACTED>"))
+        return out
+    return []
+
+
+REPLACEMENTS = _load_replacements()
+if not REPLACEMENTS:
+    sys.exit("ERROR: no patterns configured. Copy tools/secrets.txt.example to "
+             "tools/secrets.txt and add your specifics.")
 
 pattern = re.compile("|".join(re.escape(s) for s, _ in REPLACEMENTS))
 REPLACEMENT_MAP = dict(REPLACEMENTS)

@@ -1,67 +1,79 @@
 #!/usr/bin/env python3
 """Pre-commit guard: scan for accidentally-committed sensitive data.
 
-The patterns here are kept in sync with ``scrub.py`` (the
-history-cleanup script) so any string that was once sensitive
-stays that way. Run ``make check-secrets`` or wire this up as
-a pre-commit hook:
+Patterns live in a *user-local* file (``tools/secrets.txt`` or
+``~/.config/ssm/secrets.txt``) so the actual patterns — which
+include the user's home directory, conda env name, and program
+names — never get committed to the public repo. See
+``tools/secrets.txt.example`` for the format.
 
-    ln -sf ../../tools/check-secrets.py .git/hooks/pre-commit
+Usage:
+    python3 tools/check-secrets.py [staged|all]
 
 Exit code 0 if clean, 1 if leaks were found.
+
+Wire as a pre-commit hook:
+    ln -sf ../../tools/check-secrets.py .git/hooks/pre-commit
 """
 import os
 import re
 import subprocess
 import sys
 
-# Patterns that, if found, indicate a leak. The values are the
-# strings to match (the original, *un-redacted* form). The
-# replacement target (the sanitized form) is defined in
-# ``scrub.py``; both must stay in sync.
-LEAK_PATTERNS = [
-    "/home/rishabh/ComfyUI",
-    "/home/rishabh/Downloads",
-    "/home/rishabh/server-files",
-    "/home/rishabh/github_projects/server-services-manager",
-    "/home/rishabh",
-    "conda run -n comfyui",
-    "conda activate process-manager",
-    '"name: comfyui"',
-    "name: comfyui",
-    "name: ComfyUI",
-    "name: localsend",
-    '"name: localsend"',
-    '"user:rishabh"',
-    "user:rishabh",
-    "ComfyUI",
-    "localsend",
-    "comfyui",
-    "process-manager",
-    "AAaa813@123",
-    "813@",
-]
+# We always exclude the pattern-file itself and the tool's own
+# source from being scanned — they contain the patterns as
+# string literals, which is expected. The user-local
+# secrets.txt is also excluded (it's not in git anyway).
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+SELF_FILES = {
+    os.path.realpath(os.path.join(THIS_DIR, p)) for p in (
+        "check-secrets.py",
+        "scrub.py",
+        "clean-history.sh",
+        "secrets.txt",
+        "secrets.txt.example",
+    )
+}
 
-pattern = re.compile("|".join(re.escape(s) for s in LEAK_PATTERNS))
+
+def _load_patterns():
+    """Load patterns from the user-local config file.
+
+    Falls back to an empty list (no patterns) if the file
+    doesn't exist. The example file is documentation only.
+    """
+    candidates = [
+        os.path.join(THIS_DIR, "secrets.txt"),
+        os.path.expanduser("~/.config/ssm/secrets.txt"),
+    ]
+    for path in candidates:
+        if not os.path.isfile(path):
+            continue
+        out = []
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                out.append(line)
+        return out
+    return []
+
+
+LEAK_PATTERNS = _load_patterns()
+if not LEAK_PATTERNS:
+    sys.exit("ERROR: no patterns configured. Copy tools/secrets.txt.example to "
+             "tools/secrets.txt and add your specifics.")
+
+_pattern = re.compile("|".join(re.escape(s) for s in LEAK_PATTERNS))
 
 
 def scan_text(text: str, source: str) -> list:
     matches = []
     for i, line in enumerate(text.splitlines(), 1):
-        for m in pattern.finditer(line):
+        for m in _pattern.finditer(line):
             matches.append((source, i, line.strip()[:120]))
     return matches
-
-
-# The pattern-list files themselves contain the patterns as string
-# literals — that's expected, not a leak. They also reference the
-# generic placeholders (``/home/user/<app>`` etc.) that the cleanup
-# script uses as replacements, which is also expected.
-SELF_FILES = {os.path.realpath(p) for p in [
-    __file__,
-    os.path.join(os.path.dirname(__file__), "scrub.py"),
-    os.path.join(os.path.dirname(__file__), "clean-history.sh"),
-]}
 
 
 def _scan_files(files):
