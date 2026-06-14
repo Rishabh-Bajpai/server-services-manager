@@ -36,25 +36,31 @@ fi
 
 # git filter-branch checks out each commit into a temp worktree
 # that doesn't contain the user-local secrets.txt. The scrub
-# script falls back to /etc/ssm/secrets.txt. Copy our local
-# secrets.txt there so the tree filter can find the patterns.
-SECRETS_TMP="/etc/ssm/secrets.txt"
+# script falls back to /etc/ssm/secrets.txt, but that needs
+# root to write. If we can't get root, fall back to /tmp.
+SECRETS_TMP=""
 SECRETS_BACKUP=""
 if [ -f tools/secrets.txt ]; then
-    if [ ! -w /etc/ssm ] 2>/dev/null; then
-        SUDO="sudo"
+    if [ -w /etc/ssm ] 2>/dev/null || ([ ! -e /etc/ssm ] && [ -w /etc ]); then
+        SECRETS_TMP="/etc/ssm/secrets.txt"
     else
-        SUDO=""
+        # Try sudo non-interactively. If it fails, use /tmp.
+        if echo "" | sudo -S -p "" true 2>/dev/null; then
+            SECRETS_TMP="/etc/ssm/secrets.txt"
+        else
+            SECRETS_TMP="/tmp/ssm-secrets-$$.txt"
+        fi
     fi
-    $SUDO mkdir -p /etc/ssm 2>/dev/null || true
     if [ -f "$SECRETS_TMP" ]; then
         SECRETS_BACKUP="/tmp/ssm-secrets-backup-$$.txt"
         cp "$SECRETS_TMP" "$SECRETS_BACKUP"
     fi
+    $SUDO mkdir -p "$(dirname "$SECRETS_TMP")" 2>/dev/null || \
+        mkdir -p "$(dirname "$SECRETS_TMP")" 2>/dev/null || true
     $SUDO cp tools/secrets.txt "$SECRETS_TMP" 2>/dev/null || \
         cp tools/secrets.txt "$SECRETS_TMP" 2>/dev/null || \
         echo "WARNING: could not install secrets.txt at $SECRETS_TMP" >&2
-    trap "[ -n \"\$SECRETS_BACKUP\" ] && cp \"\$SECRETS_BACKUP\" \"$SECRETS_TMP\" && rm -f \"\$SECRETS_BACKUP\"; $SUDO rm -f \"$SECRETS_TMP\"" EXIT
+    trap "[ -n \"\$SECRETS_BACKUP\" ] && cp \"\$SECRETS_BACKUP\" \"$SECRETS_TMP\" && rm -f \"\$SECRETS_BACKUP\"; [ \"$SECRETS_TMP\" != /etc/* ] && rm -f \"$SECRETS_TMP\"" EXIT
 fi
 
 SCRUB_SCRIPT="/tmp/scrub-$$.py"
