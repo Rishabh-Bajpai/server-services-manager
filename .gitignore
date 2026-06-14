@@ -33,3 +33,8 @@ config.yaml
 plan.md
 .server.pid
 server.log
+
+# Personal convenience scripts (each install is different)
+start_process_manager.sh
+*.local.sh
+*.local.yaml

@@ -157,6 +157,28 @@ journalctl --user -u server-services-manager -f
               return "world"
   ```
 
+## Secret-leak guardrails
+
+The repo is public, so anything that pins to the user's specific
+machine — home directory paths, conda env names, program names
+they run, file contents of `config.yaml`, or the actual app
+password — must not be committed. The `tools/` directory has
+two scripts to keep that discipline:
+
+- `tools/check-secrets.py [staged|all]` — scan the working tree
+  for the same patterns that the cleanup uses; exit non-zero if
+  any match. Wired into `.github/workflows/test.yml` so PRs
+  fail the check.
+- `tools/clean-history.sh [--all]` — rewrite git history to
+  scrub sensitive strings from blob content, commit messages,
+  and remove `config.yaml` / `config_example.yaml` /
+  `start_process_manager.sh` from every commit. Run only when
+  a leak is found in an old commit.
+
+The pattern lists in `tools/scrub.py` and `tools/check-secrets.py`
+must stay in sync. To add a new pattern, update both files in
+the same commit.
+
 ## Testing
 ```bash
 python -m pytest tests/ -v --tb=short    # 346 tests
