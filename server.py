@@ -41,6 +41,61 @@ app = Flask(__name__, template_folder='templates')
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', os.urandom(24).hex())
 socketio = SocketIO(app, cors_allowed_origins=os.getenv('CORS_ORIGIN', '*'), max_http_buffer_size=10*1024*1024)
 
+
+# State-change hook for managed programs. Defined at module level
+# so the API routes can attach it to new programs added at runtime
+# (the function body references ``_health_notifiers`` which is also
+# module-level).
+def _on_program_state_change(program, old_status, new_status):
+    """Fan a service state transition out to all notifiers.
+
+    Triggered from :meth:`Program._set_status` on every transition.
+    Failures inside a notifier must never block the program, so the
+    hook is wrapped in a daemon thread.
+    """
+    if new_status == old_status:
+        return
+    if new_status == ProgramStatus.STOPPED and old_status == ProgramStatus.STOPPED:
+        return
+    from app import notifier as _notifier_mod
+    notifiers = list(_health_notifiers)
+    if not notifiers:
+        return
+    severity = "info"
+    if new_status == ProgramStatus.FAILED:
+        severity = "error"
+    event = _notifier_mod.Event(
+        service=program.config.name,
+        kind="state_change",
+        severity=severity,
+        message=f"{program.config.name} {old_status.value} -> {new_status.value}",
+        detail=f"command={program.config.command!r} cwd={program.config.cwd!r}",
+        timestamp=time.time(),
+    )
+    # Push to socketio so the UI sees a toast for service events.
+    # Wrapped in try/except because socketio.emit is not safe to
+    # call from every thread context (the eventlet hub is required).
+    try:
+        socketio.emit("service_event", {
+            "service": program.config.name,
+            "old": old_status.value,
+            "new": new_status.value,
+            "severity": severity,
+            "message": event.message,
+            "timestamp": event.timestamp,
+        })
+    except Exception:
+        pass
+    # Off-thread fanout so a slow webhook doesn't stall the
+    # program loop. The notifier module wraps each notifier in a
+    # try/except too, so a single bad endpoint can't poison the
+    # others.
+    threading.Thread(
+        target=_notifier_mod.fanout,
+        args=(notifiers, event),
+        daemon=True,
+    ).start()
+
 pm = ProcessManager()
 tm = TerminalManager(socketio)
 
@@ -50,6 +105,14 @@ tm = TerminalManager(socketio)
 # optional — when missing, the monitor runs no checks.
 _health_notifiers: list = []
 _health_monitor = None  # initialized after pm.load_config()
+# Live notifier list used by the program state-change hook. Mirrors
+# the health-monitor notifier list — they're built from the same
+# config.yaml section, so the live copy and the periodic copy are
+# always in sync. Kept separate so the state-change hook can fire
+# in a thread without contention on the health monitor's internal
+# state.
+def _get_active_notifiers() -> list:
+    return list(_health_notifiers)
 
 _password_hash = generate_password_hash(os.getenv('PASSWORD', 'admin'))
 
@@ -220,6 +283,11 @@ def add_program():
             environment=data.get('environment', {})
         )
         pm.add_program(config)
+        # Attach state-change hook to the newly added program so
+        # its transitions get notified.
+        new_program = pm.programs[data['name']]
+        if new_program.on_state_change is None:
+            new_program.on_state_change = _on_program_state_change
         activity.log("program.add", target=data['name'], status="ok",
                     detail=f"command={data['command']!r} cwd={data['cwd']!r}",
                     ip=request.remote_addr or "")
@@ -1477,6 +1545,14 @@ if __name__ == '__main__':
     except Exception as e:
         logger.warning(f"config.yaml has validation issues: {e}")
     pm.load_state_and_reattach()
+
+    # Wire the program state-change hook so notifiers get fired
+    # for managed-service start/stop/fail. We do this BEFORE
+    # start_all() so the initial autostart transitions get
+    # notified too.
+    for program in pm.programs.values():
+        program.on_state_change = _on_program_state_change
+
     pm.start_all()
 
     # Initialize and start the health monitor (background health checks
