@@ -22,6 +22,7 @@ from app import cron_manager
 from app.health import HealthCheck, HealthMonitor
 from app.notifier import build_notifiers, Event as HealthEvent
 from app import activity
+from app import palette
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask import send_file
@@ -781,6 +782,44 @@ def notifications_page():
 @app.route('/activity')
 def activity_page():
     return render_template('activity.html')
+
+
+def _control_commands_for_palette():
+    """Return the list of custom control commands from config.yaml."""
+    config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')
+    if not os.path.exists(config_path):
+        return []
+    try:
+        with open(config_path) as f:
+            cfg = yaml.safe_load(f)
+        return cfg.get('commands', []) if cfg else []
+    except Exception:
+        return []
+
+
+def _system_units_for_palette():
+    """Return a small list of running systemd units for the palette."""
+    try:
+        units = system_services.list_units(state="active", unit_type="service")
+        return units[:30]
+    except Exception:
+        return []
+
+
+@app.route('/api/palette/search', methods=['GET'])
+def api_palette_search():
+    q = request.args.get('q', '').strip()
+    try:
+        limit = max(1, min(50, int(request.args.get('limit', '20'))))
+    except ValueError:
+        limit = 20
+    items = palette.build_palette_index(
+        get_programs=lambda: pm.get_all_programs(),
+        get_control_commands=_control_commands_for_palette,
+        get_system_units=_system_units_for_palette,
+    )
+    results = palette.search(items, q, limit=limit)
+    return jsonify({"results": results})
 
 
 @app.route('/api/activity', methods=['GET'])

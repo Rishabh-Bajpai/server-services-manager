@@ -222,6 +222,11 @@
                     <i data-lucide="log-out" class="w-4 h-4"></i>
                     <span class="hidden sm:inline">Logout</span>
                 </a>
+                <button onclick="openPalette()" class="flex items-center gap-2 px-3 py-1.5 bg-white/5 text-[var(--text-muted)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 hover:text-[var(--text-primary)] transition-all text-sm font-medium" title="Command palette (Ctrl+K)">
+                    <i data-lucide="search" class="w-3.5 h-3.5"></i>
+                    <span class="hidden md:inline text-xs">Search</span>
+                    <kbd class="hidden md:inline text-[10px] font-mono opacity-60">⌘K</kbd>
+                </button>
                 <div id="connection-status"
                     class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20">
                     <span class="w-2 h-2 rounded-full bg-current status-running"></span>
@@ -1248,6 +1253,169 @@
             const path = currentPath === '.' ? name : `${currentPath}/${name}`;
             window.open(`/api/files/download?path=${encodeURIComponent(path)}`, '_blank');
         }
+    </script>
+
+    <!-- Command palette modal -->
+    <div class="modal-overlay" id="palette-modal" style="z-index:80;align-items:flex-start;padding-top:10vh">
+        <div class="modal-box" style="max-width:36rem;padding:0;background:var(--bg-card)">
+            <div class="flex items-center gap-2 px-4 py-3 border-b border-[var(--border-subtle)]">
+                <i data-lucide="search" class="w-4 h-4 text-[var(--text-muted)]"></i>
+                <input id="palette-input" type="text" placeholder="Type a command, page, or service…" class="flex-1 bg-transparent border-0 outline-none text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]" autocomplete="off">
+                <kbd class="text-[10px] text-[var(--text-muted)] font-mono">esc</kbd>
+            </div>
+            <div id="palette-results" style="max-height:50vh;overflow-y:auto"></div>
+            <div class="px-4 py-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-[10px] text-[var(--text-muted)]">
+                <span><kbd class="font-mono">↑↓</kbd> navigate · <kbd class="font-mono">↵</kbd> select · <kbd class="font-mono">esc</kbd> close</span>
+                <span id="palette-count"></span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            const paletteModal = document.getElementById('palette-modal');
+            const paletteInput = document.getElementById('palette-input');
+            const paletteResults = document.getElementById('palette-results');
+            const paletteCount = document.getElementById('palette-count');
+            let selectedIdx = 0;
+            let currentResults = [];
+
+            function openPalette() {
+                paletteModal.classList.add('active');
+                paletteInput.value = '';
+                paletteInput.focus();
+                runSearch('');
+            }
+            function closePalette() {
+                paletteModal.classList.remove('active');
+            }
+            window.openPalette = openPalette;
+            window.closePalette = closePalette;
+
+            // Keyboard shortcut: Ctrl+K or Cmd+K
+            document.addEventListener('keydown', (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                    e.preventDefault();
+                    if (paletteModal.classList.contains('active')) closePalette();
+                    else openPalette();
+                } else if (e.key === 'Escape' && paletteModal.classList.contains('active')) {
+                    closePalette();
+                } else if (paletteModal.classList.contains('active') && e.key === 'Enter') {
+                    e.preventDefault();
+                    runSelected();
+                } else if (paletteModal.classList.contains('active') && e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    moveSelection(1);
+                } else if (paletteModal.classList.contains('active') && e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    moveSelection(-1);
+                }
+            });
+
+            // Click outside to close
+            paletteModal.addEventListener('click', (e) => {
+                if (e.target === paletteModal) closePalette();
+            });
+
+            let searchTimer = null;
+            paletteInput.addEventListener('input', (e) => {
+                clearTimeout(searchTimer);
+                searchTimer = setTimeout(() => runSearch(e.target.value), 100);
+            });
+
+            function escapeHtml(s) {
+                return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            }
+
+            function kindColor(kind) {
+                if (kind === 'page') return 'badge-blue';
+                if (kind === 'program') return 'badge-green';
+                if (kind === 'system_service') return 'badge-purple';
+                if (kind === 'control') return 'badge-yellow';
+                return 'badge-gray';
+            }
+
+            async function runSearch(q) {
+                try {
+                    const r = await fetch(`/api/palette/search?q=${encodeURIComponent(q)}`);
+                    const data = await r.json();
+                    currentResults = data.results || [];
+                    selectedIdx = 0;
+                    renderResults();
+                } catch (e) {
+                    paletteResults.innerHTML = '<div class="p-4 text-sm text-[var(--text-muted)] text-center">Failed to load.</div>';
+                }
+            }
+
+            function renderResults() {
+                paletteCount.textContent = `${currentResults.length} item${currentResults.length === 1 ? '' : 's'}`;
+                if (currentResults.length === 0) {
+                    paletteResults.innerHTML = '<div class="p-4 text-sm text-[var(--text-muted)] text-center">No matches.</div>';
+                    return;
+                }
+                paletteResults.innerHTML = currentResults.map((r, i) => `
+                    <div class="palette-item flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${i === selectedIdx ? 'bg-[var(--accent-purple)]/15 border-l-2 border-[var(--accent-purple)]' : 'hover:bg-white/5 border-l-2 border-transparent'}" data-idx="${i}">
+                        <span class="badge ${kindColor(r.kind)}">${escapeHtml(r.kind)}</span>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm text-[var(--text-primary)] font-medium truncate">${escapeHtml(r.label)}</div>
+                            ${r.description ? `<div class="text-xs text-[var(--text-muted)] truncate">${escapeHtml(r.description)}</div>` : ''}
+                        </div>
+                    </div>
+                `).join('');
+                paletteResults.querySelectorAll('.palette-item').forEach((el) => {
+                    el.addEventListener('click', () => {
+                        selectedIdx = parseInt(el.dataset.idx, 10);
+                        runSelected();
+                    });
+                    el.addEventListener('mouseenter', () => {
+                        selectedIdx = parseInt(el.dataset.idx, 10);
+                        renderResults();
+                    });
+                });
+            }
+
+            function moveSelection(delta) {
+                if (!currentResults.length) return;
+                selectedIdx = (selectedIdx + delta + currentResults.length) % currentResults.length;
+                renderResults();
+            }
+
+            async function runSelected() {
+                const item = currentResults[selectedIdx];
+                if (!item) return;
+                const run = item.run || {};
+                if (run.type === 'navigate') {
+                    window.location.href = run.url;
+                } else if (run.type === 'action') {
+                    try {
+                        const r = await fetch(run.url, { method: run.method || 'POST' });
+                        if (r.ok) toast(`${item.label} ok`, 'success');
+                        else {
+                            const d = await r.json().catch(() => ({}));
+                            toast(d.error || 'Failed', 'error');
+                        }
+                    } catch (e) { toast('Network error: ' + e.message, 'error'); }
+                } else if (run.type === 'action_with_auth') {
+                    const pw = prompt(`Enter your password for "${item.label}":`);
+                    if (pw === null) return;
+                    try {
+                        const body = run.body ? JSON.stringify(run.body) : null;
+                        const r = await fetch(run.url, {
+                            method: run.method || 'POST',
+                            headers: body ? { 'Content-Type': 'application/json' } : {},
+                            body: body,
+                        });
+                        if (r.ok) {
+                            toast(`${item.label} ok`, 'success');
+                            closePalette();
+                        } else {
+                            const d = await r.json().catch(() => ({}));
+                            toast(d.error || 'Failed', 'error');
+                        }
+                    } catch (e) { toast('Network error: ' + e.message, 'error'); }
+                }
+            }
+        })();
     </script>
 </body>
 
