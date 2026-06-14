@@ -285,14 +285,45 @@ def get_logs(name):
     program = pm.get_program(name)
     if not program:
         return jsonify({"error": "Program not found"}), 404
+    # Live in-memory buffer; the persisted tail is fetched by
+    # ``/programs/<name>/logs/tail`` for after-restart continuity.
     return jsonify({"logs": list(program.logs)})
+
+
+@app.route('/programs/<name>/logs/tail', methods=['GET'])
+def get_logs_tail(name):
+    """Return the persisted tail of the service's log file.
+
+    This is the last N lines from the disk file, surviving across
+    restarts. Combined with ``/programs/<name>/logs`` (in-memory),
+    the UI can show both: the live buffer plus anything that
+    happened before the most recent process start.
+    """
+    from app import log_persistence
+    try:
+        lines = int(request.args.get('lines', '200'))
+    except ValueError:
+        lines = 200
+    return jsonify({"logs": log_persistence.read_tail(name, lines)})
+
 
 @app.route('/programs/<name>/logs/download', methods=['GET'])
 def download_logs(name):
     program = pm.get_program(name)
     if not program:
         return jsonify({"error": "Program not found"}), 404
-    log_text = "\n".join(program.logs)
+    # Include both in-memory and persisted tail, deduped
+    from app import log_persistence
+    persisted = log_persistence.read_tail(name, 10000)
+    in_memory = list(program.logs)
+    seen = set()
+    merged = []
+    for line in persisted + in_memory:
+        if line in seen:
+            continue
+        seen.add(line)
+        merged.append(line)
+    log_text = "\n".join(merged)
     return (log_text, 200, {
         "Content-Type": "text/plain; charset=utf-8",
         "Content-Disposition": f'attachment; filename="{name}.log"'
@@ -304,6 +335,8 @@ def clear_logs(name):
     if not program:
         return jsonify({"error": "Program not found"}), 404
     program.logs.clear()
+    from app import log_persistence
+    log_persistence.clear(name)
     return jsonify({"status": "cleared"})
 
 # File Management Endpoints

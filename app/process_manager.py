@@ -248,6 +248,15 @@ class Program:
 
     def log(self, message: str):
         self.logs.append(message)
+        # Best-effort tail persistence: write to a per-service log
+        # file. Reading is done on demand via :func:`read_persisted_log`.
+        # Failures here are silent — logging is best-effort.
+        try:
+            from app.log_persistence import append_line
+            append_line(self.config.name, message)
+        except Exception:
+            pass
+
 
 class ProcessManager:
     STATE_DIR = os.path.expanduser("~/.server-services-manager")
