@@ -10,6 +10,7 @@ file format.
 """
 import os
 import re
+import subprocess
 import sys
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -64,12 +65,65 @@ def fix_text(text: str) -> str:
     return pattern.sub(_replace, text)
 
 
+def _is_gitignored(path: str, root: str) -> bool:
+    """Check if ``path`` (relative to ``root``) matches a pattern
+    in the repo's ``.gitignore``. Returns False if git is not
+    available or the file isn't in a git repo.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", "--no-index", "--non-matching",
+             path],
+            cwd=root, capture_output=True, text=True, timeout=5,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+    # Exit 0 = ignored; exit 1 = not ignored; exit 128 = not a git repo
+    return result.returncode == 0
+
+
 def walk_files(root: str):
+    """Yield (path, text) for every *tracked* text file under
+    root. Skips ``.git/`` and any path that ``git check-ignore``
+    says is ignored (``tools/secrets.txt``, ``.env``,
+    ``config.yaml``, etc.) so a stray call doesn't accidentally
+    rewrite your local secrets.
+    """
+    # Try the tracked-only path first (fastest, most correct)
+    try:
+        result = subprocess.run(
+            ["git", "ls-files"],
+            cwd=root, capture_output=True, text=True, timeout=10,
+            check=True,
+        )
+        tracked = {line.strip() for line in result.stdout.splitlines() if line.strip()}
+        for rel in tracked:
+            path = os.path.join(root, rel)
+            if not os.path.isfile(path):
+                continue
+            try:
+                with open(path, "rb") as f:
+                    data = f.read()
+            except OSError:
+                continue
+            try:
+                text = data.decode("utf-8")
+            except UnicodeDecodeError:
+                continue
+            yield path, text
+        return
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    # Fallback: walk the filesystem and filter via gitignore
     for dirpath, dirnames, filenames in os.walk(root):
         if "/.git/" in dirpath or dirpath == os.path.join(root, ".git"):
             continue
         for fname in filenames:
             path = os.path.join(dirpath, fname)
+            rel = os.path.relpath(path, root)
+            if _is_gitignored(rel, root):
+                continue
             try:
                 with open(path, "rb") as f:
                     data = f.read()
