@@ -7,6 +7,7 @@ import queue
 import json
 import logging
 import os
+import tempfile
 import time
 import threading
 import yaml
@@ -611,6 +612,133 @@ def api_cron_toggle():
     except cron_manager.CronError as e:
         http = 403 if e.code == "permission" else 400 if e.code in ("invalid", "auth_required") else 500
         return jsonify({"error": str(e), "code": e.code}), http
+
+
+@app.route('/api/programs/<name>/autostart', methods=['GET'])
+def api_program_autostart_get(name):
+    """Return whether the managed service is enabled at boot.
+
+    Runs ``systemctl is-enabled ssm-<name>.service`` to determine
+    state, falling back to the in-memory config flag.
+    """
+    program = pm.get_program(name)
+    if not program:
+        return jsonify({"error": "Program not found"}), 404
+    safe_name = "".join(c for c in name if c.isalnum() or c in "_-.")
+    if not safe_name or safe_name != name:
+        return jsonify({"error": "Invalid service name"}), 400
+    unit_name = f"ssm-{safe_name}.service"
+    try:
+        proc = subprocess.run(
+            ["systemctl", "is-enabled", unit_name],
+            capture_output=True, text=True, timeout=5,
+        )
+        enabled = proc.returncode == 0
+    except Exception:
+        enabled = False
+    return jsonify({
+        "name": name,
+        "unit": unit_name,
+        "autostart": enabled,
+    })
+
+
+@app.route('/api/programs/<name>/autostart', methods=['POST'])
+def api_program_autostart(name):
+    """Enable or disable systemd-level autostart for a managed service.
+
+    Writes a small systemd unit to /etc/systemd/system/ssm-<name>.service
+    that runs the same command, and uses systemctl enable|disable. The
+    manager's manual start/stop is unaffected — this just adds a
+    matching systemd unit that the bootloader will run on startup.
+    """
+    program = pm.get_program(name)
+    if not program:
+        return jsonify({"error": "Program not found"}), 404
+    data = request.get_json(silent=True) or {}
+    enabled = bool(data.get("enabled"))
+    password = data.get("password", "")
+    if not password:
+        return jsonify({"error": "auth_required"}), 401
+
+    safe_name = "".join(c for c in name if c.isalnum() or c in "_-.")
+    if not safe_name or safe_name != name:
+        return jsonify({"error": "Invalid service name"}), 400
+
+    unit_name = f"ssm-{safe_name}.service"
+    unit_path = f"/etc/systemd/system/{unit_name}"
+    try:
+        if enabled:
+            # Build the [Service] section
+            cfg = program.config
+            exec_start = cfg.command
+            working_dir = cfg.cwd or "/"
+            env_lines = "\n".join(
+                f'Environment="{k}={v}"' for k, v in (cfg.environment or {}).items()
+            )
+            unit_content = (
+                "[Unit]\n"
+                f"Description=Server Services Manager: {name}\n"
+                "After=network.target\n"
+                "\n"
+                "[Service]\n"
+                f"WorkingDirectory={working_dir}\n"
+                f"ExecStart={exec_start}\n"
+                f"{env_lines}\n"
+                "Restart=on-failure\n"
+                "RestartSec=5\n"
+                "\n"
+                "[Install]\n"
+                "WantedBy=multi-user.target\n"
+            )
+            # Write via tempfile + sudo cp
+            with tempfile.NamedTemporaryFile("w", delete=False, suffix=".service") as tmp:
+                tmp.write(unit_content)
+                tmp_path = tmp.name
+            try:
+                os.chmod(tmp_path, 0o644)
+                subprocess.run(
+                    ["sudo", "-S", "cp", tmp_path, unit_path],
+                    input=password + "\n", capture_output=True, text=True, timeout=10,
+                )
+            finally:
+                try: os.unlink(tmp_path)
+                except OSError: pass
+
+        # Now enable or disable via systemctl
+        action = "enable" if enabled else "disable"
+        proc = subprocess.run(
+            ["sudo", "-S", "systemctl", action, unit_name],
+            input=password + "\n", capture_output=True, text=True, timeout=15,
+        )
+        if proc.returncode != 0:
+            stderr = (proc.stderr or "").strip()
+            first = next((ln for ln in stderr.splitlines() if ln.strip() and "password for" not in ln), stderr)
+            lower = stderr.lower()
+            if "password" in lower or "permission" in lower or "not in" in lower:
+                return jsonify({"error": first, "code": "permission"}), 403
+            return jsonify({"error": first, "code": "error"}), 500
+        if not enabled:
+            # Optionally remove the unit file too
+            subprocess.run(
+                ["sudo", "-S", "rm", "-f", unit_path],
+                input=password + "\n", capture_output=True, text=True, timeout=5,
+            )
+        subprocess.run(
+            ["sudo", "-S", "systemctl", "daemon-reload"],
+            input=password + "\n", capture_output=True, text=True, timeout=10,
+        )
+        # Update the in-memory config
+        program.config.autostart = enabled
+        return jsonify({
+            "ok": True,
+            "output": f"{action}d {unit_name}",
+            "autostart": enabled,
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "command timed out"}), 504
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/notifications')

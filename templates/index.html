@@ -303,6 +303,19 @@
                     </div>
                     <label for="autostart" class="text-sm text-[var(--text-secondary)]">Auto-start on launch</label>
                 </div>
+                <div class="flex items-center gap-3 py-2" id="boot-toggle-row" style="display:none">
+                    <div class="relative">
+                        <input type="checkbox" id="boot-toggle" class="sr-only peer">
+                        <label for="boot-toggle" class="w-10 h-5 bg-[var(--bg-secondary)] rounded-full cursor-pointer peer-checked:bg-[var(--accent-green)] transition-colors border border-[var(--border-subtle)] peer-checked:border-[var(--accent-green)]">
+                            <span class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></span>
+                        </label>
+                    </div>
+                    <div class="flex-1">
+                        <label for="boot-toggle" class="text-sm text-[var(--text-secondary)]">Start at boot (systemd)</label>
+                        <p class="text-[10px] text-[var(--text-muted)]">Creates a systemd unit and runs <code class="font-mono">systemctl enable</code>. Requires your password.</p>
+                    </div>
+                </div>
+                <div class="modal-error" id="boot-error" style="display:none;margin-top:-0.25rem;margin-bottom:0.5rem"></div>
                 <button type="submit"
                     class="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white py-3 rounded-xl font-semibold hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg shadow-blue-500/25 btn-glow mt-6">
                     Save Service
@@ -805,11 +818,54 @@
             document.getElementById('name').disabled = false;
             document.getElementById('original-name').value = '';
             isEditing = false;
+            document.getElementById('boot-toggle-row').style.display = 'none';
+            document.getElementById('boot-error').style.display = 'none';
         }
 
         function closeModal() {
             modal.classList.add('hidden');
             modal.classList.remove('flex');
+        }
+
+        async function toggleBoot() {
+            const checkbox = document.getElementById('boot-toggle');
+            const name = document.getElementById('name').value;
+            const originalName = document.getElementById('original-name').value || name;
+            const errorEl = document.getElementById('boot-error');
+            errorEl.style.display = 'none';
+            const enabled = checkbox.checked;
+            // Revert visual until the user provides a password
+            checkbox.checked = !enabled;
+            const password = prompt(
+                enabled
+                    ? `Enter your password to enable "${originalName}" at boot:`
+                    : `Enter your password to disable "${originalName}" at boot:`
+            );
+            if (password === null) {
+                return;  // user cancelled
+            }
+            try {
+                const res = await fetch(`/api/programs/${encodeURIComponent(originalName)}/autostart`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled, password }),
+                });
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    if (data.code === 'permission') {
+                        errorEl.textContent = data.error || 'Wrong password';
+                    } else {
+                        errorEl.textContent = data.error || 'Failed';
+                    }
+                    errorEl.style.display = 'block';
+                    return;
+                }
+                checkbox.checked = enabled;
+                toast(`Boot ${enabled ? 'enabled' : 'disabled'} for ${originalName}`, 'success');
+            } catch (e) {
+                errorEl.textContent = 'Network error: ' + e.message;
+                errorEl.style.display = 'block';
+            }
         }
 
         async function editService(name) {
@@ -851,6 +907,22 @@
             document.getElementById('cwd').value = p.cwd;
             document.getElementById('autostart').checked = p.autostart;
 
+            // Wire boot toggle
+            document.getElementById('boot-toggle').onchange = toggleBoot;
+
+            // Show boot toggle for existing services
+            document.getElementById('boot-toggle-row').style.display = 'flex';
+            try {
+                const bRes = await fetch(`/api/programs/${encodeURIComponent(name)}/autostart`);
+                if (bRes.ok) {
+                    const bdata = await bRes.json();
+                    document.getElementById('boot-toggle').checked = !!bdata.autostart;
+                }
+            } catch (e) {
+                document.getElementById('boot-toggle').checked = false;
+            }
+            document.getElementById('boot-error').style.display = 'none';
+
             // Env
             const envStr = Object.entries(p.environment || {})
                 .map(([k, v]) => `${k}=${v}`)
@@ -863,6 +935,7 @@
         form.onsubmit = async (e) => {
             e.preventDefault();
 
+            const envDict = {};
             const envDict = {};
             document.getElementById('environment').value.split('\n').forEach(line => {
                 const [key, ...val] = line.split('=');
