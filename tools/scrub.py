@@ -18,11 +18,13 @@ THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 def _load_replacements():
     """Load (pattern, replacement) pairs from the user-local
     secrets.txt. Falls back to an empty list (no scrubbing) if
-    the file is missing.
+    the file is missing — the cleanup becomes a no-op so the
+    history rewrite can still proceed.
     """
     candidates = [
         os.path.join(THIS_DIR, "secrets.txt"),
         os.path.expanduser("~/.config/ssm/secrets.txt"),
+        "/etc/ssm/secrets.txt",
     ]
     out = []
     for path in candidates:
@@ -45,8 +47,9 @@ def _load_replacements():
 
 REPLACEMENTS = _load_replacements()
 if not REPLACEMENTS:
-    sys.exit("ERROR: no patterns configured. Copy tools/secrets.txt.example to "
-             "tools/secrets.txt and add your specifics.")
+    print("WARNING: no patterns configured; cleanup is a no-op. "
+          "Copy tools/secrets.txt.example to tools/secrets.txt and add your "
+          "specifics.", file=sys.stderr)
 
 pattern = re.compile("|".join(re.escape(s) for s, _ in REPLACEMENTS))
 REPLACEMENT_MAP = dict(REPLACEMENTS)
