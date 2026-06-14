@@ -21,6 +21,7 @@ from app.log_streamer import get_streamer
 from app import cron_manager
 from app.health import HealthCheck, HealthMonitor
 from app.notifier import build_notifiers, Event as HealthEvent
+from app import activity
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask import send_file
@@ -216,8 +217,13 @@ def add_program():
             environment=data.get('environment', {})
         )
         pm.add_program(config)
+        activity.log("program.add", target=data['name'], status="ok",
+                    detail=f"command={data['command']!r} cwd={data['cwd']!r}",
+                    ip=request.remote_addr or "")
         return jsonify({"status": "added", "name": data['name']})
     except Exception as e:
+        activity.log("program.add", target=(data or {}).get('name', ''), status="error",
+                    detail=str(e), ip=request.remote_addr or "")
         return jsonify({"error": str(e)}), 400
 
 @app.route('/programs/<name>', methods=['PUT'])
@@ -232,18 +238,28 @@ def edit_program(name):
             environment=data.get('environment', {})
         )
         pm.edit_program(name, config)
+        activity.log("program.edit", target=name, status="ok",
+                    detail=f"new_name={data['name']!r}", ip=request.remote_addr or "")
         return jsonify({"status": "updated", "name": data['name']})
     except Exception as e:
+        activity.log("program.edit", target=name, status="error",
+                    detail=str(e), ip=request.remote_addr or "")
         return jsonify({"error": str(e)}), 400
 
 @app.route('/programs/<name>', methods=['DELETE'])
 def delete_program(name):
     try:
         pm.delete_program(name)
+        activity.log("program.delete", target=name, status="ok",
+                    ip=request.remote_addr or "")
         return jsonify({"status": "deleted", "name": name})
     except ValueError as e:
+        activity.log("program.delete", target=name, status="error",
+                    detail=str(e), ip=request.remote_addr or "")
         return jsonify({"error": str(e)}), 404
     except Exception as e:
+        activity.log("program.delete", target=name, status="error",
+                    detail=str(e), ip=request.remote_addr or "")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/programs/<name>/<action>', methods=['POST'])
@@ -494,8 +510,12 @@ def api_system_services_action(name, action):
 
     try:
         result = system_services.control(name, action, password)
+        activity.log(f"systemd.{action}", target=name, status="ok",
+                    detail=result.get("output", ""), ip=request.remote_addr or "")
         return jsonify(result)
     except system_services.SystemServicesError as e:
+        activity.log(f"systemd.{action}", target=name, status="error",
+                    detail=f"{e.code}: {e}", ip=request.remote_addr or "")
         http = 403 if e.code == "permission" else 500
         return jsonify({"error": str(e), "code": e.code}), http
 
@@ -608,8 +628,14 @@ def api_cron_toggle():
     password = data.get("password", "")
     try:
         result = cron_manager.toggle_system_job(source, int(line_number), enabled, password)
+        activity.log("cron.toggle", target=f"{source}:{line_number}",
+                    status="ok", detail=f"enabled={enabled}",
+                    ip=request.remote_addr or "")
         return jsonify(result)
     except cron_manager.CronError as e:
+        activity.log("cron.toggle", target=f"{source}:{line_number}",
+                    status="error", detail=f"{e.code}: {e}",
+                    ip=request.remote_addr or "")
         http = 403 if e.code == "permission" else 400 if e.code in ("invalid", "auth_required") else 500
         return jsonify({"error": str(e), "code": e.code}), http
 
@@ -730,20 +756,69 @@ def api_program_autostart(name):
         )
         # Update the in-memory config
         program.config.autostart = enabled
+        activity.log(f"autostart.{action}", target=name, status="ok",
+                    detail=f"unit={unit_name}", ip=request.remote_addr or "")
         return jsonify({
             "ok": True,
             "output": f"{action}d {unit_name}",
             "autostart": enabled,
         })
     except subprocess.TimeoutExpired:
+        activity.log(f"autostart.{action}", target=name, status="error",
+                    detail="timeout", ip=request.remote_addr or "")
         return jsonify({"error": "command timed out"}), 504
     except Exception as e:
+        activity.log(f"autostart.{action}", target=name, status="error",
+                    detail=str(e), ip=request.remote_addr or "")
         return jsonify({"error": str(e)}), 500
 
 
 @app.route('/notifications')
 def notifications_page():
     return render_template('notifications.html')
+
+
+@app.route('/activity')
+def activity_page():
+    return render_template('activity.html')
+
+
+@app.route('/api/activity', methods=['GET'])
+def api_activity_list():
+    action = request.args.get('action') or None
+    target = request.args.get('target') or None
+    user = request.args.get('user') or None
+    status = request.args.get('status') or None
+    try:
+        since = float(request.args['since']) if 'since' in request.args else None
+    except (KeyError, ValueError):
+        since = None
+    try:
+        limit = max(1, min(1000, int(request.args.get('limit', '200'))))
+    except ValueError:
+        limit = 200
+    entries = activity.list_entries(
+        action=action, target=target, user=user, status=status,
+        since=since, limit=limit,
+    )
+    return jsonify({
+        "entries": entries,
+        "summary": activity.count_by_action(),
+    })
+
+
+@app.route('/api/activity/export.csv', methods=['GET'])
+def api_activity_export():
+    try:
+        limit = max(1, min(10000, int(request.args.get('limit', '1000'))))
+    except ValueError:
+        limit = 1000
+    entries = activity.list_entries(limit=limit)
+    csv = activity.export_csv(entries)
+    return app.response_class(
+        csv, mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="activity.csv"'},
+    )
 
 
 @app.route('/api/notifications/state', methods=['GET'])

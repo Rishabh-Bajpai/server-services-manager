@@ -98,7 +98,7 @@ journalctl --user -u server-services-manager -f
 
 ## Testing
 ```bash
-python -m pytest tests/ -v --tb=short    # 177 tests
+python -m pytest tests/ -v --tb=short    # 197 tests
 ```
 - Tests use `unittest.mock` to avoid real subprocesses
 - Fixtures in `tests/conftest.py` provide `temp_config` (yaml), `process_manager`, `program_config`
