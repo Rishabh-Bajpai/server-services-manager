@@ -18,6 +18,7 @@ class ProgramConfigSchema(_Base):
     command: str = Field(min_length=1)
     cwd: str = Field(min_length=1)
     autostart: bool = False
+    schedule: str = ""
     environment: Dict[str, str] = Field(default_factory=dict)
 
     @field_validator("name")

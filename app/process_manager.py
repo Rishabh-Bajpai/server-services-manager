@@ -36,6 +36,10 @@ class ProgramConfig:
     cwd: str
     autostart: bool = False
     environment: Dict[str, str] = field(default_factory=dict)
+    # If set, the program runs on a systemd timer (scheduled task)
+    # instead of as a long-lived service. Format is a systemd
+    # OnCalendar= expression (e.g. "hourly", "*-*-* *:00/15").
+    schedule: str = ""
 
 class Program:
     def __init__(self, config: ProgramConfig):
@@ -281,6 +285,7 @@ class ProcessManager:
                 command=p_conf['command'],
                 cwd=p_conf['cwd'],
                 autostart=p_conf.get('autostart', False),
+                schedule=p_conf.get('schedule', ''),
                 environment=p_conf.get('environment', {})
             )
             self.programs[config.name] = Program(config)
@@ -379,6 +384,7 @@ class ProcessManager:
                         'command': config.command,
                         'cwd': config.cwd,
                         'autostart': config.autostart,
+                        'schedule': config.schedule,
                         'environment': config.environment
                     }
                     break
@@ -402,6 +408,7 @@ class ProcessManager:
             'command': config.command,
             'cwd': config.cwd,
             'autostart': config.autostart,
+            'schedule': config.schedule,
             'environment': config.environment
         }
         

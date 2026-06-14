@@ -338,6 +338,29 @@
                     </div>
                 </div>
                 <div class="modal-error" id="boot-error" style="display:none;margin-top:-0.25rem;margin-bottom:0.5rem"></div>
+                <div class="pt-2 border-t border-[var(--border-subtle)] mt-2">
+                    <div class="flex items-center gap-2 mb-2">
+                        <i data-lucide="calendar-clock" class="w-4 h-4 text-[var(--accent-purple)]"></i>
+                        <label class="text-sm font-semibold text-[var(--text-secondary)]">Schedule (optional)</label>
+                    </div>
+                    <p class="text-[10px] text-[var(--text-muted)] mb-2">Leave empty to run as a long-lived service. Set a cron-style expression to make this a one-shot timer that systemd runs on schedule.</p>
+                    <div class="flex gap-2">
+                        <input type="text" id="schedule" placeholder="hourly, daily, *-*-* *:00/15, Mon..Fri 09:00:00..."
+                            class="flex-1 bg-[var(--bg-secondary)] rounded-xl border border-[var(--border-subtle)] px-3 py-2 text-sm font-mono focus:border-[var(--accent-purple)] focus:ring-2 focus:ring-[var(--accent-purple)]/20 focus:outline-none transition-all placeholder:text-[var(--text-muted)]">
+                        <select id="schedule-preset"
+                            onchange="if(this.value){document.getElementById('schedule').value=this.value;this.value='';}"
+                            class="bg-[var(--bg-secondary)] rounded-xl border border-[var(--border-subtle)] px-3 py-2 text-sm focus:border-[var(--accent-purple)] focus:ring-2 focus:ring-[var(--accent-purple)]/20 focus:outline-none transition-all">
+                            <option value="">Presets…</option>
+                            <option value="minutely">Every minute</option>
+                            <option value="hourly">Every hour</option>
+                            <option value="daily">Every day</option>
+                            <option value="weekly">Every week</option>
+                            <option value="monthly">Every month</option>
+                            <option value="yearly">Every year</option>
+                        </select>
+                    </div>
+                    <p class="text-[10px] text-[var(--text-muted)] mt-1">See <a href="https://www.freedesktop.org/software/systemd/man/latest/systemd.time.html" target="_blank" class="underline">systemd.time(7)</a> for the full grammar.</p>
+                </div>
                 <button type="submit"
                     class="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white py-3 rounded-xl font-semibold hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg shadow-blue-500/25 btn-glow mt-6">
                     Save Service
@@ -609,6 +632,9 @@
                         </button>
                         <div class="status-indicator w-2.5 h-2.5 rounded-full ${getStatusIndicatorColor(p.status)}"></div>
                         <h3 class="font-semibold text-[var(--text-primary)]">${p.name}</h3>
+                        ${p.schedule ? `<span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--accent-purple)]/15 text-[var(--accent-purple)] border border-[var(--accent-purple)]/30" title="Runs on systemd timer: ${p.schedule}">
+                            <i data-lucide="calendar-clock" class="w-3 h-3 inline-block mr-0.5"></i>${p.schedule}
+                        </span>` : ''}
                     </div>
                     <div class="status-badge px-3 py-1 rounded-full text-xs font-semibold border uppercase tracking-wider">
                         ${p.status}
@@ -1031,6 +1057,9 @@
                 .join('\n');
             document.getElementById('environment').value = envStr;
 
+            // Schedule
+            document.getElementById('schedule').value = p.schedule || '';
+
             isEditing = true;
         }
 
@@ -1049,6 +1078,7 @@
                 command: document.getElementById('command').value,
                 cwd: document.getElementById('cwd').value,
                 autostart: document.getElementById('autostart').checked,
+                schedule: document.getElementById('schedule').value.trim(),
                 environment: envDict
             };
 
@@ -1067,6 +1097,21 @@
                     const err = await res.json();
                     alert(err.error || 'Failed to save');
                 } else {
+                    // If a schedule is set, write the systemd units too
+                    if (data.schedule) {
+                        const schedRes = await fetch(`/api/programs/${data.name}/schedule`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ schedule: data.schedule, enable: true }),
+                        });
+                        if (!schedRes.ok) {
+                            const err = await schedRes.json();
+                            alert('Service saved, but schedule failed: ' + (err.error || 'unknown'));
+                        }
+                    } else if (isEditing) {
+                        // User cleared a previous schedule — remove units
+                        await fetch(`/api/programs/${data.name}/schedule`, { method: 'DELETE' });
+                    }
                     closeModal();
                 }
             } catch (err) {

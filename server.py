@@ -203,6 +203,7 @@ def get_program_config(name):
         "command": program.config.command,
         "cwd": program.config.cwd,
         "autostart": program.config.autostart,
+        "schedule": program.config.schedule or "",
         "environment": program.config.environment
     })
 
@@ -215,6 +216,7 @@ def add_program():
             command=data['command'],
             cwd=data['cwd'],
             autostart=data.get('autostart', False),
+            schedule=data.get('schedule', ''),
             environment=data.get('environment', {})
         )
         pm.add_program(config)
@@ -236,6 +238,7 @@ def edit_program(name):
             command=data['command'],
             cwd=data['cwd'],
             autostart=data.get('autostart', False),
+            schedule=data.get('schedule', ''),
             environment=data.get('environment', {})
         )
         pm.edit_program(name, config)
@@ -805,6 +808,124 @@ def api_program_autostart(name):
         activity.log(f"autostart.{action}", target=name, status="error",
                     detail=str(e), ip=request.remote_addr or "")
         return jsonify({"error": str(e)}), 500
+
+
+# ---- Schedule (systemd timer) management ----------------------------
+
+@app.route('/api/programs/<name>/schedule', methods=['GET'])
+def api_program_schedule_get(name):
+    """Return current schedule + timer state for a program."""
+    from app import schedules
+    program = pm.get_program(name)
+    if not program:
+        return jsonify({"error": "Program not found"}), 404
+    schedule = program.config.schedule or ""
+    status = schedules.timer_status(name) if schedule else {
+        "enabled": False, "active": False, "next_run": None, "last_run": None,
+    }
+    return jsonify({
+        "name": name,
+        "schedule": schedule,
+        "is_scheduled": bool(schedule),
+        "valid": schedules.is_valid_schedule(schedule),
+        "presets": [{"value": v, "label": l} for v, l in schedules.preset_suggestions()],
+        "timer": status,
+    })
+
+
+@app.route('/api/programs/<name>/schedule', methods=['POST'])
+def api_program_schedule_set(name):
+    """Set the schedule for a program and write the systemd units.
+
+    Body: {schedule: "hourly", password?: "..."}
+    If the schedule is non-empty, also enables the timer (unless
+    the user passes ``enable: false``).
+    """
+    from app import schedules
+    program = pm.get_program(name)
+    if not program:
+        return jsonify({"error": "Program not found"}), 404
+    data = request.json or {}
+    expr = (data.get("schedule") or "").strip()
+    if not schedules.is_valid_schedule(expr):
+        return jsonify({
+            "error": f"Invalid schedule expression: {expr!r}",
+            "code": "invalid",
+        }), 400
+    password = data.get("password") or ""
+    enable = data.get("enable", True)
+    try:
+        if expr:
+            ok, err = schedules.write_units(
+                name, program.config.command, program.config.cwd,
+                expr, program.config.environment,
+            )
+            if not ok:
+                activity.log("program.schedule", target=name, status="error",
+                            detail=err, ip=request.remote_addr or "")
+                return jsonify({"error": err, "code": "write"}), 500
+            if enable:
+                ok, err = schedules.enable_timer(name, password=password or None)
+                if not ok:
+                    activity.log("program.schedule", target=name, status="error",
+                                detail=f"enable: {err}", ip=request.remote_addr or "")
+                    return jsonify({"error": err, "code": "permission"}), 403
+        else:
+            schedules.remove_units(name)
+        # Update in-memory + persisted config
+        program.config.schedule = expr
+        pm._save_config_file()
+        status = schedules.timer_status(name) if expr else {
+            "enabled": False, "active": False, "next_run": None, "last_run": None,
+        }
+        activity.log("program.schedule", target=name, status="ok",
+                    detail=f"schedule={expr!r}", ip=request.remote_addr or "")
+        return jsonify({
+            "ok": True,
+            "schedule": expr,
+            "timer": status,
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "command timed out"}), 504
+    except Exception as e:
+        activity.log("program.schedule", target=name, status="error",
+                    detail=str(e), ip=request.remote_addr or "")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/programs/<name>/schedule/trigger', methods=['POST'])
+def api_program_schedule_trigger(name):
+    """Run a scheduled task immediately (one-shot start)."""
+    from app import schedules
+    program = pm.get_program(name)
+    if not program:
+        return jsonify({"error": "Program not found"}), 404
+    password = (request.json or {}).get("password") or None
+    ok, err = schedules.trigger_now(name, password=password)
+    activity.log("program.schedule.trigger", target=name,
+                status="ok" if ok else "error",
+                detail="" if ok else err, ip=request.remote_addr or "")
+    if not ok:
+        code = "permission" if "assword" in err.lower() else "error"
+        return jsonify({"error": err, "code": code}), 403 if code == "permission" else 500
+    return jsonify({"ok": True})
+
+
+@app.route('/api/programs/<name>/schedule', methods=['DELETE'])
+def api_program_schedule_remove(name):
+    """Remove the schedule (and the timer units)."""
+    from app import schedules
+    program = pm.get_program(name)
+    if not program:
+        return jsonify({"error": "Program not found"}), 404
+    ok, err = schedules.remove_units(name)
+    if not ok:
+        return jsonify({"error": err}), 500
+    program.config.schedule = ""
+    pm._save_config_file()
+    activity.log("program.schedule.remove", target=name, status="ok",
+                ip=request.remote_addr or "")
+    return jsonify({"ok": True, "schedule": ""})
 
 
 @app.route('/notifications')
