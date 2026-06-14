@@ -56,7 +56,12 @@ REPLACEMENT_MAP = dict(REPLACEMENTS)
 
 
 def fix_text(text: str) -> str:
-    return pattern.sub(lambda m: REPLACEMENT_MAP[m.group(0)], text)
+    def _replace(m):
+        key = m.group(0)
+        if key == "":
+            return ""
+        return REPLACEMENT_MAP.get(key, key)
+    return pattern.sub(_replace, text)
 
 
 def walk_files(root: str):
