@@ -14,13 +14,24 @@ journalctl --user -u server-services-manager -f
 
 ## Architecture
 - **Entrypoint:** `server.py` — single Flask app with SocketIO, eventlet monkey-patch at line 4-5
-- **Routes** (`server.py`): `/` dashboard, `/monitor` system monitor, `/system-services` systemd units, `/programs/*` CRUD, `/api/files/*` file manager, `/api/system-services/*`, `/login`, `/logout`
-- **WebSocket events:** `update` (program cards, 1s interval), `system_stats` (monitor, 2s), `terminal_*`
+- **Routes** (`server.py`): `/` dashboard, `/monitor` system monitor, `/system-services` systemd units, `/cron` system cron jobs, `/notifications` health-check dashboard, `/activity` activity log, `/control` whitelisted system commands, `/programs/*` CRUD, `/api/files/*` file manager, `/api/system-services/*`, `/api/programs/<name>/{autostart,schedule,limits}`, `/api/palette/search`, `/api/plugins`, `/login`, `/logout`, `/health` (no auth)
+- **WebSocket events:** `update` (program cards, 1s interval), `system_stats` (monitor, 2s), `terminal_*`, `service_event` (state-change toasts), `health_event`
 - **Backend modules:**
-  - `app/process_manager.py` — Program, ProcessManager (managed services in `config.yaml`)
+  - `app/process_manager.py` — Program, ProcessManager, ProgramConfig (name/command/cwd/autostart/schedule/environment), `on_state_change` hook fired on every transition
   - `app/terminal_manager.py` — PTY sessions
-  - `app/system_services.py` — systemd unit introspection/control via `systemctl` (read + cached; write requires sudo password)
-- **Frontend:** All inline JS in `templates/index.html` (~1160 lines, 4 script blocks). Monitor at `templates/monitor.html` uses Chart.js. System services at `templates/system-services.html` (~600 lines, side-panel detail view). No build step, no framework.
+  - `app/system_services.py` — systemd unit introspection/control via `systemctl` (read + cached; write requires sudo password). `get_dependencies()` returns the BFS graph for `/system-services/<name>/graph`.
+  - `app/log_streamer.py` — reference-counted `journalctl -f` per (unit, priority) with per-subscriber queues; SSE endpoint
+  - `app/cron_manager.py` — parse /etc/crontab and /etc/cron.d/*, validate 5-field expressions, enable/disable via `sudo cp` of tempfile
+  - `app/health.py` — HealthMonitor background thread (http/tcp/cmd checks, state tracking, transition events)
+  - `app/notifier.py` — pluggable notifiers (ntfy, webhook, telegram, smtp email), `Event` dataclass, `fanout()`
+  - `app/activity.py` — SQLite WAL DB at `~/.server-services-manager/activity.db`, `log()` is best-effort and never raises
+  - `app/palette.py` — subsequence fuzzy scorer (word-boundary + prefix + length bonuses)
+  - `app/schedules.py` — systemd timer units (ssm-<name>.service + .timer) for cron-style scheduled tasks
+  - `app/resource_limits.py` — systemd drop-in overrides (CPUQuota, MemoryMax, TasksMax, IOWeight, Nice, etc.) at `~/.config/systemd/user/ssm-<name>.service.d/99-manager.conf`
+  - `app/log_persistence.py` — per-service log tail persisted to `~/.server-services-manager/logs/<name>.log` (rotated at 512KB)
+  - `app/config_schema.py` — pydantic schema for `config.yaml` (lenient `extra="allow"`, name regex, unique-name enforcement, notifier type discriminators)
+  - `app/plugins.py` — drop-in Python plugin loader, `PluginBase` ABC, `load_all()` runs at startup
+- **Frontend:** All inline JS in `templates/index.html` (~1700 lines, 4 script blocks). Monitor at `templates/monitor.html` uses Chart.js. System services at `templates/system-services.html` (~600 lines, side-panel detail view with Overview/Dependencies/Unit File/Logs tabs). Cron at `templates/cron.html`, notifications at `templates/notifications.html`, activity at `templates/activity.html`, control at `templates/control.html`. No build step, no framework.
 - **Config:** `config.yaml` (gitignored) defines services; can also be managed via UI
 - **State persistence:** Running PIDs saved to `~/.server-services-manager/state.json`, re-attached on restart
 
@@ -28,10 +39,10 @@ journalctl --user -u server-services-manager -f
 - **eventlet + Python 3.13:** `eventlet.monkey_patch()` conflicts with `httpcore>=1.0` + `trio`. Pin `httpcore<1.0` if import fails. `start.sh` already sets `PYTHONWARNINGS="ignore"` to suppress eventlet deprecation.
 - **CPU normalization:** `psutil.cpu_percent(interval=0)` already returns 0-100% system-wide — do NOT divide by num_cores. For process CPU, `proc.cpu_percent()` returns per-core (0-100% of one core); divide by `num_cores` to get total-system share.
 - **CPU temperature:** `psutil.sensors_temperatures()` may not exist on all systems. Handle gracefully — try `coretemp`, `k10temp`, `cpu-thermal`, `thinkpad`, `acpitz` as fallbacks.
-- **Auto-restart backoff:** `start()` does NOT reset `restart_count` — intentional. Counter increments via `_handle_restart()`. Resets on `stop()` or after 60s of uptime (`process_manager.py:224`).
+- **Auto-restart backoff:** `start()` does NOT reset `restart_count` — intentional. Counter increments via `_handle_restart()`. Resets on `stop()` or after 60s of uptime (`process_manager.py:_handle_restart`).
 - **SECRET_KEY:** Auto-generated via `os.urandom(24)` if not set in env. No need to configure.
 - **Password:** Hashed at startup. Default `admin` if `PASSWORD` not set.
-- **Log buffer:** `collections.deque(maxlen=10000)` per program. WebSocket sends last 100 lines every 1s.
+- **Log buffer:** `collections.deque(maxlen=10000)` per program + per-service tail persisted to `~/.server-services-manager/logs/<name>.log` (rotated at 512KB). WebSocket sends last 100 lines every 1s.
 - **Healthcheck:** `GET /health` bypasses auth.
 - **Monitor polling:** `system_monitor_thread()` emits `system_stats` every 2s. 60-point history (~2min) stored client-side for chart rendering.
 - **Disk aggregation:** Monitor filters out `/snap/*`, `/boot/efi`, and `/dev/loop*` partitions and aggregates physical disk totals.
@@ -47,7 +58,7 @@ journalctl --user -u server-services-manager -f
       auth: true
   ```
 
-- **System Services page** (`/system-services`): browse and control all systemd units on the host. Read operations (`list`, `show`, `cat`, `journalctl`) work without privileges. Write operations (start, stop, restart, reload, enable, disable, mask, daemon-reload, edit) require the user's sudo password — the same password they use to log in. The password is piped to `sudo -S` for that single command; nothing else is escalated. **The Flask process itself does not need to run as root** — only the user invoking the action needs sudo. Drop-in edits write to `/etc/systemd/system/<name>.d/99-manager.conf` (the standard `systemctl edit` location) and automatically `daemon-reload` afterwards, so vendor unit files are never touched.
+- **System Services page** (`/system-services`): browse and control all systemd units on the host. Read operations (`list`, `show`, `cat`, `journalctl`) work without privileges. Write operations (start, stop, restart, reload, enable, disable, mask, daemon-reload, edit) require the user's sudo password — the same password they use to log in. The password is piped to `sudo -S` for that single command; nothing else is escalated. **The Flask process itself does not need to run as root** — only the user invoking the action needs sudo. Drop-in edits write to `/etc/systemd/system/<name>.d/99-manager.conf` (the standard `systemctl edit` location) and automatically `daemon-reload` afterwards, so vendor unit files are never touched. Dependencies tab uses `get_dependencies(name, depth)` BFS over Requires/Wants/TriggeredBy/After/Before, capped at 40 nodes (systemd-journald alone has 100+ After/Before edges) with `_GRAPH_SKIP` for well-known targets.
 
   Unit types exposed: `service`, `timer`, `socket`, `path`, `mount`. Long lists (500+ units) are handled via `table-layout: fixed` columns and a horizontally scrollable table wrapper; the side panel loads detail on click.
 
@@ -55,6 +66,7 @@ journalctl --user -u server-services-manager -f
   from app import system_services
   units = system_services.list_units(unit_type="service", state="active", search="nginx")
   detail = system_services.get_unit("cron.service")
+  graph = system_services.get_dependencies("NetworkManager.service", depth=2)
   system_services.control("cron.service", "restart", password=user_password)
   ```
 
@@ -96,9 +108,58 @@ journalctl --user -u server-services-manager -f
       url: https://example.com/hook
   ```
 
+- **Program state-change hook** (`app/process_manager.py:Program._set_status`): every state transition calls `program.on_state_change(program, old, new)`. server.py attaches a single global hook (`_on_program_state_change`) that fans the transition out to all notifiers in a daemon thread and pushes a `service_event` to socketio for UI toasts. The hook is wired at startup; new programs added via API also get the hook attached (`server.py:api_add_program`). The notifier fanout runs in a real OS thread so a slow webhook can't stall the program thread.
+
+  ```python
+  program.on_state_change = lambda p, old, new: print(f"{p.config.name}: {old.value} -> {new.value}")
+  ```
+
+- **Scheduled tasks** (`app/schedules.py`): a managed program can have a `schedule:` field in config.yaml. When set, the manager creates `~/.config/systemd/user/ssm-<name>.service` (one-shot) + `ssm-<name>.timer` (OnCalendar + Persistent) and enables the timer. The dashboard's Start button still spawns the subprocess directly, so manual triggers keep working. The OnCalendar validator is a lightweight regex (`[A-Za-z0-9*.,/\-\s:]+`) — it rejects shell metacharacters and `//` but accepts standard cron extensions like `Mon..Fri 09:00:00`. The unit is created with `--user` so no root is needed; sudo only for write ops with the app password. API:
+
+  ```python
+  from app import schedules
+  schedules.write_units("api", "/usr/bin/foo", "/tmp", "hourly",
+                       environment={"KEY": "VAL"})
+  schedules.enable_timer("api", password=user_password)
+  schedules.trigger_now("api", password=user_password)
+  schedules.timer_status("api")
+  ```
+
+- **Resource limits** (`app/resource_limits.py`): per-service systemd drop-in at `~/.config/systemd/user/ssm-<name>.service.d/99-manager.conf`. Supported fields: `cpu_quota` (0-100%), `memory_max`/`memory_high` (e.g. `512M`, `2G`, `infinity`), `tasks_max`, `io_weight`/`cpu_weight` (1-10000), `limit_nofile`, `nice` (-20..19). Each field has type-specific validation. Empty value clears that one field. `apply()` merges with existing settings; `clear()` removes the drop-in. API:
+
+  ```python
+  from app import resource_limits
+  resource_limits.apply("api", {"cpu_quota": "50", "memory_max": "512M"},
+                        password=user_password)
+  resource_limits.get("api")    # -> {"cpu_quota": "50", "memory_max": "512M"}
+  resource_limits.clear("api", password=user_password)
+  ```
+
+- **Log persistence** (`app/log_persistence.py`): every line appended to `Program.logs` is also written to `~/.server-services-manager/logs/<safe-name>.log` (rotated at 512KB, last half kept). Available via `GET /programs/<name>/logs/tail` (default 200 lines) and merged into `/programs/<name>/logs/download`. `DELETE /programs/<name>/logs` clears both. Best-effort — persistence failure never blocks the program.
+
+- **Command palette** (`app/palette.py`): Ctrl+K opens a fuzzy-search modal. Sources: managed programs, control commands, system units. `_score()` uses subsequence match + word-boundary bonus + prefix bonus + length penalty. Index is rebuilt on each `build_palette_index()` call. `GET /api/palette/search?q=...` returns the top 20 results.
+
+- **Activity log** (`app/activity.py`): SQLite WAL DB at `~/.server-services-manager/activity.db`, table `activity(ts, action, target, status, detail, user, ip)`. `log()` is best-effort (`try/except` swallows all errors) so a logging failure cannot block an action. `/activity` page shows filterable list + summary; CSV export at `GET /api/activity/export`. Hooks into: program CRUD, systemd actions, cron toggle, autostart, schedule, limits, command palette runs.
+
+- **Config validation** (`app/config_schema.py`): pydantic models for every block (ProgramConfig, HealthCheck, Command, Ntfy/Webhook/Telegram/Email). `validate_config(data)` returns the validated tree or raises `ValidationError` with field paths. Lenient by design: `extra="allow"` everywhere so users can add fields without breaking the schema. `RootConfigSchema` enforces unique program / command / notifier names. Called at startup with `try/except` — bad config logs a warning but doesn't refuse to start.
+
+- **Plugins** (`app/plugins.py`): drop a `.py` file in `~/.server-services-manager/plugins/`. The loader imports each file, finds subclasses of `PluginBase`, instantiates them, and calls `register(app=app, pm=pm, activity=activity, notifier_module=notifier)`. Auto-reload on file change is NOT supported (too dangerous); restart required. A bad plugin is logged + skipped; it can't break the manager. `GET /api/plugins` returns discovery metadata for the UI. `PluginBase.unregister()` is the optional cleanup hook called at shutdown.
+
+  ```python
+  from app.plugins import PluginBase
+
+  class Hello(PluginBase):
+      name = "hello"
+      version = "1.0"
+      def register(self, app, pm, activity, notifier_module=None):
+          @app.route("/_hello")
+          def hello():
+              return "world"
+  ```
+
 ## Testing
 ```bash
-python -m pytest tests/ -v --tb=short    # 215 tests
+python -m pytest tests/ -v --tb=short    # 346 tests
 ```
 - Tests use `unittest.mock` to avoid real subprocesses
 - Fixtures in `tests/conftest.py` provide `temp_config` (yaml), `process_manager`, `program_config`
@@ -107,11 +168,11 @@ python -m pytest tests/ -v --tb=short    # 215 tests
 - GitHub Actions workflow at `.github/workflows/test.yml` runs ruff lint + pytest on push/PR (Python 3.10-3.13)
 
 ## Edit-service rename bug (fixed)
-When editing a service name, the PUT request URL uses the `original-name` hidden field (`templates/index.html:256`), not the new name from the form.
+When editing a service name, the PUT request URL uses the `original-name` hidden field (`templates/index.html`), not the new name from the form.
 
 ## File manager path checks
 All file endpoints (`/api/files/*`) chroot to `$HOME`. Use `os.path.realpath()` comparison — symlinks outside home are blocked.
 
 ## Dependencies
-- `flask`, `flask-socketio`, `eventlet`, `pyyaml`, `python-dotenv`, `psutil`
+- `flask`, `flask-socketio`, `eventlet`, `pyyaml`, `python-dotenv`, `psutil`, `pydantic`
 - Frontend CDNs: Tailwind, Socket.IO, Lucide icons, xterm.js, Chart.js
