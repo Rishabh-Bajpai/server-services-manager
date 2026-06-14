@@ -822,6 +822,82 @@ def api_palette_search():
     return jsonify({"results": results})
 
 
+@app.route('/api/programs/export', methods=['GET'])
+def api_programs_export():
+    """Export the full set of managed services as JSON.
+
+    The shape matches what ``POST /api/programs/import`` accepts, so a
+    file produced here can be re-imported on a fresh install to
+    reproduce the same fleet.
+    """
+    payload = {
+        "version": 1,
+        "exported_at": time.time(),
+        "programs": [
+            {
+                "name": p.config.name,
+                "command": p.config.command,
+                "cwd": p.config.cwd,
+                "autostart": p.config.autostart,
+                "environment": p.config.environment,
+            }
+            for p in pm.get_all_programs()
+        ],
+    }
+    return app.response_class(
+        json.dumps(payload, indent=2),
+        mimetype="application/json",
+        headers={
+            "Content-Disposition": 'attachment; filename="services.json"',
+        },
+    )
+
+
+@app.route('/api/programs/import', methods=['POST'])
+def api_programs_import():
+    """Import a JSON export.
+
+    Body: ``{"version": 1, "programs": [...]}``.
+
+    Modes (via ``?mode=replace|merge``, default ``merge``):
+    - ``merge``: keep existing programs, add new ones by name
+      (overwriting if the name matches).
+    - ``replace``: remove all existing programs first, then import.
+    """
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data.get("programs"), list):
+        return jsonify({"error": "expected { programs: [...] }"}), 400
+    mode = request.args.get("mode", "merge")
+    if mode == "replace":
+        for p in list(pm.get_all_programs()):
+            try:
+                pm.delete_program(p.config.name)
+            except Exception:
+                pass
+    added = 0
+    skipped = 0
+    for entry in data["programs"]:
+        try:
+            cfg = ProgramConfig(
+                name=entry["name"],
+                command=entry["command"],
+                cwd=entry["cwd"],
+                autostart=entry.get("autostart", False),
+                environment=entry.get("environment", {}),
+            )
+            pm.add_program(cfg)
+            added += 1
+        except Exception as e:
+            skipped += 1
+            activity.log("program.import.skip", target=entry.get("name", ""),
+                        status="error", detail=str(e),
+                        ip=request.remote_addr or "")
+    activity.log("program.import", target=f"mode={mode}",
+                status="ok", detail=f"added={added} skipped={skipped}",
+                ip=request.remote_addr or "")
+    return jsonify({"ok": True, "added": added, "skipped": skipped, "mode": mode})
+
+
 @app.route('/api/activity', methods=['GET'])
 def api_activity_list():
     action = request.args.get('action') or None

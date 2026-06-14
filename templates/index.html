@@ -212,6 +212,18 @@
                     <i data-lucide="folder" class="w-4 h-4"></i>
                     <span class="hidden sm:inline">Files</span>
                 </button>
+                <button onclick="openImportModal()"
+                    class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium"
+                    title="Import services from JSON export">
+                    <i data-lucide="upload" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Import</span>
+                </button>
+                <a href="/api/programs/export"
+                    class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium"
+                    title="Export services as JSON">
+                    <i data-lucide="download" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Export</span>
+                </a>
                 <button onclick="openModal()"
                     class="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all text-sm font-medium shadow-lg shadow-blue-500/25">
                     <i data-lucide="plus" class="w-4 h-4"></i>
@@ -331,6 +343,27 @@
                     Save Service
                 </button>
             </form>
+        </div>
+    </div>
+
+    <!-- Import Modal -->
+    <div class="modal-overlay" id="import-modal">
+        <div class="modal-box">
+            <h2>Import services</h2>
+            <p>Upload a JSON export to add (or replace) the configured services. Drag-and-drop a file or pick one below.</p>
+            <input type="file" id="import-file" accept=".json,application/json" class="block w-full text-sm text-[var(--text-secondary)] file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:bg-[var(--bg-secondary)] file:text-[var(--text-primary)] hover:file:bg-[var(--border-subtle)]" />
+            <div class="modal-error" id="import-error" style="display:none;margin-top:-0.25rem;margin-bottom:0.5rem"></div>
+            <div class="mb-3">
+                <label class="text-xs text-[var(--text-muted)]">Mode</label>
+                <select id="import-mode" class="search-input" style="margin-top:0.25rem">
+                    <option value="merge">Merge — add new, overwrite same-named</option>
+                    <option value="replace">Replace — delete all existing first</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeImportModal()">Cancel</button>
+                <button class="btn-primary" id="import-execute" onclick="executeImport()">Import</button>
+            </div>
         </div>
     </div>
 
@@ -835,6 +868,65 @@
         function closeModal() {
             modal.classList.add('hidden');
             modal.classList.remove('flex');
+        }
+
+        // ----- Import / Export -----
+        function openImportModal() {
+            document.getElementById('import-modal').classList.add('active');
+            document.getElementById('import-error').style.display = 'none';
+            document.getElementById('import-file').value = '';
+        }
+        function closeImportModal() {
+            document.getElementById('import-modal').classList.remove('active');
+        }
+
+        async function executeImport() {
+            const fileInput = document.getElementById('import-file');
+            const mode = document.getElementById('import-mode').value;
+            const errorEl = document.getElementById('import-error');
+            const btn = document.getElementById('import-execute');
+            errorEl.style.display = 'none';
+            if (!fileInput.files || !fileInput.files[0]) {
+                errorEl.textContent = 'Pick a JSON file first.';
+                errorEl.style.display = 'block';
+                return;
+            }
+            if (mode === 'replace' && !confirm('Replace will DELETE all existing services. Continue?')) {
+                return;
+            }
+            btn.disabled = true;
+            btn.textContent = 'Importing…';
+            try {
+                const text = await fileInput.files[0].text();
+                let data;
+                try { data = JSON.parse(text); }
+                catch (e) {
+                    errorEl.textContent = 'Invalid JSON: ' + e.message;
+                    errorEl.style.display = 'block';
+                    return;
+                }
+                const r = await fetch(`/api/programs/import?mode=${mode}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                });
+                const out = await r.json();
+                if (!r.ok) {
+                    errorEl.textContent = out.error || 'Failed';
+                    errorEl.style.display = 'block';
+                    return;
+                }
+                toast(`Imported ${out.added} (skipped ${out.skipped})`, 'success');
+                closeImportModal();
+                // Reload programs
+                if (typeof loadPrograms === 'function') loadPrograms();
+            } catch (e) {
+                errorEl.textContent = 'Network error: ' + e.message;
+                errorEl.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Import';
+            }
         }
 
         async function toggleBoot() {
