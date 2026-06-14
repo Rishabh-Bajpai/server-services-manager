@@ -15,30 +15,34 @@ import re
 import subprocess
 import sys
 
-REPLACEMENTS = [
-    "/home/user/<app>",
-    "/home/user/Downloads",
-    "/path/to/server-files",
-    "<repo-dir>",
-    "/home/user",
-    "conda run -n <env>",
-    "conda activate <env>",
-    '"name: <app>"',
-    "name: <app>",
-    "name: <app>",
-    "name: <app>",
-    '"name: <app>"',
-    '"user:testuser"',
-    "user:testuser",
-    "<app>",
-    "<app>",
-    "<app>",
-    "<env>",
-    "<REDACTED-PASSWORD>",
-    "<REDACTED-PASSWORD>",
+# Patterns that, if found, indicate a leak. The values are the
+# strings to match (the original, *un-redacted* form). The
+# replacement target (the sanitized form) is defined in
+# ``scrub.py``; both must stay in sync.
+LEAK_PATTERNS = [
+    "/home/rishabh/ComfyUI",
+    "/home/rishabh/Downloads",
+    "/home/rishabh/server-files",
+    "/home/rishabh/github_projects/server-services-manager",
+    "/home/rishabh",
+    "conda run -n comfyui",
+    "conda activate process-manager",
+    '"name: comfyui"',
+    "name: comfyui",
+    "name: ComfyUI",
+    "name: localsend",
+    '"name: localsend"',
+    '"user:rishabh"',
+    "user:rishabh",
+    "ComfyUI",
+    "localsend",
+    "comfyui",
+    "process-manager",
+    "AAaa813@123",
+    "813@",
 ]
 
-pattern = re.compile("|".join(re.escape(s) for s in REPLACEMENTS))
+pattern = re.compile("|".join(re.escape(s) for s in LEAK_PATTERNS))
 
 
 def scan_text(text: str, source: str) -> list:
@@ -46,6 +50,37 @@ def scan_text(text: str, source: str) -> list:
     for i, line in enumerate(text.splitlines(), 1):
         for m in pattern.finditer(line):
             matches.append((source, i, line.strip()[:120]))
+    return matches
+
+
+# The pattern-list files themselves contain the patterns as string
+# literals — that's expected, not a leak. They also reference the
+# generic placeholders (``/home/user/<app>`` etc.) that the cleanup
+# script uses as replacements, which is also expected.
+SELF_FILES = {os.path.realpath(p) for p in [
+    __file__,
+    os.path.join(os.path.dirname(__file__), "scrub.py"),
+    os.path.join(os.path.dirname(__file__), "clean-history.sh"),
+]}
+
+
+def _scan_files(files):
+    matches = []
+    for fname in files:
+        if not os.path.isfile(fname):
+            continue
+        if os.path.realpath(fname) in SELF_FILES:
+            continue
+        try:
+            with open(fname, "rb") as f:
+                data = f.read()
+        except OSError:
+            continue
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        matches.extend(scan_text(text, fname))
     return matches
 
 
@@ -57,22 +92,7 @@ def scan_staged():
         )
     except subprocess.CalledProcessError as e:
         sys.exit(f"git diff failed: {e}")
-    files = [f for f in out.splitlines() if f]
-    matches = []
-    for fname in files:
-        if not os.path.isfile(fname):
-            continue
-        try:
-            with open(fname, "rb") as f:
-                data = f.read()
-        except OSError:
-            continue
-        try:
-            text = data.decode("utf-8")
-        except UnicodeDecodeError:
-            continue
-        matches.extend(scan_text(text, fname))
-    return matches
+    return _scan_files([f for f in out.splitlines() if f])
 
 
 def scan_tracked():
@@ -82,22 +102,7 @@ def scan_tracked():
         )
     except subprocess.CalledProcessError as e:
         sys.exit(f"git ls-files failed: {e}")
-    files = [f for f in out.splitlines() if f]
-    matches = []
-    for fname in files:
-        if not os.path.isfile(fname):
-            continue
-        try:
-            with open(fname, "rb") as f:
-                data = f.read()
-        except OSError:
-            continue
-        try:
-            text = data.decode("utf-8")
-        except UnicodeDecodeError:
-            continue
-        matches.extend(scan_text(text, fname))
-    return matches
+    return _scan_files([f for f in out.splitlines() if f])
 
 
 def main():
