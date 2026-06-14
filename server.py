@@ -1257,8 +1257,13 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, shutdown_handler)
     signal.signal(signal.SIGINT, shutdown_handler)
     
-    # Load config, re-attach to surviving processes, then start new ones
+    # Load config, validate, re-attach to surviving processes, then start
     pm.load_config()
+    try:
+        from app.config_schema import validate_config
+        validate_config(pm.config_data if hasattr(pm, "config_data") else {})
+    except Exception as e:
+        logger.warning(f"config.yaml has validation issues: {e}")
     pm.load_state_and_reattach()
     pm.start_all()
 

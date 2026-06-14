@@ -1,13 +1,14 @@
-"""Pluggable notification backends for health-check transitions.
+"""Pluggable notification backends for health-check transitions AND
+service events (start, stop, fail). Each notifier is a small class
+with a single ``send(event)`` method.
 
-Each notifier is a small class with a single ``send(event)`` method.
 Currently supported: ``ntfy``, ``webhook``, ``telegram``, ``email``.
 
 Notifier instances are constructed from the ``notifications:`` list
 in ``config.yaml``; see :func:`build_notifiers`.
 """
-import json
 import logging
+import json
 import smtplib
 import threading
 from abc import ABC, abstractmethod
