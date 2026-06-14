@@ -449,6 +449,15 @@ def api_system_services_unit(name):
         return jsonify({"error": str(e), "code": e.code}), http
 
 
+@app.route('/api/system-services/<path:name>/graph', methods=['GET'])
+def api_system_services_graph(name):
+    try:
+        depth = int(request.args.get('depth', '2'))
+    except ValueError:
+        depth = 2
+    return jsonify(system_services.get_dependencies(name, depth))
+
+
 @app.route('/api/system-services/<path:name>/unit', methods=['PUT'])
 def api_system_services_edit(name):
     data = request.get_json(silent=True) or {}

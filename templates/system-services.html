@@ -453,6 +453,7 @@
 
         <div class="flex items-center gap-1 px-4 border-b border-[var(--border-subtle)] overflow-x-auto">
             <button class="tab-btn active" data-tab="overview">Overview</button>
+            <button class="tab-btn" data-tab="dependencies">Dependencies</button>
             <button class="tab-btn" data-tab="unit-file">Unit File</button>
             <button class="tab-btn" data-tab="logs">Logs</button>
         </div>
@@ -514,6 +515,29 @@
                     </div>
                     <p class="text-xs text-[var(--text-muted)] mb-2">Drop-in overrides live at <code class="font-mono text-[var(--accent-purple)]">/etc/systemd/system/&lt;name&gt;.d/99-manager.conf</code></p>
                     <pre id="unit-file-content" class="editor" style="max-height:50vh;overflow:auto;white-space:pre;font-family:'JetBrains Mono',monospace"></pre>
+                </div>
+            </div>
+
+            <!-- Dependencies tab -->
+            <div id="tab-dependencies" class="tab-pane" style="display:none">
+                <div class="panel-section">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="panel-label" style="margin-bottom:0">Dependency graph</div>
+                        <div class="flex items-center gap-1">
+                            <select id="graph-depth" class="text-xs bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-md px-2 py-1 text-[var(--text-primary)] outline-none">
+                                <option value="1">depth 1</option>
+                                <option value="2" selected>depth 2</option>
+                                <option value="3">depth 3</option>
+                            </select>
+                            <button onclick="loadGraph()" class="row-action-btn" style="height:auto;padding:0.375rem 0.625rem;width:auto;display:inline-flex;gap:0.375rem" title="Reload">
+                                <i data-lucide="refresh-ccw" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <p class="text-xs text-[var(--text-muted)] mb-2">Hover a node to see its edges. Missing units are shown with a dashed border.</p>
+                    <div id="graph-canvas" style="background:#050508;border:1px solid var(--border-subtle);border-radius:0.5rem;padding:1rem;min-height:300px;overflow:auto;position:relative">
+                        <div class="empty-state" id="graph-empty" style="color:var(--text-muted);text-align:center;padding:2rem">Loading…</div>
+                    </div>
                 </div>
             </div>
 
@@ -863,6 +887,7 @@
             $('tab-' + name).style.display = 'block';
             if (name === 'unit-file' && currentUnit) loadUnitFile();
             if (name === 'logs' && currentUnit) loadLogs();
+            if (name === 'dependencies' && currentUnit) loadGraph();
         }
 
         async function loadUnitFile() {
@@ -910,6 +935,204 @@
                 target.textContent = 'Network error: ' + e.message;
             }
         }
+
+        // ----- Dependency graph -----
+        async function loadGraph() {
+            if (!currentUnit) return;
+            const canvas = $('graph-canvas');
+            const empty = $('graph-empty');
+            if (empty) empty.textContent = 'Loading…';
+            try {
+                const depth = $('graph-depth').value || 2;
+                const r = await fetch(`/api/system-services/${encodeURIComponent(currentUnit.name)}/graph?depth=${depth}`);
+                const data = await r.json();
+                if (!r.ok) {
+                    canvas.innerHTML = `<div class="empty-state" style="color:var(--accent-red)">${escapeHtml(data.error || 'Failed to load')}</div>`;
+                    return;
+                }
+                renderGraph(data);
+            } catch (e) {
+                canvas.innerHTML = `<div class="empty-state" style="color:var(--accent-red)">Network error: ${escapeHtml(e.message)}</div>`;
+            }
+        }
+        $('graph-depth').addEventListener('change', loadGraph);
+
+        function renderGraph(data) {
+            const canvas = $('graph-canvas');
+            canvas.innerHTML = '';
+            const nodes = data.nodes || [];
+            const edges = data.edges || [];
+            if (nodes.length <= 1 && edges.length === 0) {
+                canvas.innerHTML = '<div class="empty-state" style="color:var(--text-muted);text-align:center;padding:2rem">No dependencies found.</div>';
+                return;
+            }
+
+            // Layout: place root at center, deps above, reverse-deps below
+            // Group nodes by level (0=root, 1=direct, 2=transitive)
+            const byLevel = {};
+            for (const n of nodes) {
+                const lvl = n.level || 0;
+                if (!byLevel[lvl]) byLevel[lvl] = [];
+                byLevel[lvl].push(n);
+            }
+            const levels = Object.keys(byLevel).map(Number).sort((a, b) => a - b);
+
+            // Compute a vertical position per level, and within each level, place nodes left-to-right
+            const nodeWidth = 180;
+            const nodeHeight = 56;
+            const vGap = 30;
+            const hGap = 24;
+            const positions = {};
+            for (const lvl of levels) {
+                const list = byLevel[lvl];
+                list.sort((a, b) => a.name.localeCompare(b.name));
+                const totalWidth = list.length * nodeWidth + (list.length - 1) * hGap;
+                const startX = -totalWidth / 2 + nodeWidth / 2;
+                list.forEach((n, i) => {
+                    positions[n.name] = {
+                        x: startX + i * (nodeWidth + hGap),
+                        y: lvl * (nodeHeight + vGap),
+                        node: n,
+                    };
+                });
+            }
+
+            // Compute total bounds
+            let minX = 0, maxX = 0, maxY = 0;
+            for (const k in positions) {
+                const p = positions[k];
+                if (p.x < minX) minX = p.x;
+                if (p.x > maxX) maxX = p.x;
+                if (p.y > maxY) maxY = p.y;
+            }
+            const padding = 16;
+            const w = (maxX - minX) + nodeWidth + padding * 2;
+            const h = maxY + nodeHeight + padding * 2;
+            const offsetX = -minX + padding;
+            const offsetY = padding;
+
+            // Build SVG
+            const svgNS = 'http://www.w3.org/2000/svg';
+            const svg = document.createElementNS(svgNS, 'svg');
+            svg.setAttribute('width', w);
+            svg.setAttribute('height', h);
+            svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+            svg.style.display = 'block';
+
+            // Arrow marker
+            const defs = document.createElementNS(svgNS, 'defs');
+            defs.innerHTML = `
+                <marker id="arrow-req" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#3b82f6"/>
+                </marker>
+                <marker id="arrow-want" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#8b5cf6"/>
+                </marker>
+                <marker id="arrow-other" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+                </marker>
+            `;
+            svg.appendChild(defs);
+
+            // Edges
+            for (const e of edges) {
+                const from = positions[e.from];
+                const to = positions[e.to];
+                if (!from || !to) continue;
+                const x1 = from.x + offsetX;
+                const y1 = from.y + offsetY + nodeHeight;
+                const x2 = to.x + offsetX;
+                const y2 = to.y + offsetY;
+                const midY = (y1 + y2) / 2;
+                const path = document.createElementNS(svgNS, 'path');
+                let d;
+                if (e.type === 'After' || e.type === 'Before') {
+                    // Curve for ordering
+                    d = `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
+                } else {
+                    d = `M ${x1} ${y1} L ${x2} ${y2}`;
+                }
+                path.setAttribute('d', d);
+                let color = '#64748b';
+                if (e.type === 'Requires') color = '#3b82f6';
+                else if (e.type === 'Wants') color = '#8b5cf6';
+                path.setAttribute('stroke', color);
+                path.setAttribute('stroke-width', e.type === 'Requires' ? 2 : 1);
+                if (e.type === 'Wants') path.setAttribute('stroke-dasharray', '4 2');
+                path.setAttribute('fill', 'none');
+                const marker = e.type === 'Requires' ? 'arrow-req' : e.type === 'Wants' ? 'arrow-want' : 'arrow-other';
+                path.setAttribute('marker-end', `url(#${marker})`);
+                const title = document.createElementNS(svgNS, 'title');
+                title.textContent = `${e.from} ${e.type} ${e.to}`;
+                path.appendChild(title);
+                svg.appendChild(path);
+            }
+
+            // Nodes
+            for (const name in positions) {
+                const p = positions[name];
+                const n = p.node;
+                const cx = p.x + offsetX;
+                const cy = p.y + offsetY;
+                const g = document.createElementNS(svgNS, 'g');
+                g.setAttribute('transform', `translate(${cx - nodeWidth / 2}, ${cy})`);
+                const rect = document.createElementNS(svgNS, 'rect');
+                rect.setAttribute('width', nodeWidth);
+                rect.setAttribute('height', nodeHeight);
+                rect.setAttribute('rx', 6);
+                const isRoot = n.level === 0;
+                const isMissing = n.missing;
+                if (isRoot) {
+                    rect.setAttribute('fill', '#1e3a8a');
+                    rect.setAttribute('stroke', '#3b82f6');
+                    rect.setAttribute('stroke-width', 1.5);
+                } else if (isMissing) {
+                    rect.setAttribute('fill', '#1a1a25');
+                    rect.setAttribute('stroke', '#475569');
+                    rect.setAttribute('stroke-width', 1);
+                    rect.setAttribute('stroke-dasharray', '4 2');
+                } else if (n.active_state === 'active') {
+                    rect.setAttribute('fill', '#0d3320');
+                    rect.setAttribute('stroke', '#10b981');
+                    rect.setAttribute('stroke-width', 1);
+                } else {
+                    rect.setAttribute('fill', '#1a1a25');
+                    rect.setAttribute('stroke', '#334155');
+                    rect.setAttribute('stroke-width', 1);
+                }
+                g.appendChild(rect);
+
+                const title = document.createElementNS(svgNS, 'title');
+                title.textContent = name + (n.active_state ? ` (${n.active_state})` : '');
+                g.appendChild(title);
+
+                const text = document.createElementNS(svgNS, 'text');
+                text.setAttribute('x', nodeWidth / 2);
+                text.setAttribute('y', 22);
+                text.setAttribute('text-anchor', 'middle');
+                text.setAttribute('fill', '#f1f5f9');
+                text.setAttribute('font-size', '11');
+                text.setAttribute('font-family', 'JetBrains Mono, monospace');
+                text.setAttribute('font-weight', isRoot ? 'bold' : 'normal');
+                text.textContent = name.length > 24 ? name.substring(0, 22) + '…' : name;
+                g.appendChild(text);
+
+                const sub = document.createElementNS(svgNS, 'text');
+                sub.setAttribute('x', nodeWidth / 2);
+                sub.setAttribute('y', 40);
+                sub.setAttribute('text-anchor', 'middle');
+                sub.setAttribute('fill', isMissing ? '#94a3b8' : (n.active_state === 'active' ? '#10b981' : '#94a3b8'));
+                sub.setAttribute('font-size', '9');
+                const subText = isMissing ? 'missing' : (n.active_state || '—');
+                sub.textContent = subText;
+                g.appendChild(sub);
+
+                svg.appendChild(g);
+            }
+
+            canvas.appendChild(svg);
+        }
+
         $('log-lines').addEventListener('change', loadLogs);
         $('log-priority').addEventListener('change', () => {
             if (logStreamState.active) {

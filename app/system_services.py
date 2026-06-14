@@ -452,6 +452,116 @@ ACTIONS = {
 }
 
 
+# Skip well-known targets when building the dependency graph: they're
+# every service's parent and add noise without insight.
+_GRAPH_SKIP = frozenset({
+    "multi-user.target", "graphical.target", "network-online.target",
+    "network.target", "shutdown.target", "sysinit.target", "basic.target",
+    "sockets.target", "timers.target", "paths.target", "remote-fs.target",
+    "nss-user-lookup.target", "umount.target", "local-fs.target",
+    "swap.target", "cryptsetup.target", "veritysetup.target",
+    "integritysetup.target", "remote-fs-pre.target", "nss-lookup.target",
+})
+
+# Cap graph size so a single request can't pull in the entire unit
+# tree. systemd-journald alone has 100+ After/Before edges; the UI
+# wouldn't render them usefully anyway.
+_GRAPH_MAX_NODES = 40
+
+
+def get_dependencies(name: str, depth: int = 2) -> dict:
+    """Return a graph (nodes + edges) of dependencies around ``name``.
+
+    ``depth`` is the BFS expansion radius — 1 means direct
+    dependencies only, 2 includes one level of transitives. Capped
+    at 4 to keep the response bounded.
+
+    The graph has the requested unit as the root; edges include
+    ``Requires``, ``Wants``, ``TriggeredBy``, ``After``, and
+    ``Before`` relationships. Well-known targets are skipped.
+    To keep the payload manageable, the response is capped at
+    ``_GRAPH_MAX_NODES`` total nodes; deeper transitive expansion
+    is truncated when this limit is hit.
+    """
+    if depth < 1:
+        depth = 1
+    if depth > 4:
+        depth = 4
+
+    nodes: Dict[str, dict] = {}
+    edges: List[dict] = []
+    visited: set = set()
+    truncated = False
+
+    def add_node(unit_name: str, level: int):
+        nonlocal truncated
+        if unit_name in nodes:
+            return
+        if unit_name in visited:
+            return
+        if len(nodes) >= _GRAPH_MAX_NODES:
+            truncated = True
+            return
+        visited.add(unit_name)
+        u = get_unit(unit_name)
+        if u is None:
+            nodes[unit_name] = {"name": unit_name, "missing": True, "level": level}
+            return
+        nodes[unit_name] = {
+            "name": unit_name,
+            "missing": False,
+            "level": level,
+            "active_state": u.active_state,
+            "sub_state": u.sub_state,
+            "unit_file_state": u.unit_file_state,
+        }
+
+    def expand(unit_name: str, level: int, direction: str):
+        if level > depth:
+            return
+        if len(nodes) >= _GRAPH_MAX_NODES:
+            return
+        u = get_unit(unit_name)
+        if u is None:
+            add_node(unit_name, level)
+            return
+        for edge_type, attr in (
+            ("Requires", "requires"),
+            ("Wants", "wants"),
+            ("TriggeredBy", "triggered_by"),
+            ("After", "after"),
+            ("Before", "before"),
+        ):
+            val = (getattr(u, attr, "") or "").strip()
+            if not val:
+                continue
+            for dep in val.split():
+                dep = dep.strip()
+                if not dep or dep in _GRAPH_SKIP:
+                    continue
+                if direction == "deps":
+                    edges.append({"from": unit_name, "to": dep, "type": edge_type})
+                    if level < depth:
+                        expand(dep, level + 1, "deps")
+                else:
+                    edges.append({"from": dep, "to": unit_name, "type": edge_type})
+                    if level < depth:
+                        expand(dep, level + 1, "reverse")
+
+    add_node(name, 0)
+    expand(name, 1, "deps")
+    visited.clear()
+    visited.add(name)
+    expand(name, 1, "reverse")
+    return {
+        "root": name,
+        "depth": depth,
+        "nodes": list(nodes.values()),
+        "edges": edges,
+        "truncated": truncated,
+    }
+
+
 def control(name: str, action: str, password: str) -> dict:
     """Perform a privileged action on a unit.
 

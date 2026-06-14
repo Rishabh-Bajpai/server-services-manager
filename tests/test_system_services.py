@@ -9,7 +9,7 @@ from app.system_services import (
     Unit, SystemServicesError,
     _run, _parse_show, _unit_type, _cache_get, _cache_set, cache_invalidate,
     list_units, get_unit, get_unit_file, get_unit_logs,
-    control, verify_password, edit_unit_file,
+    control, verify_password, edit_unit_file, get_dependencies, _GRAPH_MAX_NODES,
 )
 
 
@@ -410,3 +410,75 @@ class TestIntegration:
                 assert u.description
                 return
         pytest.skip("no common unit found to test against")
+
+
+class TestGetDependencies:
+    def test_missing_root(self):
+        result = get_dependencies("nonexistent.service", depth=1)
+        assert result["root"] == "nonexistent.service"
+        assert len(result["nodes"]) == 1
+        assert result["nodes"][0]["missing"] is True
+
+    def test_skip_well_known_targets(self):
+        def fake(name):
+            if name == "test.service":
+                m = MagicMock()
+                m.requires = "multi-user.target basic.target real-dep.service"
+                m.wants = "graphical.target real-dep2.service"
+                m.triggered_by = "trigger.service"
+                m.after = "multi-user.target after-dep.service"
+                m.before = ""
+                return m
+            return None
+        with patch("app.system_services.get_unit", side_effect=fake):
+            result = get_dependencies("test.service", depth=1)
+        targets = {e["to"] for e in result["edges"]}
+        assert "multi-user.target" not in targets
+        assert "basic.target" not in targets
+        assert "graphical.target" not in targets
+        assert "real-dep.service" in targets
+        assert "real-dep2.service" in targets
+        assert "after-dep.service" in targets
+        assert "trigger.service" in targets
+
+    def test_reverse_edges_from_triggeredby(self):
+        def fake(name):
+            if name == "test.service":
+                m = MagicMock()
+                m.requires = ""
+                m.wants = ""
+                m.triggered_by = "trigger.service"
+                m.after = ""
+                m.before = ""
+                return m
+            return None
+        with patch("app.system_services.get_unit", side_effect=fake):
+            result = get_dependencies("test.service", depth=1)
+        # trigger.service -> test.service via TriggeredBy (reverse direction)
+        rev = [e for e in result["edges"] if e["to"] == "test.service"]
+        assert any(e["from"] == "trigger.service" and e["type"] == "TriggeredBy" for e in rev)
+
+    def test_max_nodes_truncates(self):
+        def fake(name):
+            m = MagicMock()
+            deps = [f"d-{name}-{i}" for i in range(5)]
+            m.requires = " ".join(deps)
+            m.wants = ""
+            m.triggered_by = ""
+            m.after = ""
+            m.before = ""
+            return m
+        with patch("app.system_services.get_unit", side_effect=fake):
+            result = get_dependencies("root", depth=4)
+        assert len(result["nodes"]) <= _GRAPH_MAX_NODES
+        if len(result["nodes"]) == _GRAPH_MAX_NODES:
+            assert result["truncated"] is True
+
+    def test_depth_clamped(self):
+        with patch("app.system_services.get_unit", return_value=None):
+            # depth=99 should be clamped to 4
+            result = get_dependencies("x.service", depth=99)
+            assert result["depth"] == 4
+            # depth=0 should be clamped to 1
+            result = get_dependencies("x.service", depth=0)
+            assert result["depth"] == 1
