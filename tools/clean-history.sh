@@ -4,11 +4,11 @@
 # Usage:
 #   git tag history-backup-before-cleanup HEAD   # safety tag
 #   bash tools/clean-history.sh                  # do the rewrite
-#   git push --force-with-lease origin development  # push to remote
+#   git push --force-with-lease origin development
 #
 # By default this rewrites the current branch only (so you can
-# clean `development` without touching the public `main`).
-# Pass --all to rewrite every branch.
+# clean ``development`` without touching the public ``main``).
+# Pass ``--all`` to rewrite every branch.
 #
 # The script uses scrub.py as both a tree filter (rewrites file
 # content) and a message filter (rewrites commit messages), then
@@ -32,6 +32,29 @@ if [ "${1:-}" = "--all" ]; then
 else
     echo "Rewriting current branch ($(git rev-parse --abbrev-ref HEAD)) only."
     echo "Pass --all to rewrite every branch."
+fi
+
+# git filter-branch checks out each commit into a temp worktree
+# that doesn't contain the user-local secrets.txt. The scrub
+# script falls back to /etc/ssm/secrets.txt. Copy our local
+# secrets.txt there so the tree filter can find the patterns.
+SECRETS_TMP="/etc/ssm/secrets.txt"
+SECRETS_BACKUP=""
+if [ -f tools/secrets.txt ]; then
+    if [ ! -w /etc/ssm ] 2>/dev/null; then
+        SUDO="sudo"
+    else
+        SUDO=""
+    fi
+    $SUDO mkdir -p /etc/ssm 2>/dev/null || true
+    if [ -f "$SECRETS_TMP" ]; then
+        SECRETS_BACKUP="/tmp/ssm-secrets-backup-$$.txt"
+        cp "$SECRETS_TMP" "$SECRETS_BACKUP"
+    fi
+    $SUDO cp tools/secrets.txt "$SECRETS_TMP" 2>/dev/null || \
+        cp tools/secrets.txt "$SECRETS_TMP" 2>/dev/null || \
+        echo "WARNING: could not install secrets.txt at $SECRETS_TMP" >&2
+    trap "[ -n \"\$SECRETS_BACKUP\" ] && cp \"\$SECRETS_BACKUP\" \"$SECRETS_TMP\" && rm -f \"\$SECRETS_BACKUP\"; $SUDO rm -f \"$SECRETS_TMP\"" EXIT
 fi
 
 SCRUB_SCRIPT="/tmp/scrub-$$.py"
