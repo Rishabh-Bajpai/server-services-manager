@@ -3,18 +3,23 @@ import sys
 
 import eventlet
 eventlet.monkey_patch()
-
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
-from flask_socketio import SocketIO, emit
-from app.process_manager import ProcessManager, ProgramConfig
-from app.terminal_manager import TerminalManager
+import queue
+import json
 import logging
 import os
 import time
 import threading
+import yaml
+
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
+from flask_socketio import SocketIO
+from app.process_manager import ProcessManager, ProgramConfig
+from app.terminal_manager import TerminalManager
+from app import system_services
+from app.log_streamer import get_streamer
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask import send_file, send_from_directory
+from flask import send_file
 from dotenv import load_dotenv
 import psutil
 import subprocess
@@ -86,6 +91,11 @@ def control():
         except Exception:
             pass
     return render_template('control.html', commands=custom_commands)
+
+
+@app.route('/system-services')
+def system_services_page():
+    return render_template('system-services.html')
 
 WHITELIST_COMMANDS = {
     "lock":       {"cmd": "loginctl lock-session",          "auth": False, "icon": "lock"},
@@ -382,6 +392,163 @@ def download_file():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ---------------------------------------------------------------------------
+# System Services (systemd units)
+# ---------------------------------------------------------------------------
+
+@app.route('/api/system-services', methods=['GET'])
+def api_system_services_list():
+    unit_type = request.args.get('type', 'all')
+    state = request.args.get('state', 'all')
+    search = request.args.get('q', '').strip()
+    only_user = request.args.get('user', '').lower() in ('1', 'true', 'yes')
+
+    try:
+        units = system_services.list_units(
+            unit_type=unit_type, state=state, search=search, only_user=only_user,
+        )
+        return jsonify({
+            "units": [u.to_summary() for u in units],
+            "count": len(units),
+        })
+    except system_services.SystemServicesError as e:
+        return jsonify({"error": str(e), "code": e.code}), 500
+    except Exception as e:
+        logger.error(f"system-services list failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/system-services/<path:name>', methods=['GET'])
+def api_system_services_detail(name):
+    try:
+        unit = system_services.get_unit(name)
+        if not unit:
+            return jsonify({"error": "Unit not found"}), 404
+        return jsonify(unit.to_detail())
+    except system_services.SystemServicesError as e:
+        return jsonify({"error": str(e), "code": e.code}), 500
+
+
+@app.route('/api/system-services/<path:name>/unit', methods=['GET'])
+def api_system_services_unit(name):
+    try:
+        content = system_services.get_unit_file(name)
+        return jsonify({"name": name, "content": content})
+    except system_services.SystemServicesError as e:
+        http = 404 if e.code == "not_found" else 500
+        return jsonify({"error": str(e), "code": e.code}), http
+
+
+@app.route('/api/system-services/<path:name>/unit', methods=['PUT'])
+def api_system_services_edit(name):
+    data = request.get_json(silent=True) or {}
+    content = data.get('content', '')
+    password = data.get('password', '')
+
+    if not isinstance(content, str):
+        return jsonify({"error": "content must be a string"}), 400
+    if len(content) > 200_000:
+        return jsonify({"error": "content too large"}), 413
+    if not password:
+        return jsonify({"error": "auth_required"}), 401
+
+    try:
+        result = system_services.edit_unit_file(name, content, password)
+        # If the content was for [Service]/[Timer] etc, suggest a daemon-reload
+        return jsonify(result)
+    except system_services.SystemServicesError as e:
+        code = e.code
+        http = 403 if code == "permission" else 400 if code in ("invalid",) else 500
+        return jsonify({"error": str(e), "code": code}), http
+
+
+@app.route('/api/system-services/<path:name>/<action>', methods=['POST'])
+def api_system_services_action(name, action):
+    data = request.get_json(silent=True) or {}
+    password = data.get('password', '')
+
+    if action not in system_services.ACTIONS:
+        return jsonify({"error": f"Unknown action: {action}"}), 400
+    if not password:
+        return jsonify({"error": "auth_required"}), 401
+
+    try:
+        result = system_services.control(name, action, password)
+        return jsonify(result)
+    except system_services.SystemServicesError as e:
+        http = 403 if e.code == "permission" else 500
+        return jsonify({"error": str(e), "code": e.code}), http
+
+
+@app.route('/api/system-services/<path:name>/logs', methods=['GET'])
+def api_system_services_logs(name):
+    try:
+        lines = int(request.args.get('lines', '100'))
+    except ValueError:
+        lines = 100
+    try:
+        logs = system_services.get_unit_logs(name, lines)
+        return jsonify({"name": name, "logs": logs})
+    except system_services.SystemServicesError as e:
+        return jsonify({"error": str(e), "code": e.code}), 500
+
+
+@app.route('/api/system-services/<path:name>/logs/stream', methods=['GET'])
+def api_system_services_logs_stream(name):
+    """Server-Sent Events endpoint for live log lines.
+
+    Each connected client gets its own journalctl -f (the OS subprocess
+    is shared via the streamer; only the per-client output queue is
+    unique). Lines are written as ``data: <json>\\n\\n`` SSE frames.
+    A sentinel ``{"ended": true}`` is sent when the stream closes.
+    """
+    priority = request.args.get('priority', 'info')
+    try:
+        lines = int(request.args.get('lines', '100'))
+    except ValueError:
+        lines = 100
+    try:
+        from app.log_streamer import get_streamer
+        streamer = get_streamer()
+        sid = f"sse-{request.remote_addr}-{id(request)}"
+        handle = streamer.subscribe(name, sid, priority, lines)
+    except (ValueError, RuntimeError) as e:
+        return jsonify({"error": str(e)}), 400
+
+    queue_obj = streamer.get_subscriber_queue(handle, sid)
+    replay = streamer.get_replay(handle)
+
+    def generate():
+        try:
+            for line in replay:
+                yield f"data: {json.dumps({'line': line, 'unit': name})}\n\n"
+            if queue_obj is None:
+                return
+            while True:
+                try:
+                    item = queue_obj.get(timeout=15)
+                except queue.Empty:
+                    # Heartbeat to keep connection alive through proxies
+                    yield ": heartbeat\n\n"
+                    continue
+                if item is None:
+                    yield f"data: {json.dumps({'ended': True, 'unit': name})}\n\n"
+                    break
+                yield f"data: {json.dumps({'line': item, 'unit': name})}\n\n"
+        finally:
+            streamer.unsubscribe(name, sid, priority)
+
+    return app.response_class(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+            'Connection': 'keep-alive',
+        },
+    )
+
+
 _process_cache = {}
 
 def background_thread():
@@ -425,10 +592,6 @@ def background_thread():
 def test_connect():
     logger.info('Client connected')
 
-@socketio.on('disconnect')
-def test_disconnect():
-    logger.info('Client disconnected')
-
 # Terminal Events
 @socketio.on('terminal_create')
 def handle_terminal_create(data):
@@ -456,6 +619,10 @@ def handle_terminal_close(data):
     session_id = data.get('id')
     if session_id:
         tm.close(session_id)
+
+# Note: log streaming is delivered via Server-Sent Events at
+# /api/system-services/<name>/logs/stream. No socketio event handlers
+# are required for it.
 
 _net_prev = {}
 _disk_io_prev = None
@@ -621,6 +788,10 @@ def shutdown_handler(signum=None, frame=None):
     pm.stop_all()
     for sid in list(tm.sessions.keys()):
         tm.close(sid)
+    try:
+        get_streamer().shutdown()
+    except Exception as e:
+        logger.warning(f"streamer shutdown: {e}")
     logger.info("Shutdown complete.")
     sys.exit(0)
 

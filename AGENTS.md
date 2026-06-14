@@ -14,10 +14,13 @@ journalctl --user -u server-services-manager -f
 
 ## Architecture
 - **Entrypoint:** `server.py` — single Flask app with SocketIO, eventlet monkey-patch at line 4-5
-- **Routes** (`server.py`): `/` dashboard, `/monitor` system monitor, `/programs/*` CRUD, `/api/files/*` file manager, `/login`, `/logout`
+- **Routes** (`server.py`): `/` dashboard, `/monitor` system monitor, `/system-services` systemd units, `/programs/*` CRUD, `/api/files/*` file manager, `/api/system-services/*`, `/login`, `/logout`
 - **WebSocket events:** `update` (program cards, 1s interval), `system_stats` (monitor, 2s), `terminal_*`
-- **Backend modules:** `app/process_manager.py` (Program, ProcessManager), `app/terminal_manager.py` (PTY sessions)
-- **Frontend:** All inline JS in `templates/index.html` (~1156 lines, 4 script blocks). Monitor at `templates/monitor.html` uses Chart.js. No build step, no framework.
+- **Backend modules:**
+  - `app/process_manager.py` — Program, ProcessManager (managed services in `config.yaml`)
+  - `app/terminal_manager.py` — PTY sessions
+  - `app/system_services.py` — systemd unit introspection/control via `systemctl` (read + cached; write requires sudo password)
+- **Frontend:** All inline JS in `templates/index.html` (~1160 lines, 4 script blocks). Monitor at `templates/monitor.html` uses Chart.js. System services at `templates/system-services.html` (~600 lines, side-panel detail view). No build step, no framework.
 - **Config:** `config.yaml` (gitignored) defines services; can also be managed via UI
 - **State persistence:** Running PIDs saved to `~/.server-services-manager/state.json`, re-attached on restart
 
@@ -44,13 +47,34 @@ journalctl --user -u server-services-manager -f
       auth: true
   ```
 
+- **System Services page** (`/system-services`): browse and control all systemd units on the host. Read operations (`list`, `show`, `cat`, `journalctl`) work without privileges. Write operations (start, stop, restart, reload, enable, disable, mask, daemon-reload, edit) require the user's sudo password — the same password they use to log in. The password is piped to `sudo -S` for that single command; nothing else is escalated. **The Flask process itself does not need to run as root** — only the user invoking the action needs sudo. Drop-in edits write to `/etc/systemd/system/<name>.d/99-manager.conf` (the standard `systemctl edit` location) and automatically `daemon-reload` afterwards, so vendor unit files are never touched.
+
+  Unit types exposed: `service`, `timer`, `socket`, `path`, `mount`. Long lists (500+ units) are handled via `table-layout: fixed` columns and a horizontally scrollable table wrapper; the side panel loads detail on click.
+
+  ```python
+  from app import system_services
+  units = system_services.list_units(unit_type="service", state="active", search="nginx")
+  detail = system_services.get_unit("cron.service")
+  system_services.control("cron.service", "restart", password=user_password)
+  ```
+
+- **Live log streaming** (`app/log_streamer.py`): the Logs tab on the system services page supports real-time streaming via Server-Sent Events. The backend spawns a single `journalctl -f` per (unit, priority) and fans lines out to per-subscriber queues; the frontend opens an `EventSource` on `/api/system-services/<name>/logs/stream`. Subprocess management is reference-counted: when the last subscriber unsubscribes, the journalctl process is terminated. The reader runs in a real OS thread (not an eventlet greenlet) so blocking `readline()` doesn't trip the eventlet hub, but `process.wait()` is intentionally not called during teardown to avoid the same conflict.
+
+  ```python
+  from app.log_streamer import get_streamer
+  streamer = get_streamer()
+  handle = streamer.subscribe("cron.service", "sid1", priority="info", lines=100)
+  queue = streamer.get_subscriber_queue(handle, "sid1")  # consume from this
+  ```
+
 ## Testing
 ```bash
-python -m pytest tests/ -v --tb=short    # 35 tests
+python -m pytest tests/ -v --tb=short    # 102 tests
 ```
 - Tests use `unittest.mock` to avoid real subprocesses
 - Fixtures in `tests/conftest.py` provide `temp_config` (yaml), `process_manager`, `program_config`
 - No integration tests against the live server (no test client for Flask-SocketIO)
+- `tests/test_system_services.py` includes both mocked tests and live integration tests for `systemctl list-units` and `systemctl show`
 - GitHub Actions workflow at `.github/workflows/test.yml` runs ruff lint + pytest on push/PR (Python 3.10-3.13)
 
 ## Edit-service rename bug (fixed)

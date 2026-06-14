@@ -16,13 +16,14 @@
 ## Features
 
 - **Service Management** — Start, stop, restart, and monitor services with auto-restart on failure
+- **System Services** — Browse, start, stop, enable, disable, and edit drop-in overrides for **any systemd unit** on the host (services, timers, sockets, paths, mounts)
 - **System Monitor** — Real-time CPU (per-core + averaged chart), memory, swap, disk I/O, network usage, and top processes with sortable columns
 - **Control Panel** — Steam Deck–style quick-action buttons for reboot, suspend, lock, disk/memory checks, and custom user-defined commands
 - **Web Terminal** — Multi-tab PTY terminal for direct shell access
 - **File Manager** — Browse, upload, and download files on the server
 - **Real-time Updates** — Live status and logs via WebSockets
 - **Process Recovery** — Survives manager restarts; re-attaches to running services automatically
-- **Authentication** — Password-protected access with hashed credentials
+- **Authentication** — Password-protected access with hashed credentials; sudo password reused for privileged actions
 - **Responsive UI** — Dark-themed, resizable panes, desktop and mobile-friendly
 
 ## Quick Start
@@ -52,15 +53,15 @@ journalctl --user -u server-services-manager -f
 
 ### Desktop
 
-| Dashboard | System Monitor | Control Panel |
-|-----------|---------------|---------------|
-| ![Desktop](resources/dashboard-desktop.png) | ![Monitor](resources/monitor-desktop.png) | ![Control](resources/control-desktop.png) |
+| Dashboard | System Monitor | Control Panel | System Services |
+|-----------|---------------|---------------|-----------------|
+| ![Desktop](resources/dashboard-desktop.png) | ![Monitor](resources/monitor-desktop.png) | ![Control](resources/control-desktop.png) | ![System](resources/system-services-desktop.png) |
 
 ### Mobile
 
-| Dashboard | System Monitor | Control Panel |
-|-----------|---------------|---------------|
-| ![Dashboard Mobile](resources/dashboard-mobile.png) | ![Monitor Mobile](resources/monitor-mobile.png) | ![Control Mobile](resources/control-mobile.png) |
+| Dashboard | System Monitor | Control Panel | System Services |
+|-----------|---------------|---------------|-----------------|
+| ![Dashboard Mobile](resources/dashboard-mobile.png) | ![Monitor Mobile](resources/monitor-mobile.png) | ![Control Mobile](resources/control-mobile.png) | ![System Mobile](resources/system-services-mobile.png) |
 
 ## Configuration
 
@@ -108,6 +109,12 @@ commands:
 
 Available icons: any [Lucide icon](https://lucide.dev/icons) name.
 
+### System Services Privileges
+
+The `/system-services` page manages **all systemd units** on the host, not just services defined in `config.yaml`. Read operations (listing, status, logs, viewing the unit file) work without privileges. Write operations (start, stop, restart, reload, enable, disable, mask, edit) require sudo, which is obtained by piping your app login password to `sudo -S` for that single command.
+
+**This means the app does not need to run as root** — only the user invoking the action needs sudo. The drop-in file editor writes to `/etc/systemd/system/<name>.d/99-manager.conf` (the standard `systemctl edit` location), so vendor-provided unit files are never touched. `daemon-reload` runs automatically after each edit.
+
 ## Pages
 
 | Route | Page | Description |
@@ -115,6 +122,7 @@ Available icons: any [Lucide icon](https://lucide.dev/icons) name.
 | `/` | Dashboard | Manage services, view logs, terminal |
 | `/monitor` | System Monitor | Real-time CPU/Memory/Network charts, processes |
 | `/control` | Control Panel | Quick system commands |
+| `/system-services` | System Services | Browse and control systemd units on the host |
 
 ## Tech Stack
 
