@@ -1064,6 +1064,20 @@ def activity_page():
     return render_template('activity.html')
 
 
+@app.route('/api/plugins', methods=['GET'])
+def api_plugins_list():
+    """List user plugins discovered in the plugin directory.
+
+    Read-only; the loader is what actually instantiates and
+    registers them at startup.
+    """
+    from app import plugins as _plugins
+    return jsonify({
+        "directory": _plugins.DEFAULT_DIR,
+        "plugins": _plugins.discover(),
+    })
+
+
 def _control_commands_for_palette():
     """Return the list of custom control commands from config.yaml."""
     config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')
@@ -1494,6 +1508,11 @@ def shutdown_handler(signum=None, frame=None):
             globals()["_health_monitor"].stop()
     except Exception as e:
         logger.warning(f"health monitor shutdown: {e}")
+    try:
+        from app import plugins as _plugins
+        _plugins.unload_all(globals().get("_loaded_plugins") or [])
+    except Exception as e:
+        logger.warning(f"plugin unload: {e}")
     logger.info("Shutdown complete.")
     sys.exit(0)
 
@@ -1565,6 +1584,22 @@ if __name__ == '__main__':
         on_event=_on_health_event,
     )
     globals()["_health_monitor"].start()
+
+    # Load user plugins from ~/.server-services-manager/plugins/.
+    # Plugins are NOT auto-reloaded on file change — restart is
+    # required to pick up new / modified plugins. A bad plugin
+    # is logged and skipped; it cannot break the manager.
+    from app import plugins as _plugins
+    from app import activity as _activity
+    from app import notifier as _notifier_mod
+    _loaded_plugins = _plugins.load_all(
+        app=app, pm=pm, activity=_activity, notifier_module=_notifier_mod,
+    )
+    globals()["_loaded_plugins"] = _loaded_plugins
+    if _loaded_plugins:
+        logger.info(f"loaded {len(_loaded_plugins)} plugin(s)")
+    else:
+        logger.info("no plugins loaded (drop .py files into ~/.server-services-manager/plugins/ to add one)")
 
     # Start background thread for updates
     thread = threading.Thread(target=background_thread, daemon=True)
