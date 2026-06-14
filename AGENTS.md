@@ -78,9 +78,27 @@ journalctl --user -u server-services-manager -f
                                  enabled=False, password=user_password)
   ```
 
+- **Health checks + notifications** (`app/health.py`, `app/notifier.py`): a `health_check:` block in `config.yaml` describes how to probe each managed service (http / tcp / cmd). A background thread runs all configured checks, tracks each service's last-known state, and emits on transition (healthy <-> unhealthy) via a pluggable notifier (ntfy.sh, generic webhook, Telegram, SMTP email). The `/notifications` page shows a live status dashboard with summary cards and recent events; SocketIO pushes transitions toasts in real time. Configuration:
+
+  ```yaml
+  programs:
+    - name: api
+      command: ...
+      health_check:
+        type: http             # http | tcp | cmd
+        target: http://localhost:8080/health
+        interval: 30
+        timeout: 5
+  notifications:
+    - type: ntfy
+      topic: alerts
+    - type: webhook
+      url: https://example.com/hook
+  ```
+
 ## Testing
 ```bash
-python -m pytest tests/ -v --tb=short    # 130 tests
+python -m pytest tests/ -v --tb=short    # 177 tests
 ```
 - Tests use `unittest.mock` to avoid real subprocesses
 - Fixtures in `tests/conftest.py` provide `temp_config` (yaml), `process_manager`, `program_config`

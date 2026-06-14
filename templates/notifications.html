@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Health &amp; Notifications - Server Services Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --border-subtle: #1e1e2a;
+            --border-active: #2d2d3a;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-purple: #8b5cf6;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+        * { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        code, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+        body {
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(ellipse at top left, rgba(16,185,129,0.04) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(239,68,68,0.04) 0%, transparent 50%);
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        @keyframes flash-new { 0% { background: rgba(59, 130, 246, 0.18); } 100% { background: transparent; } }
+
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        .row-flash { animation: flash-new 2s ease-out; }
+
+        .badge {
+            display: inline-flex; align-items: center; gap: 0.25rem;
+            padding: 0.125rem 0.5rem; border-radius: 0.375rem;
+            font-size: 0.6875rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .badge-green { background: rgba(16,185,129,0.12); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.25); }
+        .badge-red { background: rgba(239,68,68,0.12); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.25); }
+        .badge-blue { background: rgba(59,130,246,0.12); color: var(--accent-blue); border: 1px solid rgba(59,130,246,0.25); }
+        .badge-gray { background: rgba(100,116,139,0.12); color: var(--text-secondary); border: 1px solid rgba(100,116,139,0.25); }
+
+        .state-dot {
+            width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+        }
+        .state-dot.healthy { background: var(--accent-green); box-shadow: 0 0 8px rgba(16,185,129,0.6); }
+        .state-dot.unhealthy { background: var(--accent-red); box-shadow: 0 0 8px rgba(239,68,68,0.5); animation: pulse 2s ease-in-out infinite; }
+        .state-dot.unknown { background: var(--text-muted); }
+
+        .table-wrap {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem; overflow: hidden;
+        }
+        .events-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+        .events-table thead th {
+            text-align: left; font-size: 0.6875rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-muted); padding: 0.75rem 1rem;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-subtle);
+            position: sticky; top: 0; z-index: 2;
+        }
+        .events-table tbody td {
+            padding: 0.625rem 1rem;
+            border-bottom: 1px solid var(--border-subtle);
+            font-size: 0.8125rem; color: var(--text-primary);
+            vertical-align: middle;
+        }
+        .events-table tbody tr:last-child td { border-bottom: none; }
+        .table-scroll { max-height: 60vh; overflow-y: auto; }
+
+        .summary-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            display: flex; flex-direction: column; gap: 0.25rem;
+        }
+        .summary-value {
+            font-size: 1.75rem; font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .summary-label {
+            font-size: 0.6875rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-muted);
+        }
+
+        #toast-container {
+            position: fixed; top: 1rem; right: 1rem; z-index: 100;
+            display: flex; flex-direction: column; gap: 0.5rem; pointer-events: none;
+        }
+        .toast {
+            padding: 0.75rem 1.25rem; border-radius: 0.75rem;
+            font-size: 0.8125rem; font-weight: 500; pointer-events: auto;
+            animation: toastIn 0.25s ease-out;
+            max-width: 24rem; backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: 0 8px 24px -8px rgba(0,0,0,0.4);
+        }
+        .toast.success { background: rgba(16,185,129,0.92); color: white; }
+        .toast.error { background: rgba(239,68,68,0.92); color: white; }
+        .toast.info { background: rgba(59,130,246,0.92); color: white; }
+        .toast.out { animation: toastOut 0.2s ease-in forwards; }
+        @keyframes toastIn { from { opacity: 0; transform: translateY(-10px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes toastOut { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(-10px) scale(0.95); } }
+
+        .empty {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 3rem 1rem; color: var(--text-muted); text-align: center; gap: 0.5rem;
+        }
+    </style>
+</head>
+<body class="bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-screen">
+    <div class="max-w-7xl mx-auto p-4 sm:p-6">
+        <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 animate-fade-in">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-green-500/20">
+                    <i data-lucide="bell-ring" class="w-5 h-5 text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">Health &amp; Notifications</h1>
+                    <p class="text-[var(--text-muted)] text-xs font-medium">Live status of monitored services</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+                <a href="/" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
+                    <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Dashboard</span>
+                </a>
+                <a href="/system-services" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
+                    <i data-lucide="server-cog" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">System</span>
+                </a>
+                <a href="/cron" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
+                    <i data-lucide="calendar-clock" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Cron</span>
+                </a>
+                <a href="/logout" class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20 rounded-lg hover:bg-[var(--accent-red)]/20 transition-all text-sm font-medium">
+                    <i data-lucide="log-out" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Logout</span>
+                </a>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6 animate-fade-in" id="summary"></div>
+
+        <div class="animate-fade-in mb-4" style="animation-delay:0.05s">
+            <h2 class="text-sm font-bold text-[var(--text-primary)] mb-2 flex items-center gap-2">
+                <i data-lucide="heart-pulse" class="w-4 h-4"></i>Service states
+            </h2>
+            <div class="table-wrap">
+                <table class="events-table">
+                    <thead>
+                        <tr>
+                            <th style="width:30px"></th>
+                            <th>Service</th>
+                            <th>State</th>
+                            <th>Last detail</th>
+                            <th>Last change</th>
+                        </tr>
+                    </thead>
+                    <tbody id="states-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="animate-fade-in" style="animation-delay:0.1s">
+            <h2 class="text-sm font-bold text-[var(--text-primary)] mb-2 flex items-center gap-2">
+                <i data-lucide="history" class="w-4 h-4"></i>Recent events
+            </h2>
+            <div class="table-wrap">
+                <div class="table-scroll">
+                    <table class="events-table">
+                        <thead>
+                            <tr>
+                                <th>Service</th>
+                                <th>Event</th>
+                                <th>State</th>
+                                <th>Detail</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="events-tbody"></tbody>
+                    </table>
+                </div>
+                <div id="events-empty" class="empty">
+                    <i data-lucide="inbox" class="w-10 h-10 opacity-40"></i>
+                    <p class="text-sm">No events yet. Add a <code class="font-mono text-[var(--accent-green)]">health_check</code> block to a service in <code class="font-mono text-[var(--accent-green)]">config.yaml</code> to start.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script>
+        lucide.createIcons();
+        const socket = io();
+
+        function $(id) { return document.getElementById(id); }
+        function escapeHtml(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        function toast(message, type) {
+            const c = $('toast-container');
+            const t = document.createElement('div');
+            t.className = 'toast ' + (type || 'info');
+            t.textContent = message;
+            c.appendChild(t);
+            setTimeout(() => {
+                t.classList.add('out');
+                setTimeout(() => t.remove(), 200);
+            }, 4000);
+        }
+
+        function formatTime(ts) {
+            if (!ts) return '—';
+            return new Date(ts * 1000).toLocaleString();
+        }
+
+        function renderStates(states) {
+            const tbody = $('states-tbody');
+            if (!states || states.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="empty">No monitored services yet.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = states.map(s => {
+                const cls = s.last_state === 'healthy' ? 'healthy' : s.last_state === 'unhealthy' ? 'unhealthy' : 'unknown';
+                const stateBadge = s.last_state === 'healthy'
+                    ? '<span class="badge badge-green">healthy</span>'
+                    : s.last_state === 'unhealthy'
+                        ? '<span class="badge badge-red">unhealthy</span>'
+                        : '<span class="badge badge-gray">unknown</span>';
+                return `<tr>
+                    <td><span class="state-dot ${cls}"></span></td>
+                    <td><code class="font-mono font-semibold">${escapeHtml(s.name)}</code></td>
+                    <td>${stateBadge}</td>
+                    <td class="text-[var(--text-secondary)]">${escapeHtml(s.last_check ? s.last_check.detail : '—')}</td>
+                    <td class="text-[var(--text-muted)] text-xs">${formatTime(s.last_change)}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function renderEvents(events) {
+            const tbody = $('events-tbody');
+            const empty = $('events-empty');
+            if (!events || events.length === 0) {
+                tbody.innerHTML = '';
+                empty.style.display = 'flex';
+                return;
+            }
+            empty.style.display = 'none';
+            tbody.innerHTML = events.map(e => {
+                const badge = e.state === 'healthy' ? 'badge-green' : e.state === 'unhealthy' ? 'badge-red' : 'badge-blue';
+                return `<tr>
+                    <td><code class="font-mono font-semibold">${escapeHtml(e.service)}</code></td>
+                    <td><span class="badge ${badge}">${escapeHtml(e.kind)}</span></td>
+                    <td><span class="badge ${badge}">${escapeHtml(e.state)}</span></td>
+                    <td class="text-[var(--text-secondary)] font-mono text-xs">${escapeHtml(e.detail)}</td>
+                    <td class="text-[var(--text-muted)] text-xs whitespace-nowrap">${formatTime(e.timestamp)}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function renderSummary(states, events) {
+            const healthy = (states || []).filter(s => s.last_state === 'healthy').length;
+            const unhealthy = (states || []).filter(s => s.last_state === 'unhealthy').length;
+            const unknown = (states || []).length - healthy - unhealthy;
+            const totalEvents = (events || []).length;
+            const cards = [
+                { label: 'Healthy', value: healthy, color: 'var(--accent-green)' },
+                { label: 'Unhealthy', value: unhealthy, color: 'var(--accent-red)' },
+                { label: 'Unknown', value: unknown, color: 'var(--text-muted)' },
+                { label: 'Total events', value: totalEvents, color: 'var(--accent-blue)' },
+            ];
+            $('summary').innerHTML = cards.map(c => `
+                <div class="summary-card">
+                    <div class="summary-value" style="color:${c.color}">${c.value}</div>
+                    <div class="summary-label">${c.label}</div>
+                </div>
+            `).join('');
+        }
+
+        async function loadState() {
+            try {
+                const r = await fetch('/api/notifications/state');
+                const data = await r.json();
+                renderStates(data.states);
+                renderEvents(data.events);
+                renderSummary(data.states, data.events);
+                lucide.createIcons();
+            } catch (e) {
+                console.error('load state failed:', e);
+            }
+        }
+
+        // Live updates: receive health events and re-fetch state
+        socket.on('health_event', (e) => {
+            const isFail = e.state === 'unhealthy';
+            toast(`${e.service}: ${e.state} — ${e.detail || 'no detail'}`, isFail ? 'error' : 'success');
+            loadState();
+        });
+
+        loadState();
+        setInterval(loadState, 5000);
+    </script>
+</body>
+</html>

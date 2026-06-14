@@ -18,6 +18,8 @@ from app.terminal_manager import TerminalManager
 from app import system_services
 from app.log_streamer import get_streamer
 from app import cron_manager
+from app.health import HealthCheck, HealthMonitor
+from app.notifier import build_notifiers, Event as HealthEvent
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask import send_file
@@ -38,6 +40,13 @@ socketio = SocketIO(app, cors_allowed_origins=os.getenv('CORS_ORIGIN', '*'), max
 
 pm = ProcessManager()
 tm = TerminalManager(socketio)
+
+# Health monitor reads `health_check` blocks from config.yaml and
+# pings each service on a background thread. Notifiers are also
+# loaded from `notifications:` in the same file. Both blocks are
+# optional — when missing, the monitor runs no checks.
+_health_notifiers: list = []
+_health_monitor = None  # initialized after pm.load_config()
 
 _password_hash = generate_password_hash(os.getenv('PASSWORD', 'admin'))
 
@@ -595,6 +604,41 @@ def api_cron_toggle():
         return jsonify({"error": str(e), "code": e.code}), http
 
 
+@app.route('/notifications')
+def notifications_page():
+    return render_template('notifications.html')
+
+
+@app.route('/api/notifications/state', methods=['GET'])
+def api_notifications_state():
+    if _health_monitor is None:
+        return jsonify({"states": [], "events": []})
+    states = [
+        {
+            "name": s.name,
+            "last_state": s.last_state,
+            "last_change": s.last_change,
+            "last_check": {
+                "healthy": s.last_check.healthy,
+                "detail": s.last_check.detail,
+                "timestamp": s.last_check.timestamp,
+            } if s.last_check else None,
+        }
+        for s in _health_monitor.all_states()
+    ]
+    events = [
+        {
+            "service": e.service,
+            "kind": e.kind,
+            "state": e.state,
+            "detail": e.detail,
+            "timestamp": e.timestamp,
+        }
+        for e in _health_monitor.recent_events()
+    ]
+    return jsonify({"states": states, "events": events})
+
+
 _process_cache = {}
 
 def background_thread():
@@ -838,8 +882,49 @@ def shutdown_handler(signum=None, frame=None):
         get_streamer().shutdown()
     except Exception as e:
         logger.warning(f"streamer shutdown: {e}")
+    try:
+        if globals().get("_health_monitor") is not None:
+            globals()["_health_monitor"].stop()
+    except Exception as e:
+        logger.warning(f"health monitor shutdown: {e}")
     logger.info("Shutdown complete.")
     sys.exit(0)
+
+def _get_health_services():
+    """Return [(name, HealthCheck)] pairs for all services with a
+    `health_check` block in their config."""
+    out = []
+    raw = pm.config_data.get("programs", []) if hasattr(pm, "config_data") else []
+    for p in pm.get_all_programs():
+        cfg = None
+        for entry in raw:
+            if entry.get("name") == p.config.name:
+                cfg = entry.get("health_check")
+                break
+        if not cfg:
+            continue
+        check = HealthCheck.from_config(cfg)
+        if check is not None:
+            out.append((p.config.name, check))
+    return out
+
+
+def _on_health_event(event):
+    """Called by the monitor on a healthy<->unhealthy transition.
+
+    Pushes a SocketIO event so the dashboard can show a toast and
+    update the per-service status dot.
+    """
+    try:
+        socketio.emit("health_event", {
+            "service": event.service,
+            "state": event.state,
+            "detail": event.detail,
+            "timestamp": event.timestamp,
+        })
+    except Exception as e:
+        logger.warning(f"emit health_event failed: {e}")
+
 
 if __name__ == '__main__':
     signal.signal(signal.SIGTERM, shutdown_handler)
@@ -849,11 +934,22 @@ if __name__ == '__main__':
     pm.load_config()
     pm.load_state_and_reattach()
     pm.start_all()
-    
+
+    # Initialize and start the health monitor (background health checks
+    # and notification fanout)
+    cfg_data = pm.config_data if hasattr(pm, "config_data") else {}
+    _health_notifiers[:] = build_notifiers(cfg_data.get("notifications", []))
+    globals()["_health_monitor"] = HealthMonitor(
+        get_services=_get_health_services,
+        notifiers=_health_notifiers,
+        on_event=_on_health_event,
+    )
+    globals()["_health_monitor"].start()
+
     # Start background thread for updates
     thread = threading.Thread(target=background_thread, daemon=True)
     thread.start()
-    
+
     # Start system monitor thread
     monitor_thread = threading.Thread(target=system_monitor_thread, daemon=True)
     monitor_thread.start()

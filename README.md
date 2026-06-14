@@ -19,6 +19,7 @@
 - **System Services** — Browse, start, stop, enable, disable, and edit drop-in overrides for **any systemd unit** on the host (services, timers, sockets, paths, mounts)
 - **Live Log Streaming** — Real-time `journalctl -f` over Server-Sent Events for any unit, with priority filter and follow-tail
 - **Cron Jobs** — Inspect, validate, and enable/disable system cron entries in `/etc/crontab` and `/etc/cron.d/*`
+- **Health Checks & Notifications** — Probe each managed service (HTTP/TCP/cmd) and alert on transition via ntfy, webhook, Telegram, or email
 - **System Monitor** — Real-time CPU (per-core + averaged chart), memory, swap, disk I/O, network usage, and top processes with sortable columns
 - **Control Panel** — Steam Deck–style quick-action buttons for reboot, suspend, lock, disk/memory checks, and custom user-defined commands
 - **Web Terminal** — Multi-tab PTY terminal for direct shell access
@@ -126,6 +127,7 @@ The `/system-services` page manages **all systemd units** on the host, not just 
 | `/control` | Control Panel | Quick system commands |
 | `/system-services` | System Services | Browse and control systemd units on the host |
 | `/cron` | Cron Jobs | Inspect and toggle system cron entries |
+| `/notifications` | Health & Notifications | Live status of monitored services |
 
 ## Tech Stack
 
