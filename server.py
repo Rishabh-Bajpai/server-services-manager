@@ -17,6 +17,7 @@ from app.process_manager import ProcessManager, ProgramConfig
 from app.terminal_manager import TerminalManager
 from app import system_services
 from app.log_streamer import get_streamer
+from app import cron_manager
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask import send_file
@@ -547,6 +548,51 @@ def api_system_services_logs_stream(name):
             'Connection': 'keep-alive',
         },
     )
+
+
+# Cron management
+@app.route('/cron')
+def cron_page():
+    return render_template('cron.html')
+
+
+@app.route('/api/cron', methods=['GET'])
+def api_cron_list():
+    try:
+        jobs = cron_manager.list_all()
+        return jsonify({
+            "jobs": [j.to_dict() for j in jobs],
+            "count": len(jobs),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/cron/validate', methods=['POST'])
+def api_cron_validate():
+    data = request.get_json(silent=True) or {}
+    expr = (data.get("expression") or "").strip()
+    err = cron_manager.validate_expression(expr)
+    return jsonify({
+        "valid": err is None,
+        "error": err,
+        "description": cron_manager.describe_schedule(expr) if err is None else None,
+    })
+
+
+@app.route('/api/cron/toggle', methods=['POST'])
+def api_cron_toggle():
+    data = request.get_json(silent=True) or {}
+    source = (data.get("source") or "").strip()
+    line_number = data.get("line_number")
+    enabled = bool(data.get("enabled"))
+    password = data.get("password", "")
+    try:
+        result = cron_manager.toggle_system_job(source, int(line_number), enabled, password)
+        return jsonify(result)
+    except cron_manager.CronError as e:
+        http = 403 if e.code == "permission" else 400 if e.code in ("invalid", "auth_required") else 500
+        return jsonify({"error": str(e), "code": e.code}), http
 
 
 _process_cache = {}

@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cron Jobs - Server Services Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --border-subtle: #1e1e2a;
+            --border-active: #2d2d3a;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-purple: #8b5cf6;
+            --accent-orange: #f97316;
+            --accent-cyan: #06b6d4;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+        * { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        code, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+        body {
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(ellipse at top left, rgba(245, 158, 11, 0.04) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(59, 130, 246, 0.04) 0%, transparent 50%);
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes toastIn { from { opacity: 0; transform: translateY(-10px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes toastOut { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(-10px) scale(0.95); } }
+
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+
+        .badge {
+            display: inline-flex; align-items: center; gap: 0.25rem;
+            padding: 0.125rem 0.5rem; border-radius: 0.375rem;
+            font-size: 0.6875rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .badge-green { background: rgba(16,185,129,0.12); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.25); }
+        .badge-red { background: rgba(239,68,68,0.12); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.25); }
+        .badge-yellow { background: rgba(245,158,11,0.12); color: var(--accent-yellow); border: 1px solid rgba(245,158,11,0.25); }
+        .badge-blue { background: rgba(59,130,246,0.12); color: var(--accent-blue); border: 1px solid rgba(59,130,246,0.25); }
+        .badge-gray { background: rgba(100,116,139,0.12); color: var(--text-secondary); border: 1px solid rgba(100,116,139,0.25); }
+
+        .filter-tab {
+            padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+            font-size: 0.8125rem; font-weight: 600;
+            color: var(--text-secondary); background: transparent;
+            border: 1px solid var(--border-subtle);
+            cursor: pointer; transition: all 0.15s ease;
+            display: inline-flex; align-items: center; gap: 0.375rem;
+        }
+        .filter-tab:hover { background: rgba(255,255,255,0.04); color: var(--text-primary); }
+        .filter-tab.active { background: rgba(245,158,11,0.12); color: var(--accent-yellow); border-color: rgba(245,158,11,0.35); }
+
+        .search-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.5rem 0.875rem 0.5rem 2.25rem;
+            color: var(--text-primary);
+            font-size: 0.8125rem; outline: none;
+            transition: border-color 0.15s, background 0.15s;
+            width: 100%; min-width: 200px;
+        }
+        .search-input::placeholder { color: var(--text-muted); }
+        .search-input:focus { border-color: var(--accent-yellow); background: var(--bg-card); }
+
+        .table-wrap {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem; overflow: hidden;
+        }
+        .jobs-table { width: 100%; min-width: 760px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+        .jobs-table thead th {
+            text-align: left; font-size: 0.6875rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-muted); padding: 0.75rem 1rem;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-subtle);
+            position: sticky; top: 0; z-index: 2;
+            user-select: none;
+        }
+        .jobs-table tbody tr { transition: background 0.1s ease; }
+        .jobs-table tbody tr:hover { background: rgba(255,255,255,0.025); }
+        .jobs-table tbody td {
+            padding: 0.625rem 1rem;
+            border-bottom: 1px solid var(--border-subtle);
+            font-size: 0.8125rem; color: var(--text-primary);
+            vertical-align: middle;
+        }
+        .jobs-table tbody tr:last-child td { border-bottom: none; }
+        .table-scroll { max-height: calc(100vh - 360px); overflow-y: auto; overflow-x: auto; }
+
+        .toggle {
+            position: relative; display: inline-block;
+            width: 36px; height: 20px; flex-shrink: 0;
+        }
+        .toggle input { opacity: 0; width: 0; height: 0; }
+        .toggle .slider {
+            position: absolute; cursor: pointer; inset: 0;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 999px;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .toggle .slider::before {
+            content: ""; position: absolute;
+            height: 14px; width: 14px;
+            left: 2px; top: 2px;
+            background: var(--text-muted);
+            border-radius: 50%;
+            transition: transform 0.15s, background 0.15s;
+        }
+        .toggle input:checked + .slider {
+            background: rgba(16,185,129,0.2);
+            border-color: rgba(16,185,129,0.4);
+        }
+        .toggle input:checked + .slider::before {
+            transform: translateX(16px);
+            background: var(--accent-green);
+        }
+        .toggle input:disabled + .slider { opacity: 0.4; cursor: not-allowed; }
+
+        .refresh-btn {
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-secondary);
+            font-size: 0.8125rem; font-weight: 600;
+            cursor: pointer; transition: all 0.15s ease;
+        }
+        .refresh-btn:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+        .refresh-btn.loading .icon { animation: spin 0.8s linear infinite; }
+
+        .empty-state {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 4rem 1rem; color: var(--text-muted); text-align: center;
+        }
+        .empty-state .icon { opacity: 0.4; margin-bottom: 1rem; }
+
+        .modal-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.65);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            display: none; align-items: center; justify-content: center;
+            z-index: 60; padding: 1rem;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 1.25rem; padding: 1.5rem;
+            width: 100%; max-width: 32rem;
+            box-shadow: 0 20px 60px -12px rgba(0,0,0,0.5);
+            animation: slideUp 0.25s ease-out;
+        }
+        .modal-box h2 { font-size: 1.125rem; font-weight: 700; margin-bottom: 0.5rem; }
+        .modal-box p { font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1rem; }
+        .modal-box input[type="password"], .modal-box input[type="text"] {
+            width: 100%; background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem; padding: 0.75rem 1rem;
+            font-size: 0.875rem; color: var(--text-primary);
+            outline: none; transition: border-color 0.2s;
+            margin-bottom: 1rem;
+        }
+        .modal-box input:focus { border-color: var(--accent-yellow); }
+        .modal-actions { display: flex; flex-direction: column; gap: 0.75rem; }
+        @media (min-width: 480px) { .modal-actions { flex-direction: row; } }
+        .modal-actions button {
+            flex: 1; padding: 0.75rem; border-radius: 0.75rem;
+            font-size: 0.875rem; font-weight: 600; border: none;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .modal-actions .btn-cancel { background: rgba(255,255,255,0.06); color: var(--text-secondary); }
+        .modal-actions .btn-cancel:hover { background: rgba(255,255,255,0.1); }
+        .modal-actions .btn-primary { background: var(--accent-yellow); color: white; }
+        .modal-actions .btn-primary:hover { background: #d97706; }
+        .modal-actions .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .modal-error { color: var(--accent-red); font-size: 0.75rem; margin-top: -0.5rem; margin-bottom: 0.75rem; }
+
+        #toast-container {
+            position: fixed; top: 1rem; right: 1rem; z-index: 100;
+            display: flex; flex-direction: column; gap: 0.5rem; pointer-events: none;
+        }
+        .toast {
+            padding: 0.75rem 1.25rem; border-radius: 0.75rem;
+            font-size: 0.8125rem; font-weight: 500; pointer-events: auto;
+            animation: toastIn 0.25s ease-out;
+            max-width: 24rem; backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: 0 8px 24px -8px rgba(0,0,0,0.4);
+        }
+        .toast.success { background: rgba(16,185,129,0.92); color: white; }
+        .toast.error { background: rgba(239,68,68,0.92); color: white; }
+        .toast.info { background: rgba(59,130,246,0.92); color: white; }
+        .toast.out { animation: toastOut 0.2s ease-in forwards; }
+
+        .schedule-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8125rem; outline: none;
+            transition: border-color 0.15s;
+            width: 100%;
+        }
+        .schedule-input:focus { border-color: var(--accent-yellow); }
+        .schedule-input.invalid { border-color: var(--accent-red); }
+        .schedule-input.valid { border-color: var(--accent-green); }
+    </style>
+</head>
+<body class="bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-screen">
+    <div class="max-w-7xl mx-auto p-4 sm:p-6">
+        <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 animate-fade-in">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-yellow-500 to-orange-600 flex items-center justify-center shadow-lg shadow-yellow-500/20">
+                    <i data-lucide="calendar-clock" class="w-5 h-5 text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">Cron Jobs</h1>
+                    <p class="text-[var(--text-muted)] text-xs font-medium">Schedule and inspect system cron jobs</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+                <a href="/" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
+                    <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Dashboard</span>
+                </a>
+                <a href="/system-services" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
+                    <i data-lucide="server-cog" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">System</span>
+                </a>
+                <a href="/monitor" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
+                    <i data-lucide="activity" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Monitor</span>
+                </a>
+                <a href="/control" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
+                    <i data-lucide="gamepad-2" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Control</span>
+                </a>
+                <a href="/logout" class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20 rounded-lg hover:bg-[var(--accent-red)]/20 transition-all text-sm font-medium">
+                    <i data-lucide="log-out" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Logout</span>
+                </a>
+            </div>
+        </header>
+
+        <!-- Schedule validator -->
+        <div class="mb-4 p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] animate-fade-in">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div class="flex-1 min-w-0">
+                    <div class="text-xs text-[var(--text-muted)] font-medium mb-1">Validate cron expression</div>
+                    <div class="flex items-center gap-2">
+                        <input id="schedule-input" type="text" class="schedule-input flex-1" placeholder="* * * * *" autocomplete="off">
+                        <span id="schedule-validation" class="text-xs whitespace-nowrap"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="flex flex-col gap-3 mb-4 animate-fade-in" style="animation-delay:0.05s">
+            <div class="flex flex-wrap items-center gap-2">
+                <div id="source-tabs" class="flex flex-wrap items-center gap-1.5">
+                    <button class="filter-tab active" data-source="all"><i data-lucide="layers" class="w-3.5 h-3.5"></i><span>All</span></button>
+                    <button class="filter-tab" data-source="system"><i data-lucide="file-cog" class="w-3.5 h-3.5"></i><span>System</span></button>
+                    <button class="filter-tab" data-source="user"><i data-lucide="user" class="w-3.5 h-3.5"></i><span>User</span></button>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="relative flex-1 min-w-0">
+                    <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"></i>
+                    <input id="search-input" type="text" placeholder="Search by command…" class="search-input" autocomplete="off">
+                </div>
+                <span id="count-display" class="text-xs text-[var(--text-muted)] font-medium whitespace-nowrap px-2"></span>
+                <button id="refresh-btn" class="refresh-btn" title="Refresh">
+                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5 icon"></i>
+                    <span class="hidden sm:inline">Refresh</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div class="table-wrap animate-fade-in" style="animation-delay:0.1s">
+            <div class="table-scroll">
+                <table class="jobs-table">
+                    <thead>
+                        <tr>
+                            <th style="width:60px">Enabled</th>
+                            <th style="width:200px">Schedule</th>
+                            <th>Command</th>
+                            <th style="width:90px" class="hidden sm:table-cell">User</th>
+                            <th style="width:160px" class="hidden md:table-cell">Source</th>
+                        </tr>
+                    </thead>
+                    <tbody id="jobs-tbody"></tbody>
+                </table>
+            </div>
+            <div id="empty-state" class="empty-state" style="display:none">
+                <i data-lucide="calendar-x" class="w-12 h-12 icon"></i>
+                <p class="text-sm font-medium">No cron jobs match your filters</p>
+                <p class="text-xs mt-1">Try a different source or search term</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auth modal -->
+    <div class="modal-overlay" id="auth-modal">
+        <div class="modal-box">
+            <h2 id="auth-title">Authentication required</h2>
+            <p id="auth-message">Enter your password to perform this action.</p>
+            <input type="password" id="auth-password" placeholder="Enter password..." autocomplete="off">
+            <div class="modal-error" id="auth-error" style="display:none"></div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeAuth()">Cancel</button>
+                <button class="btn-primary" id="auth-execute">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script>
+        lucide.createIcons();
+
+        const filters = { source: 'all', search: '' };
+        let allJobs = [];
+        let pendingToggle = null;
+
+        function $(id) { return document.getElementById(id); }
+        function escapeHtml(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        function toast(message, type) {
+            const container = $('toast-container');
+            const t = document.createElement('div');
+            t.className = 'toast ' + (type || 'info');
+            t.textContent = message;
+            container.appendChild(t);
+            setTimeout(() => {
+                t.classList.add('out');
+                setTimeout(() => t.remove(), 200);
+            }, 3000);
+        }
+
+        function sourceLabel(src) {
+            if (src === '/etc/crontab') return 'crontab';
+            if (src.startsWith('/etc/cron.d/')) {
+                const f = src.substring('/etc/cron.d/'.length);
+                return 'cron.d/' + f;
+            }
+            if (src.startsWith('user:')) return src.substring(5) + ' (user)';
+            return src;
+        }
+
+        function renderTable() {
+            const tbody = $('jobs-tbody');
+            const empty = $('empty-state');
+            const q = filters.search.toLowerCase();
+            const rows = [];
+            for (const j of allJobs) {
+                if (filters.source === 'system' && !j.source.startsWith('/etc/')) continue;
+                if (filters.source === 'user' && !j.source.startsWith('user:')) continue;
+                if (q && !(j.command.toLowerCase().includes(q) || j.schedule.toLowerCase().includes(q) || j.source.toLowerCase().includes(q))) continue;
+                rows.push(j);
+            }
+            $('count-display').textContent =
+                rows.length === allJobs.length
+                    ? `${allJobs.length} jobs`
+                    : `${rows.length} / ${allJobs.length} jobs`;
+
+            if (rows.length === 0) {
+                tbody.innerHTML = '';
+                empty.style.display = 'flex';
+                return;
+            }
+            empty.style.display = 'none';
+
+            const frag = document.createDocumentFragment();
+            for (const j of rows) {
+                const tr = document.createElement('tr');
+                const userEditable = j.source.startsWith('/etc/');
+                tr.innerHTML = `
+                    <td>
+                        <label class="toggle" title="${userEditable ? 'Toggle' : 'Per-user crontab; not editable from UI'}">
+                            <input type="checkbox" ${j.enabled ? 'checked' : ''} ${userEditable ? '' : 'disabled'} data-source="${escapeHtml(j.source)}" data-line="${j.line_number}">
+                            <span class="slider"></span>
+                        </label>
+                    </td>
+                    <td><code class="font-mono text-[var(--accent-yellow)] font-semibold">${escapeHtml(j.schedule)}</code></td>
+                    <td><span class="text-[var(--text-secondary)] break-all">${escapeHtml(j.command)}</span></td>
+                    <td class="hidden sm:table-cell text-[var(--text-muted)] font-mono text-xs">${escapeHtml(j.user || '—')}</td>
+                    <td class="hidden md:table-cell text-[var(--text-muted)] font-mono text-xs truncate" title="${escapeHtml(j.source)}">${escapeHtml(sourceLabel(j.source))}</td>
+                `;
+                frag.appendChild(tr);
+            }
+            tbody.innerHTML = '';
+            tbody.appendChild(frag);
+            // Wire up toggle handlers
+            tbody.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                if (cb.disabled) return;
+                cb.addEventListener('change', onToggle);
+            });
+        }
+
+        async function loadJobs() {
+            const btn = $('refresh-btn');
+            btn.classList.add('loading');
+            try {
+                const r = await fetch('/api/cron');
+                const data = await r.json();
+                if (!r.ok) {
+                    toast(data.error || 'Failed to load jobs', 'error');
+                    return;
+                }
+                allJobs = data.jobs || [];
+                renderTable();
+            } catch (e) {
+                toast('Network error: ' + e.message, 'error');
+            } finally {
+                btn.classList.remove('loading');
+            }
+        }
+
+        document.querySelectorAll('#source-tabs .filter-tab').forEach(btn => {
+            btn.onclick = () => {
+                document.querySelectorAll('#source-tabs .filter-tab').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                filters.source = btn.dataset.source;
+                renderTable();
+            };
+        });
+
+        let searchDebounce = null;
+        $('search-input').addEventListener('input', (e) => {
+            filters.search = e.target.value;
+            clearTimeout(searchDebounce);
+            searchDebounce = setTimeout(() => renderTable(), 80);
+        });
+        $('refresh-btn').onclick = () => loadJobs();
+
+        // ----- Schedule validation -----
+        $('schedule-input').addEventListener('input', async (e) => {
+            const expr = e.target.value.trim();
+            const el = $('schedule-validation');
+            const input = $('schedule-input');
+            if (!expr) {
+                el.textContent = '';
+                input.classList.remove('invalid', 'valid');
+                return;
+            }
+            try {
+                const r = await fetch('/api/cron/validate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ expression: expr }),
+                });
+                const data = await r.json();
+                if (data.valid) {
+                    input.classList.add('valid');
+                    input.classList.remove('invalid');
+                    el.innerHTML = `<span class="text-[var(--accent-green)] font-medium">✓ ${escapeHtml(data.description)}</span>`;
+                } else {
+                    input.classList.add('invalid');
+                    input.classList.remove('valid');
+                    el.innerHTML = `<span class="text-[var(--accent-red)] font-medium">✗ ${escapeHtml(data.error)}</span>`;
+                }
+            } catch (e) {
+                el.textContent = '';
+            }
+        });
+
+        // ----- Toggle (enable/disable) -----
+        function onToggle(event) {
+            const cb = event.target;
+            // Revert visual until confirmed
+            const wasChecked = !cb.checked;
+            cb.checked = wasChecked;
+            pendingToggle = {
+                source: cb.dataset.source,
+                line_number: parseInt(cb.dataset.line, 10),
+                enabled: wasChecked,  // we want it to BE in the state the user clicked TO
+                cb: cb,
+            };
+            openAuth(wasChecked ? 'Enable cron job' : 'Disable cron job');
+        }
+
+        function openAuth(title) {
+            $('auth-title').textContent = title;
+            $('auth-message').textContent = title + ' (requires your sudo password)';
+            $('auth-password').value = '';
+            $('auth-error').style.display = 'none';
+            $('auth-modal').classList.add('active');
+            setTimeout(() => $('auth-password').focus(), 100);
+        }
+
+        function closeAuth() {
+            $('auth-modal').classList.remove('active');
+            pendingToggle = null;
+        }
+
+        $('auth-password').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') $('auth-execute').click();
+        });
+
+        $('auth-execute').onclick = async () => {
+            if (!pendingToggle) return;
+            const password = $('auth-password').value;
+            const btn = $('auth-execute');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;display:inline-block;animation:spin 0.6s linear infinite"></span>';
+            try {
+                const r = await fetch('/api/cron/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        source: pendingToggle.source,
+                        line_number: pendingToggle.line_number,
+                        enabled: pendingToggle.enabled,
+                        password: password,
+                    }),
+                });
+                const data = await r.json().catch(() => ({}));
+                if (!r.ok) {
+                    if (data.code === 'permission') {
+                        $('auth-error').textContent = data.error || 'Wrong password';
+                        $('auth-error').style.display = 'block';
+                        $('auth-password').value = '';
+                        $('auth-password').focus();
+                        return;
+                    }
+                    toast(data.error || 'Toggle failed', 'error');
+                    closeAuth();
+                    return;
+                }
+                toast('Cron job ' + (pendingToggle.enabled ? 'enabled' : 'disabled'), 'success');
+                // Update local state and visual
+                pendingToggle.cb.checked = pendingToggle.enabled;
+                for (const j of allJobs) {
+                    if (j.source === pendingToggle.source && j.line_number === pendingToggle.line_number) {
+                        j.enabled = pendingToggle.enabled;
+                        break;
+                    }
+                }
+                closeAuth();
+            } catch (e) {
+                toast('Network error: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Confirm';
+            }
+        };
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && $('auth-modal').classList.contains('active')) closeAuth();
+        });
+
+        // Initial load
+        loadJobs();
+    </script>
+</body>
+</html>

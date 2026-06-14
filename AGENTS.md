@@ -67,9 +67,20 @@ journalctl --user -u server-services-manager -f
   queue = streamer.get_subscriber_queue(handle, "sid1")  # consume from this
   ```
 
+- **Cron page** (`/cron`): inspect and toggle system cron jobs in `/etc/crontab` and `/etc/cron.d/*`. Per-user crontabs in `/var/spool/cron/crontabs/<user>` are listed read-only when readable (use `crontab -e` to edit those). The expression validator checks each of the 5 fields against the standard cron range, step, and list syntax; the UI shows the human-readable description and flags invalid input red. Enable/disable works by commenting or uncommenting the line via `sudo cp` of a tempfile; the user's app password is piped to `sudo -S` for that single command, so the Flask process stays unprivileged.
+
+  ```python
+  from app import cron_manager
+  cron_manager.validate_expression("*/5 * * * *")   # -> None (valid)
+  cron_manager.validate_expression("60 * * * *")    # -> "minute: value 60 out of range"
+  jobs = cron_manager.list_all()
+  cron_manager.toggle_system_job("/etc/cron.d/foo", line_number=3,
+                                 enabled=False, password=user_password)
+  ```
+
 ## Testing
 ```bash
-python -m pytest tests/ -v --tb=short    # 102 tests
+python -m pytest tests/ -v --tb=short    # 130 tests
 ```
 - Tests use `unittest.mock` to avoid real subprocesses
 - Fixtures in `tests/conftest.py` provide `temp_config` (yaml), `process_manager`, `program_config`

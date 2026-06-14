@@ -17,6 +17,8 @@
 
 - **Service Management** — Start, stop, restart, and monitor services with auto-restart on failure
 - **System Services** — Browse, start, stop, enable, disable, and edit drop-in overrides for **any systemd unit** on the host (services, timers, sockets, paths, mounts)
+- **Live Log Streaming** — Real-time `journalctl -f` over Server-Sent Events for any unit, with priority filter and follow-tail
+- **Cron Jobs** — Inspect, validate, and enable/disable system cron entries in `/etc/crontab` and `/etc/cron.d/*`
 - **System Monitor** — Real-time CPU (per-core + averaged chart), memory, swap, disk I/O, network usage, and top processes with sortable columns
 - **Control Panel** — Steam Deck–style quick-action buttons for reboot, suspend, lock, disk/memory checks, and custom user-defined commands
 - **Web Terminal** — Multi-tab PTY terminal for direct shell access
@@ -53,15 +55,15 @@ journalctl --user -u server-services-manager -f
 
 ### Desktop
 
-| Dashboard | System Monitor | Control Panel | System Services |
-|-----------|---------------|---------------|-----------------|
-| ![Desktop](resources/dashboard-desktop.png) | ![Monitor](resources/monitor-desktop.png) | ![Control](resources/control-desktop.png) | ![System](resources/system-services-desktop.png) |
+| Dashboard | System Monitor | Control Panel | System Services | Cron Jobs |
+|-----------|---------------|---------------|-----------------|-----------|
+| ![Desktop](resources/dashboard-desktop.png) | ![Monitor](resources/monitor-desktop.png) | ![Control](resources/control-desktop.png) | ![System](resources/system-services-desktop.png) | ![Cron](resources/cron-desktop.png) |
 
 ### Mobile
 
-| Dashboard | System Monitor | Control Panel | System Services |
-|-----------|---------------|---------------|-----------------|
-| ![Dashboard Mobile](resources/dashboard-mobile.png) | ![Monitor Mobile](resources/monitor-mobile.png) | ![Control Mobile](resources/control-mobile.png) | ![System Mobile](resources/system-services-mobile.png) |
+| Dashboard | System Monitor | Control Panel | System Services | Cron Jobs |
+|-----------|---------------|---------------|-----------------|-----------|
+| ![Dashboard Mobile](resources/dashboard-mobile.png) | ![Monitor Mobile](resources/monitor-mobile.png) | ![Control Mobile](resources/control-mobile.png) | ![System Mobile](resources/system-services-mobile.png) | ![Cron Mobile](resources/cron-mobile.png) |
 
 ## Configuration
 
@@ -123,6 +125,7 @@ The `/system-services` page manages **all systemd units** on the host, not just 
 | `/monitor` | System Monitor | Real-time CPU/Memory/Network charts, processes |
 | `/control` | Control Panel | Quick system commands |
 | `/system-services` | System Services | Browse and control systemd units on the host |
+| `/cron` | Cron Jobs | Inspect and toggle system cron entries |
 
 ## Tech Stack
 
