@@ -338,6 +338,14 @@
                     </div>
                 </div>
                 <div class="modal-error" id="boot-error" style="display:none;margin-top:-0.25rem;margin-bottom:0.5rem"></div>
+                <div class="flex items-center gap-3 py-2">
+                    <button type="button" id="limits-btn"
+                        class="text-xs px-3 py-1.5 rounded-lg bg-[var(--accent-amber)]/10 border border-[var(--accent-amber)]/30 text-[var(--accent-amber)] hover:bg-[var(--accent-amber)]/20 transition-all flex items-center gap-1.5">
+                        <i data-lucide="gauge" class="w-3.5 h-3.5"></i>
+                        Resource Limits
+                    </button>
+                    <span class="text-[10px] text-[var(--text-muted)]">CPU%, memory, I/O weight, nice, etc.</span>
+                </div>
                 <div class="pt-2 border-t border-[var(--border-subtle)] mt-2">
                     <div class="flex items-center gap-2 mb-2">
                         <i data-lucide="calendar-clock" class="w-4 h-4 text-[var(--accent-purple)]"></i>
@@ -386,6 +394,33 @@
             <div class="modal-actions">
                 <button class="btn-cancel" onclick="closeImportModal()">Cancel</button>
                 <button class="btn-primary" id="import-execute" onclick="executeImport()">Import</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resource Limits Modal -->
+    <div class="modal-overlay" id="limits-modal">
+        <div class="modal-box" style="max-width:36rem">
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="mb-0 flex items-center gap-2">
+                    <i data-lucide="gauge" class="w-5 h-5 text-[var(--accent-amber)]"></i>
+                    Resource Limits
+                </h2>
+                <button onclick="closeLimitsModal()" class="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <p class="text-sm text-[var(--text-secondary)] mb-3">
+                Set systemd-level resource limits for
+                <span id="limits-program-name" class="font-mono font-semibold text-[var(--accent-amber)]"></span>.
+                Leave a field empty to use the system default. Changes take effect on next start.
+            </p>
+            <div id="limits-fields" class="space-y-2 mb-3"></div>
+            <div class="modal-error" id="limits-error" style="display:none;margin-top:-0.25rem;margin-bottom:0.5rem"></div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeLimitsModal()">Cancel</button>
+                <button class="btn-cancel" id="limits-clear" style="color:var(--accent-red)">Clear all</button>
+                <button class="btn-primary" id="limits-save" onclick="saveLimits()">Save</button>
             </div>
         </div>
     </div>
@@ -955,6 +990,99 @@
             }
         }
 
+        // ---- Resource limits ----
+        let _limitsProgramName = '';
+        let _limitsFields = [];
+
+        async function openLimitsModal() {
+            const name = document.getElementById('name').value;
+            const originalName = document.getElementById('original-name').value || name;
+            if (!originalName) {
+                alert('Save the program first, then set limits.');
+                return;
+            }
+            _limitsProgramName = originalName;
+            document.getElementById('limits-program-name').textContent = originalName;
+            document.getElementById('limits-error').style.display = 'none';
+            const r = await fetch(`/api/programs/${encodeURIComponent(originalName)}/limits`);
+            const data = await r.json();
+            _limitsFields = data.fields || [];
+            const current = data.limits || {};
+            const html = _limitsFields.map(f => `
+                <div class="grid grid-cols-2 gap-2 items-center">
+                    <label class="text-sm text-[var(--text-secondary)]" for="lim-${f.field}">${f.label}</label>
+                    <div>
+                        <input id="lim-${f.field}" data-field="${f.field}" type="text"
+                            value="${(current[f.field] || '').replace(/"/g, '&quot;')}"
+                            placeholder="${f.hint}"
+                            class="search-input w-full">
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('limits-fields').innerHTML = html;
+            document.getElementById('limits-modal').classList.add('open');
+            lucide.createIcons();
+        }
+
+        function closeLimitsModal() {
+            document.getElementById('limits-modal').classList.remove('open');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const clear = document.getElementById('limits-clear');
+            if (clear) {
+                clear.onclick = async () => {
+                    if (!confirm('Remove all resource limits for this service?')) return;
+                    const r = await fetch(`/api/programs/${encodeURIComponent(_limitsProgramName)}/limits`, {
+                        method: 'DELETE',
+                    });
+                    const out = await r.json();
+                    if (out.ok) {
+                        toast('Resource limits cleared', 'success');
+                        closeLimitsModal();
+                    } else {
+                        const err = document.getElementById('limits-error');
+                        err.textContent = out.error || 'Failed';
+                        err.style.display = 'block';
+                    }
+                };
+            }
+        });
+
+        async function saveLimits() {
+            const btn = document.getElementById('limits-save');
+            btn.disabled = true;
+            btn.textContent = 'Saving…';
+            document.getElementById('limits-error').style.display = 'none';
+            const limits = {};
+            document.querySelectorAll('#limits-fields input[data-field]').forEach(inp => {
+                limits[inp.dataset.field] = inp.value.trim();
+            });
+            try {
+                const r = await fetch(`/api/programs/${encodeURIComponent(_limitsProgramName)}/limits`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ limits }),
+                });
+                const out = await r.json();
+                if (out.ok) {
+                    toast('Resource limits applied', 'success');
+                    closeLimitsModal();
+                } else {
+                    const err = document.getElementById('limits-error');
+                    err.textContent = out.error || 'Failed';
+                    err.style.display = 'block';
+                }
+            } catch (e) {
+                const err = document.getElementById('limits-error');
+                err.textContent = 'Network error: ' + e.message;
+                err.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Save';
+            }
+        }
+
         async function toggleBoot() {
             const checkbox = document.getElementById('boot-toggle');
             const name = document.getElementById('name').value;
@@ -1037,6 +1165,9 @@
 
             // Wire boot toggle
             document.getElementById('boot-toggle').onchange = toggleBoot;
+
+            // Wire limits button
+            document.getElementById('limits-btn').onclick = openLimitsModal;
 
             // Show boot toggle for existing services
             document.getElementById('boot-toggle-row').style.display = 'flex';

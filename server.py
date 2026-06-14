@@ -928,6 +928,64 @@ def api_program_schedule_remove(name):
     return jsonify({"ok": True, "schedule": ""})
 
 
+# ---- Resource limits (systemd drop-in) ------------------------------
+
+@app.route('/api/programs/<name>/limits', methods=['GET'])
+def api_program_limits_get(name):
+    """Return the current resource limits and the supported fields."""
+    from app import resource_limits
+    program = pm.get_program(name)
+    if not program:
+        return jsonify({"error": "Program not found"}), 404
+    return jsonify({
+        "name": name,
+        "limits": resource_limits.get(name),
+        "fields": resource_limits.field_choices(),
+    })
+
+
+@app.route('/api/programs/<name>/limits', methods=['POST'])
+def api_program_limits_set(name):
+    """Apply resource limits to the program's systemd drop-in.
+
+    Body: {limits: {cpu_quota: "50", memory_max: "512M", ...},
+           password?: "..."}
+    Pass an empty string to clear a single field.
+    """
+    from app import resource_limits
+    program = pm.get_program(name)
+    if not program:
+        return jsonify({"error": "Program not found"}), 404
+    data = request.json or {}
+    settings = data.get("limits", {})
+    password = data.get("password") or None
+    ok, err = resource_limits.apply(name, settings, password=password)
+    activity.log("program.limits", target=name,
+                status="ok" if ok else "error",
+                detail="" if ok else err, ip=request.remote_addr or "")
+    if not ok:
+        code = "permission" if "password" in err.lower() else "error"
+        return jsonify({"error": err, "code": code}), 403 if code == "permission" else 400
+    return jsonify({"ok": True, "limits": resource_limits.get(name)})
+
+
+@app.route('/api/programs/<name>/limits', methods=['DELETE'])
+def api_program_limits_clear(name):
+    """Remove the drop-in entirely."""
+    from app import resource_limits
+    program = pm.get_program(name)
+    if not program:
+        return jsonify({"error": "Program not found"}), 404
+    password = (request.json or {}).get("password") or None
+    ok, err = resource_limits.clear(name, password=password)
+    activity.log("program.limits.clear", target=name,
+                status="ok" if ok else "error",
+                detail="" if ok else err, ip=request.remote_addr or "")
+    if not ok:
+        return jsonify({"error": err}), 500
+    return jsonify({"ok": True, "limits": {}})
+
+
 @app.route('/notifications')
 def notifications_page():
     return render_template('notifications.html')
