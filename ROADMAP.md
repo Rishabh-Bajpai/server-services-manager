@@ -193,7 +193,48 @@ terminal, file manager, control panel, auth, responsive UI.
 
 ---
 
-## Phase 27 — Full File Explorer
+## Phase 27 — Multi-host Cluster Management
+
+> **User says:** "Link multiple devices all running this app on the local
+> network, see their state in one dashboard."
+
+- **Architecture:** No central server — every instance is peer-to-peer.
+  Each node discovers others via mDNS / Zeroconf (`avahi` / `Bonjour`),
+  broadcasting its hostname, port, and a shared cluster secret.
+- **Discovery:** 
+  - mDNS service type: `_ssm-manager._tcp`
+  - On startup, browse the network for peers; UI shows a "Nearby nodes" list
+  - Manual add by `host:port` for non-mDNS networks
+- **Aggregated dashboard:**
+  - New `/cluster` page: cards for each node (hostname, uptime, CPU/memory bar,
+    service counts, health status)
+  - Click a card → proxy to that node's dashboard (embedded iframe or API proxy)
+  - Color indicators: green (reachable), yellow (high load), red (unreachable)
+- **Peer API proxy:**
+  - `GET /api/cluster/nodes` — list discovered peers
+  - `GET /api/cluster/node/<host>/proxy/*` — transparently proxy to the peer's
+    own API (auth via shared secret or cookie forwarding)
+  - Reachability check: ping each peer every 10s, track last-seen timestamp
+- **Security:**
+  - Shared cluster secret in `config.yaml` (`cluster_secret:`)
+  - Every peer-to-peer API call includes `X-SSM-Cluster-Secret` header
+  - No secrets ever sent over the wire unencrypted (HTTPS recommended)
+  - Peers authenticate each other on first contact via challenge-response
+- **Config:**
+  ```yaml
+  cluster:
+    enabled: true
+    secret: my-shared-secret       # must match on all peers
+    port: 8881                     # same port as the app
+    advertise: 192.168.1.100       # optional, override auto-detect
+  ```
+- **Reuses:** existing REST API, socketio events (aggregate per-peer),
+  dashboard card rendering pattern
+- **Tests:** discovery mocks, proxy forwarding, auth handshake, timeout handling
+
+---
+
+## Phase 28 — Full File Explorer
 
 > **User says:** "Better file explorer with file preview etc."
 
@@ -226,7 +267,6 @@ delete, and rename/move. Missing:
 | OAuth login | Requires external provider setup; overkill for single-admin |
 | Performance / light mode | Low impact — the app is already lightweight |
 | Webhook receiver | Outbound webhooks already exist (Phase 12); inbound is niche |
-| Multi-host / fleet view | Massive scope; covered by tools like Cockpit |
 | Profile-based commands | Niche; control panel commands already work |
 
 ---
