@@ -2079,16 +2079,21 @@ def disk_page():
     description=(
         "Returns the immediate children of `path` (relative to "
         "$HOME) with their apparent sizes in bytes, sorted by size "
-        "descending. `depth` is capped at 3. Paths outside $HOME "
-        "are rejected."
+        "descending. `depth` is capped at 3. `timeout` (seconds, "
+        "1-300) overrides the default 60s. Paths outside $HOME "
+        "are rejected. Common cache/build directories (node_modules, "
+        ".git, .cache, venv, etc.) are excluded from the recursive "
+        "walk by default — drill into them explicitly if you want "
+        "their size."
     ),
     tag="Disk Usage",
 )
 def api_disk_usage():
     path = request.args.get("path", "")
     depth = request.args.get("depth", "1")
+    timeout = request.args.get("timeout")
     try:
-        result = disk_manager.get_usage(path=path, depth=depth)
+        result = disk_manager.get_usage(path=path, depth=depth, timeout=timeout)
     except disk_manager.DiskError as e:
         if e.code == "outside_home":
             activity.log(
@@ -2098,6 +2103,13 @@ def api_disk_usage():
             return jsonify({"error": str(e), "code": e.code}), 403
         if e.code == "not_found":
             return jsonify({"error": str(e), "code": e.code}), 404
+        if e.code == "timeout":
+            # 503 with a hint lets the frontend offer a "retry
+            # with a longer timeout" button.
+            return jsonify({
+                "error": str(e), "code": e.code,
+                "retry_with_timeout": result_timeout_hint(),
+            }), 503
         return jsonify({"error": str(e), "code": e.code}), 400
     except Exception as e:  # noqa: BLE001
         logger.exception(f"disk usage failed for path={path!r}")
@@ -2106,6 +2118,15 @@ def api_disk_usage():
     result["largest"] = disk_manager.largest_items(result.get("items", []), n=20)
     result["breadcrumb"] = disk_manager.breadcrumb(result.get("path", "."))
     return jsonify(result)
+
+
+def result_timeout_hint():
+    """Return a sensible retry timeout (current × 2, capped at 300s)."""
+    try:
+        cur = float(request.args.get("timeout") or disk_manager._DU_TIMEOUT_SECONDS)
+    except (TypeError, ValueError):
+        cur = float(disk_manager._DU_TIMEOUT_SECONDS)
+    return int(min(cur * 2, disk_manager._MAX_TIMEOUT))
 
 
 @app.route('/api/disk/breadcrumb', methods=['GET'])

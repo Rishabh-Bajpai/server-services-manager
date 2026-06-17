@@ -158,6 +158,25 @@ class TestGetUsage(unittest.TestCase):
         out = dm.get_usage(".", depth="not-a-number")
         assert out["depth"] == 1
 
+    def test_response_includes_timeout(self):
+        out = dm.get_usage(".", depth=1)
+        assert "timeout" in out
+        assert out["timeout"] == dm._DU_TIMEOUT_SECONDS
+
+    def test_per_request_timeout_override(self):
+        out = dm.get_usage(".", depth=1, timeout=120)
+        assert out["timeout"] == 120
+
+    def test_per_request_timeout_clamped_to_max(self):
+        out = dm.get_usage(".", depth=1, timeout=99999)
+        assert out["timeout"] == dm._MAX_TIMEOUT
+
+    def test_excludes_common_heavy_dirs(self):
+        # The exclude list should at least include the usual
+        # suspects (node_modules, .git, .cache, venv, etc.).
+        for needle in ("node_modules", ".git", ".cache", "venv", "dist", "build"):
+            assert any(needle in x for x in dm._DU_EXCLUDES), f"missing exclude for {needle}"
+
 
 class TestLargestItems(unittest.TestCase):
     def test_returns_top_n(self):

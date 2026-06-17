@@ -16,20 +16,50 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("DiskManager")
 
 # du is reasonably fast on a home directory but a recursive walk of
 # e.g. ~/node_modules on a developer's box can take a few seconds.
-# 15 s is enough for any realistic subtree; if it ever fires, the
-# frontend just shows "du took too long".
-_DU_TIMEOUT_SECONDS = 15
+# 60 s is enough for any realistic subtree; the frontend can also
+# override per-request via `?timeout=N` (capped to _MAX_TIMEOUT).
+_DU_TIMEOUT_SECONDS = 60
+_MAX_TIMEOUT = 300  # five minutes — user-initiated deep scans
 
 # Hard cap on the recursive depth the frontend is allowed to request.
 # du can be made to scan arbitrarily deep; we want a sane upper bound
 # so a malicious query string can't pin a CPU on the user's machine.
 _MAX_DEPTH = 3
+
+# Directories we always skip from du's recursive walk. These are
+# commonly huge but rarely where the user wants to look first —
+# node_modules / .cache / .git / venv / flatpak / snap etc. make
+# `du ~` take 10× longer than the user would expect. The user can
+# always drill into one of them explicitly.
+_DU_EXCLUDES = (
+    "--exclude=node_modules",
+    "--exclude=.git",
+    "--exclude=.cache",
+    "--exclude=.npm",
+    "--exclude=.next",
+    "--exclude=__pycache__",
+    "--exclude=.venv",
+    "--exclude=venv",
+    "--exclude=.gradle",
+    "--exclude=.cargo",
+    "--exclude=.rustup",
+    "--exclude=.m2",
+    "--exclude=.vscode",
+    "--exclude=dist",
+    "--exclude=build",
+    "--exclude=target",
+    "--exclude=snap",
+    "--exclude=.steam",
+    "--exclude=.var",
+    "--exclude=flatpak",
+    "--exclude=Trash",
+)
 
 
 class DiskError(Exception):
@@ -144,7 +174,7 @@ def _parse_du_lines(stdout: str, target: str) -> Tuple[int, List[Dict[str, Any]]
     return total, items
 
 
-def get_usage(path: str = "", depth: int = 1) -> Dict[str, Any]:
+def get_usage(path: str = "", depth: int = 1, timeout: Optional[float] = None) -> Dict[str, Any]:
     """Return disk usage info for ``path`` (relative to ``$HOME``).
 
     The returned dict has the shape::
@@ -156,10 +186,17 @@ def get_usage(path: str = "", depth: int = 1) -> Dict[str, Any]:
             "total_human":  str,    # human-readable total
             "items":        list,   # immediate children, sorted by size desc
             "depth":        int,    # depth the client asked for (capped)
+            "timeout":      int,    # timeout (seconds) actually used
         }
 
     On any error, raises :class:`DiskError`. The caller (route
     handler) maps those to HTTP error codes.
+
+    ``timeout`` is the du subprocess timeout in seconds. ``None``
+    means use the module default (:data:`_DU_TIMEOUT_SECONDS`).
+    Per-request overrides are clamped to :data:`_MAX_TIMEOUT` so
+    a caller can't pin a CPU on the user's machine by passing
+    a huge value.
     """
     target = resolve_under_home(path)
 
@@ -174,19 +211,25 @@ def get_usage(path: str = "", depth: int = 1) -> Dict[str, Any]:
         depth_i = 1
     depth_i = max(1, min(depth_i, _MAX_DEPTH))
 
-    cmd = ["du", "--all", "--max-depth", str(depth_i), "-b", target]
+    try:
+        timeout_i = float(timeout) if timeout is not None else float(_DU_TIMEOUT_SECONDS)
+    except (TypeError, ValueError):
+        timeout_i = float(_DU_TIMEOUT_SECONDS)
+    timeout_i = max(1.0, min(timeout_i, float(_MAX_TIMEOUT)))
+
+    cmd = ["du", "--all", "--max-depth", str(depth_i), "-b", *_DU_EXCLUDES, target]
     try:
         proc = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            timeout=_DU_TIMEOUT_SECONDS,
+            timeout=timeout_i,
             check=False,
         )
     except subprocess.TimeoutExpired:
         raise DiskError(
             "timeout",
-            f"du took longer than {_DU_TIMEOUT_SECONDS}s — try a smaller subtree",
+            f"du took longer than {int(timeout_i)}s — try a smaller subtree or pass timeout={int(timeout_i * 2)}",
         )
     except FileNotFoundError:
         # /usr/bin/du missing — extremely unusual.
@@ -208,6 +251,7 @@ def get_usage(path: str = "", depth: int = 1) -> Dict[str, Any]:
         "total_human": humanize(total),
         "items": items,
         "depth": depth_i,
+        "timeout": int(timeout_i),
     }
 
 

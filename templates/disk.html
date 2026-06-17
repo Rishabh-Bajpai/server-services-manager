@@ -210,33 +210,23 @@
     </style>
 </head>
 <body class="text-[var(--text-primary)] min-h-screen">
-    <header class="border-b border-[var(--border-subtle)] bg-[var(--bg-card)]/60 backdrop-blur-md sticky top-0 z-30">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
-            <div class="flex items-center gap-3 min-w-0">
-                <a href="/" class="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors" title="Back to dashboard">
-                    <i data-lucide="arrow-left" class="w-4 h-4"></i>
-                </a>
-                <i data-lucide="pie-chart" class="w-5 h-5 text-[var(--accent-cyan)] flex-shrink-0"></i>
-                <h1 class="text-base sm:text-lg font-semibold truncate">Disk Usage</h1>
-                <span id="depth-badge" class="hidden sm:inline-flex badge badge-gray">depth 1</span>
-            </div>
-            <div class="flex items-center gap-2">
-                <button class="btn" onclick="changeDepth(1)" id="btn-depth-1">
-                    <span>1</span>
-                </button>
-                <button class="btn" onclick="changeDepth(2)" id="btn-depth-2">
-                    <span>2</span>
-                </button>
-                <button class="btn" onclick="changeDepth(3)" id="btn-depth-3">
-                    <span>3</span>
-                </button>
-                <button class="btn" onclick="loadCurrent()" title="Refresh">
-                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-                    <span class="hidden sm:inline">Refresh</span>
-                </button>
-            </div>
-        </div>
-    </header>
+    {% import "_macros.html" as ui %}
+    {% set actions %}
+        <button class="btn" onclick="changeDepth(1)" id="btn-depth-1"><span>1</span></button>
+        <button class="btn" onclick="changeDepth(2)" id="btn-depth-2"><span>2</span></button>
+        <button class="btn" onclick="changeDepth(3)" id="btn-depth-3"><span>3</span></button>
+        <button class="btn" onclick="loadCurrent()" title="Refresh">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Refresh</span>
+        </button>
+    {% endset %}
+    {{ ui.header(
+        title="Disk Usage",
+        icon="pie-chart",
+        icon_color="var(--accent-cyan)",
+        badge_id="depth-badge",
+        actions=actions,
+    ) }}
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
         <section class="flex flex-wrap items-center gap-1.5" id="breadcrumb">
@@ -370,16 +360,93 @@
 
         function loadCurrent() {
             const params = new URLSearchParams({ path: currentPath, depth: String(currentDepth) });
+            // Show a "scanning" indicator on every panel that the
+            // load touches so the user knows the page isn't
+            // frozen — du on a big home dir can take a minute.
+            showScanning(true);
             api('/api/disk/usage?' + params.toString())
                 .then(data => {
+                    currentData = data;
+                    if (data && data.code === 'timeout') {
+                        showTimeout(data, () => retryWithLongerTimeout());
+                        return;
+                    }
+                    if (data && data.error) {
+                        toast(data.error, 'error');
+                        showScanning(false);
+                        return;
+                    }
+                    updateBreadcrumb();
+                    renderStats();
+                    renderTreemap();
+                    renderItems();
+                    renderLargest();
+                    showScanning(false);
+                })
+                .catch(err => {
+                    showScanning(false);
+                    toast(err.message || String(err), 'error');
+                });
+        }
+
+        function showScanning(on) {
+            // Tiny "scanning…" tag inside the treemap header so
+            // the user knows the page is alive.
+            const summary = document.getElementById('treemap-summary');
+            if (on) {
+                summary.innerHTML = '<span class="inline-flex items-center gap-1.5"><i data-lucide="loader" class="w-3 h-3 animate-spin"></i>scanning…</span>';
+                lucide.createIcons();
+            }
+        }
+
+        function showTimeout(data, onRetry) {
+            const wrap = document.getElementById('treemap');
+            wrap.innerHTML = `
+                <div class="treemap-empty flex flex-col items-center justify-center gap-3 text-center px-4">
+                    <i data-lucide="timer" class="w-8 h-8 text-[var(--accent-yellow)]"></i>
+                    <div class="text-sm text-[var(--text-primary)]">du took too long</div>
+                    <div class="text-xs text-[var(--text-muted)] max-w-md">${escapeHtml(data.error || '')}</div>
+                    ${data.retry_with_timeout
+                        ? `<button class="btn btn-primary" onclick="(${onRetry.toString()})()">
+                               <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                               Retry with timeout=${data.retry_with_timeout}s
+                           </button>`
+                        : ''}
+                </div>
+            `;
+            lucide.createIcons();
+        }
+
+        function retryWithLongerTimeout() {
+            // Re-issue the same request with an explicit longer
+            // timeout the server can use directly.
+            const params = new URLSearchParams({ path: currentPath, depth: String(currentDepth) });
+            const current = currentData && currentData.timeout ? currentData.timeout : 60;
+            params.set('timeout', String(Math.min(current * 2, 300)));
+            showScanning(true);
+            api('/api/disk/usage?' + params.toString())
+                .then(data => {
+                    if (data && data.code === 'timeout') {
+                        showTimeout(data, () => retryWithLongerTimeout());
+                        return;
+                    }
+                    if (data && data.error) {
+                        toast(data.error, 'error');
+                        showScanning(false);
+                        return;
+                    }
                     currentData = data;
                     updateBreadcrumb();
                     renderStats();
                     renderTreemap();
                     renderItems();
                     renderLargest();
+                    showScanning(false);
                 })
-                .catch(err => toast(err.message || String(err), 'error'));
+                .catch(err => {
+                    showScanning(false);
+                    toast(err.message || String(err), 'error');
+                });
         }
 
         function renderStats() {
