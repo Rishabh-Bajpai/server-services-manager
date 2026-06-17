@@ -24,6 +24,7 @@ from app import alert_log
 from app import package_manager
 from app import firewall_manager
 from app import backup_manager
+from app import openapi as openapi_mod
 from app.health import HealthCheck, HealthMonitor
 from app.notifier import build_notifiers, Event as HealthEvent
 from app import activity
@@ -129,6 +130,11 @@ def require_login():
         return redirect(url_for('login'))
 
 @app.route('/health')
+@openapi_mod.describe(
+    summary="Health check (no auth)",
+    description="Returns 200 OK if the server is reachable. Bypasses auth.",
+    responses={"200": {"description": "OK"}},
+)
 def health():
     return jsonify({"status": "ok"})
 
@@ -368,6 +374,24 @@ def get_logs(name):
 
 
 @app.route('/api/programs/<name>/logs/search', methods=['GET'])
+@openapi_mod.describe(
+    summary="Search/filter a program's logs",
+    description=(
+        "Server-side log search with substring match, ISO/relative date "
+        "range, pagination, and source selection (in-memory deque, "
+        "persisted tail, or both deduped). Lines without a parseable "
+        "timestamp are kept so a buggy log line never silently vanishes."
+    ),
+    tag="Programs",
+    parameters=[
+        {"name": "search", "in": "query", "schema": {"type": "string"}, "description": "substring (case-insensitive)"},
+        {"name": "since", "in": "query", "schema": {"type": "string"}, "description": "5m / 1h / 2d / ISO 8601 / unix ts"},
+        {"name": "until", "in": "query", "schema": {"type": "string"}},
+        {"name": "source", "in": "query", "schema": {"type": "string", "enum": ["memory", "disk", "all"]}},
+        {"name": "offset", "in": "query", "schema": {"type": "integer", "default": 0}},
+        {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 200, "maximum": 5000}},
+    ],
+)
 def api_program_logs_search(name):
     """Server-side log filtering + pagination for the program logs panel.
 
@@ -775,6 +799,24 @@ def api_system_services_logs(name):
 
 
 @app.route('/api/system-services/<path:name>/logs/search', methods=['GET'])
+@openapi_mod.describe(
+    summary="Search a systemd unit's journal logs",
+    description=(
+        "Server-side journalctl search with substring match, ISO/relative "
+        "date range, journalctl priority, and pagination. When a search "
+        "query is set, a wide window is fetched and filtered in Python "
+        "(since journalctl has no substring filter)."
+    ),
+    tag="System Services",
+    parameters=[
+        {"name": "search", "in": "query", "schema": {"type": "string"}},
+        {"name": "since", "in": "query", "schema": {"type": "string"}, "description": "passed to journalctl --since"},
+        {"name": "until", "in": "query", "schema": {"type": "string"}},
+        {"name": "priority", "in": "query", "schema": {"type": "string", "enum": ["emerg", "alert", "crit", "err", "warning", "notice", "info", "debug"]}},
+        {"name": "offset", "in": "query", "schema": {"type": "integer", "default": 0}},
+        {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 200, "maximum": 5000}},
+    ],
+)
 def api_system_services_logs_search(name):
     """Server-side journalctl log search/filter.
 
@@ -927,6 +969,15 @@ def docker_page():
 
 
 @app.route('/api/docker/availability')
+@openapi_mod.describe(
+    summary="Probe Docker daemon availability",
+    description=(
+        "Returns ``{available, reason, version}``. The reason is "
+        "human-readable when the daemon is unreachable (e.g. permission "
+        "denied → explains how to add user to docker group)."
+    ),
+    tag="Docker",
+)
 def api_docker_availability():
     try:
         return jsonify(docker_manager.is_available(timeout=0.5))
@@ -935,6 +986,14 @@ def api_docker_availability():
 
 
 @app.route('/api/docker/containers', methods=['GET'])
+@openapi_mod.describe(
+    summary="List Docker containers",
+    description="Returns a summary list of containers. Use ``?all=false`` to filter to running ones.",
+    tag="Docker",
+    parameters=[
+        {"name": "all", "in": "query", "schema": {"type": "string", "enum": ["true", "false"], "default": "true"}},
+    ],
+)
 def api_docker_containers_list():
     try:
         all_containers = request.args.get('all', 'true').lower() != 'false'
@@ -1651,6 +1710,23 @@ def _parse_since(arg):
 
 
 @app.route('/api/alerts/events', methods=['GET'])
+@openapi_mod.describe(
+    summary="List notification delivery events",
+    description=(
+        "Returns recent notification delivery attempts with channel, "
+        "recipient, success/failure, latency. Supports relative or "
+        "absolute date ranges for `since`/`until`."
+    ),
+    tag="Alerts",
+    parameters=[
+        {"name": "channel", "in": "query", "schema": {"type": "string", "enum": ["ntfy", "webhook", "telegram", "email"]}},
+        {"name": "service", "in": "query", "schema": {"type": "string"}},
+        {"name": "success", "in": "query", "schema": {"type": "string", "enum": ["true", "false", "1", "0"]}},
+        {"name": "since", "in": "query", "schema": {"type": "string"}},
+        {"name": "until", "in": "query", "schema": {"type": "string"}},
+        {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 200, "maximum": 5000}},
+    ],
+)
 def api_alerts_events():
     try:
         limit = max(1, min(5000, int(request.args.get('limit', '200'))))
@@ -1716,6 +1792,18 @@ def firewall_page():
 
 
 @app.route('/api/firewall/status')
+@openapi_mod.describe(
+    summary="Read firewall status (ufw/firewalld)",
+    description=(
+        "Returns the current firewall backend, enabled state, default "
+        "policies, and rule list. Optional ``?password=`` elevates the "
+        "read with sudo so the full rule list is returned."
+    ),
+    tag="Firewall",
+    parameters=[
+        {"name": "password", "in": "query", "schema": {"type": "string"}, "description": "optional app password for sudo-elevated read"},
+    ],
+)
 def api_firewall_status():
     # Optional password query param; if provided, the read is elevated
     # so the user can see the full rules list.
@@ -1853,6 +1941,32 @@ def api_backups_list():
 
 
 @app.route('/api/backups', methods=['POST'])
+@openapi_mod.describe(
+    summary="Create a backup job",
+    description=(
+        "Creates a new backup job that materializes as a systemd timer "
+        "+ service pair. Required fields: name, type (directory/mysql/"
+        "postgres), source, destination, schedule. Retention defaults "
+        "to 7 (most-recent N archives kept)."
+    ),
+    tag="Backups",
+    request_body={
+        "required": True,
+        "content": {"application/json": {"schema": {
+            "type": "object",
+            "required": ["name", "type", "source", "destination", "schedule"],
+            "properties": {
+                "name": {"type": "string"},
+                "type": {"type": "string", "enum": ["directory", "mysql", "postgres"]},
+                "source": {"type": "string"},
+                "destination": {"type": "string"},
+                "schedule": {"type": "string", "description": "systemd OnCalendar expression"},
+                "retention": {"type": "integer", "default": 7},
+                "password": {"type": "string", "description": "optional app password to enable the timer"},
+            },
+        }}},
+    },
+)
 def api_backups_create():
     data = request.get_json(silent=True) or {}
     password = data.get('password', '')
@@ -1975,6 +2089,19 @@ def api_packages_updates_list():
 
 
 @app.route('/api/packages/refresh', methods=['POST'])
+@openapi_mod.describe(
+    summary="Refresh the package-upgrade cache",
+    description=(
+        "Runs the distro-specific cache refresh (`apt update` / "
+        "`dnf check-update`) and re-parses the upgrade list. If sudo "
+        "needs a password, the existing cache is used and a warning "
+        "is included in the response."
+    ),
+    tag="Packages",
+    responses={
+        "200": {"description": "Returns the refreshed UpdateState."},
+    },
+)
 def api_packages_refresh():
     state = package_manager.refresh()
     activity.log("packages.refresh", target=state.manager, status="ok" if not state.last_error else "error",
@@ -2124,6 +2251,42 @@ _net_prev = {}
 _disk_io_prev = None
 
 _proc_cpu_cache = {}
+
+
+# OpenAPI / Swagger UI
+try:
+    from flask_swagger_ui import get_swaggerui_blueprint
+
+    SWAGGER_URL = "/docs"
+    API_URL = "/openapi.json"
+    swagger_bp = get_swaggerui_blueprint(
+        SWAGGER_URL, API_URL,
+        config={"app_name": "Server Services Manager API", "validatorUrl": None},
+    )
+    app.register_blueprint(swagger_bp, url_prefix=SWAGGER_URL)
+except ImportError:
+    logger.warning("flask-swagger-ui not installed; /docs unavailable")
+
+
+# Register security scheme for the session cookie
+openapi_mod.add_security_scheme({
+    "name": "sessionCookie",
+    "type": "apiKey",
+    "in": "cookie",
+    "description": "Session cookie set by POST /login.",
+})
+
+
+@app.route('/openapi.json')
+def openapi_spec():
+    """Return the OpenAPI 3.0 spec for this server's REST API."""
+    return jsonify(openapi_mod.generate_spec(app))
+
+
+# Decorate key routes with describe() so /docs has good content out of
+# the box. We do this lazily — for routes we want enriched, the decorator
+# is applied via openapi_mod.describe(). Most routes still appear with
+# empty descriptions; the operator can enrich them later.
 
 def system_monitor_thread():
     global _net_prev, _disk_io_prev, _proc_cpu_cache

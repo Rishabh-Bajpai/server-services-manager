@@ -47,146 +47,36 @@ terminal, file manager, control panel, auth, responsive UI.
 
 ---
 
-## Phase 18 — Docker Container Management (🔜 Next)
+## Phases 18–24 (✅ Delivered)
 
-> **User says:** "List, start/stop, logs, stats, exec. Natural sibling of
-> the systemd UI — same CRUD + log streaming pattern."
-
-- New `app/docker_manager.py` — wraps Python `docker` SDK
-- List containers (running/stopped/all), start/stop/restart
-- Stream logs (reuse SSE pattern from `app/log_streamer.py`)
-- Container stats (CPU, memory, network) → frontend charts
-- Exec into a container (PTY terminal, reuse `app/terminal_manager.py`)
-- New `/docker` page with containers table + side panel (details/logs/stats/exec)
-- `docker-compose` support (list projects, up/down/logs)
-- **Missing-socket UX:** page detects absent/unreadable `/var/run/docker.sock`
-  and renders a hint card with the exact `sudo usermod -aG docker $USER`
-  command, rather than crashing. The page is reachable even without Docker.
-- **Reuses:** `templates/system-services.html` pattern, log streamer, terminal manager
-- **Tests:** mocked docker SDK calls, container lifecycle, log parsing
+| # | Feature | Status |
+|---|---------|--------|
+| 18 | Docker container management (`app/docker_manager.py`, `/docker`) | ✅ |
+| 19 | Alert history / notification log (`app/alert_log.py`, `/alerts`) | ✅ |
+| 20 | Package updates dashboard (`app/package_manager.py`, `/packages`) | ✅ |
+| 21 | Log viewer with search/filter (`templates/logs.html`) | ✅ |
+| 22 | Firewall manager (`app/firewall_manager.py`, `/firewall`) | ✅ |
+| 23 | Backup scheduler (`app/backup_manager.py`, `/backups`) | ✅ |
+| 24 | API documentation (`app/openapi.py`, `/openapi.json`, `/docs/`) | ✅ |
 
 ---
 
-## Phase 19 — Alert History / Notification Log (🔜 Next)
-
-> **User says:** "Health checks already fire events, but there's no
-> persistent record of *when* ntfy/telegram/email alerts were sent."
-
-- Extend `app/activity.py` with a `notification_events` table or separate
-  `~/.server-services-manager/notification_log.db`
-- Log every fanout: service, recipient, channel, timestamp, success/failure
-- New `/alerts` page: filterable timeline of sent notifications
-- Per-notifier stats (delivery rate, last failure, latency)
-- **Reuses:** activity log DB, notifier module hooks, `/activity` page pattern
-- **Tests:** fanout logging, query, stats aggregation
-
----
-
-## Phase 20 — Package Updates Dashboard (🔜 Next)
-
-> **User says:** "Show pending apt/yum updates, select and install."
-
-- New `app/package_manager.py` — detect distro (apt/dnf/yum), list updates
-- `GET /api/packages/updates` — parsed output of `apt list --upgradable`
-  or `dnf check-update`
-- `POST /api/packages/install` — install selected packages (via background
-  process, stream output to SSE)
-- New `/packages` page: table of pending updates with checkbox select,
-  "Select All", "Install Selected", progress log
-- Security updates flagged with a warning badge
-- **Refresh model:** manual — `apt update` runs only when the user clicks
-  the "Refresh" button. If the cached list is older than 1 hour, the page
-  shows a "stale data" warning.
-- **Reuses:** SSE streaming, control panel password-reauth pattern
-- **Tests:** mock apt/dnf output, install simulation
-
----
-
-## Phase 21 — Log Viewer with Search/Filter
-
-> **User says:** "Currently shows last 100 lines in a scrollable div.
-> Add pagination, grep-style search, date range, severity filter."
-
-- Upgrade the Dashboard's log panel and the system services Logs tab
-- Backend: `GET /api/programs/<name>/logs?search=&since=&until=&severity=&offset=&limit=`
-- Server-side filtering + pagination (don't send 10K lines to the browser)
-- Frontend: text input, date-range picker, severity dropdown, scroll + "load more"
-- Same interface for systemd journal logs (`GET /api/system-services/<name>/logs?search=...`)
-- **Reuses:** existing log endpoints, journalctl query in `app/system_services.py`
-- **Tests:** filter query parsing, pagination logic, combined search + severity
-
----
-
-## Phase 22 — Firewall Manager
-
-> **User says:** "ufw / firewalld frontend. Enable/disable, add/remove rules, status."
-
-- New `app/firewall_manager.py` — detect ufw or firewalld
-- `GET /api/firewall/status` — enabled/disabled, default policy, rules list
-- `POST /api/firewall/rules` — add rule (port, protocol, source allow/deny)
-- `DELETE /api/firewall/rules/<id>` — remove rule
-- `POST /api/firewall/enable` / `POST /api/firewall/disable`
-- New `/firewall` page: status card, rules table with toggle enable/disable,
-  add-rule form (port number, protocol dropdown, source IP, allow/deny)
-- **Reuses:** sudo password auth pattern (same as system services),
-  control panel confirmation modals
-- **Tests:** mock iptables/ufw, rule parsing, add/remove round-trip
-
----
-
-## Phase 23 — Backup Scheduler
-
-> **User says:** "Set up periodic backups of config, databases, or
-> directories via systemd timers."
-
-- **Destinations in v1:** local disk only. Remote destinations (S3, SFTP)
-  deferred — easy to add later as a destination plugin.
-- Extend `app/schedules.py` (the systemd timer infrastructure) with a
-  backup-specific UI
-- New `/backups` page:
-  - List existing backup jobs (reading from systemd timers)
-  - Create new: source path or database URL, destination path, schedule
-    expression, retention count
-  - One-shot "run now" button
-  - Status: last run, last size, next run, success/failure
-- Backups are just `ssm-backup-<name>.service` + `ssm-backup-<name>.timer`
-  units (oneshot `tar` / `pg_dump` etc.)
-- **Reuses:** `app/schedules.py`, systemd timer lifecycle, activity log
-- **Tests:** timer creation, backup unit file validation
-
----
-
-## Phase 24 — API Documentation
-
-> **User says:** "Swagger/OpenAPI for the 40+ REST endpoints."
-
-- Add `Flask-Swagger-UI` or `flasgger` or generate OpenAPI spec manually
-- Annotate routes with `@swag_from` or inline YAML
-- Accessible at `/docs` (serves Swagger UI)
-- Covers: programs CRUD, system services, file manager, packages, docker,
-  firewall, backups
-- **Value:** Makes the API usable for scripting / automation without
-  reading source code
-- **Tests:** spec is valid JSON Schema, every documented endpoint responds
-
----
-
-## Phase 25 — Disk Usage Analyzer
+## Phase 25 — Disk Usage Analyzer (🔜 Next)
 
 > **User says:** "Visual breakdown per directory (think ncdu in the browser)."
 
-- New `GET /api/disk/usage` — runs `du -sh *` in a given directory
-  (chrooted to `$HOME` like the file manager)
+- New `app/disk_manager.py` — runs `du` with chroot + size caps
+- `GET /api/disk/usage?path=&depth=` — returns tree of (name, size, type)
 - New `/disk` page:
-  - Treemap or sunburst chart (use Canvas or a lightweight library)
+  - Treemap (Canvas) of children of the current directory
   - Click a block to drill into that directory
-  - Sidebar with largest files, filesystem-level usage bar
+  - Sidebar with largest items (top 20 by size)
 - **Reuses:** file manager's chroot logic, monitor's Chart.js
 - **Tests:** du output parsing, path validation, chroot enforcement
 
 ---
 
-## Phase 26 — SSH Key Manager
+## Phase 26 — SSH Key Manager (🔜 Next)
 
 > **User says:** "Add/remove authorized keys via UI."
 
