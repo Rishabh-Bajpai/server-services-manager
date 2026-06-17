@@ -47,7 +47,7 @@ terminal, file manager, control panel, auth, responsive UI.
 
 ---
 
-## Phases 18–26 (✅ Delivered)
+## Phases 18–27 (✅ Delivered)
 
 | # | Feature | Status |
 |---|---------|--------|
@@ -60,58 +60,11 @@ terminal, file manager, control panel, auth, responsive UI.
 | 24 | API documentation (`app/openapi.py`, `/openapi.json`, `/docs/`) | ✅ |
 | 25 | Disk usage analyzer (`app/disk_manager.py`, `/disk`) | ✅ |
 | 26 | SSH key manager (`app/ssh_manager.py`, `/ssh`) | ✅ |
+| 27 | Multi-host cluster manager (`app/cluster_manager.py`, `/cluster`) | ✅ |
 
 ---
 
-## Phase 27 — Multi-host Cluster Management (🔜 Next)
-
-> **User says:** "Link multiple devices all running this app on the local
-> network, see their state in one dashboard."
-
-> **User says:** "Link multiple devices all running this app on the local
-> network, see their state in one dashboard."
-
-- **Scope:** LAN-only. No public-internet support in v1.
-- **Architecture:** No central server — every instance is peer-to-peer.
-  Each node discovers others via mDNS / Zeroconf (`avahi` / `Bonjour`),
-  broadcasting its hostname, port, and a shared cluster secret.
-- **Discovery:**
-  - mDNS service type: `_ssm-manager._tcp`
-  - On startup, browse the network for peers; UI shows a "Nearby nodes" list
-  - Manual add by `host:port` as a fallback for networks without mDNS
-- **Aggregated dashboard:**
-  - New `/cluster` page: cards for each node (hostname, uptime, CPU/memory bar,
-    service counts, health status)
-  - Click a card → proxy to that node's dashboard (embedded iframe or API proxy)
-  - Color indicators: green (reachable), yellow (high load), red (unreachable)
-- **Peer API proxy:**
-  - `GET /api/cluster/nodes` — list discovered peers
-  - `GET /api/cluster/node/<host>/proxy/*` — transparently proxy to the peer's
-    own API (auth via shared secret or cookie forwarding)
-  - Reachability check: ping each peer every 10s, track last-seen timestamp
-- **Security:**
-  - Shared plaintext secret in `config.yaml` (`cluster_secret:`)
-  - Every peer-to-peer API call includes `X-SSM-Cluster-Secret` header
-  - No secrets sent in cleartext on the wire — **HTTPS recommended for
-    any production-like deployment**. The app works over plain HTTP
-    on trusted home/office LANs.
-  - No challenge-response in v1 — a single shared secret is sufficient
-    given the LAN-only model
-- **Config:**
-  ```yaml
-  cluster:
-    enabled: true
-    secret: my-shared-secret       # must match on all peers
-    port: 8881                     # same port as the app
-    advertise: 192.168.1.100       # optional, override auto-detect
-  ```
-- **Reuses:** existing REST API, socketio events (aggregate per-peer),
-  dashboard card rendering pattern
-- **Tests:** discovery mocks, proxy forwarding, auth handshake, timeout handling
-
----
-
-## Phase 28 — Full File Explorer
+## Phase 28 — Full File Explorer (🔜 Next)
 
 > **User says:** "Better file explorer with file preview etc."
 

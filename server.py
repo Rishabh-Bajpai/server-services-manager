@@ -12,7 +12,7 @@ import time
 import threading
 import yaml
 
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash, Response
 from flask_socketio import SocketIO
 from app.process_manager import ProcessManager, ProgramConfig
 from app.terminal_manager import TerminalManager
@@ -24,6 +24,7 @@ from app import alert_log
 from app import package_manager
 from app import firewall_manager
 from app import backup_manager
+from app import cluster_manager
 from app import disk_manager
 from app import ssh_manager
 from app import openapi as openapi_mod
@@ -2228,6 +2229,179 @@ def api_ssh_keys_remove(identifier):
 @app.route('/api/packages/manager')
 def api_packages_manager():
     return jsonify({"manager": package_manager.detect_manager()})
+
+
+# Multi-host cluster manager (Phase 27)
+@app.route('/cluster')
+def cluster_page():
+    return render_template('cluster.html')
+
+
+@app.route('/api/cluster/info', methods=['GET'])
+@openapi_mod.describe(
+    summary="Cluster info: local identity + enabled flag",
+    description=(
+        "Returns whether cluster mode is enabled in config and "
+        "this node's hostname, port, and configured secret. The "
+        "secret is included only so the UI can pre-fill the add-"
+        "peer form; never log it."
+    ),
+    tag="Cluster",
+)
+def api_cluster_info():
+    cfg_data = pm.config_data if hasattr(pm, "config_data") else {}
+    cfg = cluster_manager.get_cluster_config(cfg_data)
+    ident = cluster_manager.local_identity(cfg_data)
+    return jsonify({
+        "enabled": cfg["enabled"],
+        "hostname": ident["hostname"],
+        "port": ident["port"],
+        "secret": cfg["secret"],
+        "advertise": cfg["advertise"],
+    })
+
+
+@app.route('/api/cluster/nodes', methods=['GET'])
+@openapi_mod.describe(
+    summary="List known peer nodes",
+    description=(
+        "Returns every peer in the local registry plus a summary "
+        "block with reachable/unreachable counts. Reachability "
+        "is read from the cached `last_seen` field; call "
+        "POST /api/cluster/probe to refresh."
+    ),
+    tag="Cluster",
+)
+def api_cluster_nodes_list():
+    return jsonify(cluster_manager.list_peers_with_status())
+
+
+@app.route('/api/cluster/nodes', methods=['POST'])
+@openapi_mod.describe(
+    summary="Add a peer node",
+    description=(
+        "Manually add a peer (host:port). The shared secret is "
+        "optional; if omitted the proxy will fall back to the "
+        "local cluster.secret from config."
+    ),
+    tag="Cluster",
+)
+def api_cluster_nodes_add():
+    payload = request.get_json(silent=True) or {}
+    host = (payload.get("host") or "").strip()
+    try:
+        port = int(payload.get("port", 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "port must be an integer", "code": "invalid_port"}), 400
+    secret = (payload.get("secret") or "").strip()
+    label = (payload.get("label") or "").strip()
+    try:
+        peer = cluster_manager.add_peer(host, port, secret=secret, label=label)
+    except cluster_manager.ClusterError as e:
+        http = 409 if e.code == "duplicate" else 400
+        return jsonify({"error": str(e), "code": e.code}), http
+    activity.log(
+        "cluster.add_peer", target=peer["id"], status="ok",
+        detail=peer.get("label", ""), ip=request.remote_addr or "",
+    )
+    return jsonify({"peer": peer})
+
+
+@app.route('/api/cluster/nodes/<peer_id>', methods=['DELETE'])
+@openapi_mod.describe(
+    summary="Remove a peer node",
+    tag="Cluster",
+)
+def api_cluster_nodes_remove(peer_id):
+    try:
+        out = cluster_manager.remove_peer(peer_id)
+    except cluster_manager.ClusterError as e:
+        return jsonify({"error": str(e), "code": e.code}), 404
+    activity.log(
+        "cluster.remove_peer", target=peer_id, status="ok",
+        detail="", ip=request.remote_addr or "",
+    )
+    return jsonify(out)
+
+
+@app.route('/api/cluster/probe', methods=['POST'])
+@openapi_mod.describe(
+    summary="Probe reachability of every known peer",
+    description=(
+        "HEAD/GET /health on every registered peer and update "
+        "the cached last_seen / last_error fields. Returns the "
+        "per-peer results."
+    ),
+    tag="Cluster",
+)
+def api_cluster_probe():
+    return jsonify(cluster_manager.probe_all_peers(timeout=2.0))
+
+
+@app.route('/api/cluster/mdns', methods=['POST'])
+@openapi_mod.describe(
+    summary="Best-effort mDNS browse (zeroconf)",
+    description=(
+        "Browses _ssm-manager._tcp.local. for peers if the "
+        "zeroconf package is installed. Returns an empty list "
+        "if zeroconf isn't available or the browse fails — "
+        "this endpoint never raises."
+    ),
+    tag="Cluster",
+)
+def api_cluster_mdns():
+    payload = request.get_json(silent=True) or {}
+    timeout = float(payload.get("timeout", 2.0))
+    timeout = max(0.5, min(timeout, 10.0))
+    return jsonify({"peers": cluster_manager.try_mdns_browse(timeout=timeout)})
+
+
+@app.route('/api/cluster/node/<peer_id>/proxy/<path:rest>', methods=['GET', 'POST', 'PUT', 'DELETE'])
+@openapi_mod.describe(
+    summary="Proxy an API request to a peer",
+    description=(
+        "Forwards the request to the peer's same path with the "
+        "shared cluster secret in the X-SSM-Cluster-Secret "
+        "header. Returns the peer's response verbatim (status, "
+        "headers, body) so the UI can render any peer's API "
+        "through a single endpoint."
+    ),
+    tag="Cluster",
+)
+def api_cluster_proxy(peer_id, rest):
+    peer = cluster_manager.get_peer(peer_id)
+    if not peer:
+        return jsonify({"error": "peer not found", "code": "not_found"}), 404
+    cfg_data = pm.config_data if hasattr(pm, "config_data") else {}
+    # Forward the user's session cookie so they appear logged
+    # in on the peer.
+    fwd_headers = {}
+    cookie = request.headers.get("Cookie")
+    if cookie:
+        fwd_headers["Cookie"] = cookie
+    body = request.get_data() or None
+    try:
+        status, hdrs, body_resp = cluster_manager.proxy_request(
+            peer, "/" + rest,
+            method=request.method,
+            body=body,
+            headers=fwd_headers,
+            cfg_data=cfg_data,
+            timeout=5.0,
+        )
+    except cluster_manager.ClusterError as e:
+        return jsonify({"error": str(e), "code": e.code}), 502
+    # Filter hop-by-hop headers we shouldn't echo back.
+    SKIP = {"transfer-encoding", "connection", "keep-alive",
+            "proxy-authenticate", "proxy-authorization",
+            "te", "trailers", "upgrade", "content-encoding",
+            "content-length"}
+    out_headers = []
+    for k, v in hdrs.items():
+        if k.lower() in SKIP:
+            continue
+        out_headers.append((k, v))
+    return Response(body_resp, status=status, headers=out_headers)
 
 
 @app.route('/api/packages/updates', methods=['GET'])
