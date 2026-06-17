@@ -260,7 +260,34 @@ def search(query: str, path: str = ".",
 _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico"}
 _PDF_EXTS = {".pdf"}
 _VIDEO_EXTS = {".mp4", ".webm", ".ogg", ".mov"}
-_AUDIO_EXTS = {".mp3", ".wav", ".ogg", ".flac", ".m4a"}
+_AUDIO_EXTS = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac"}
+
+# Common text extensions. We keep this list conservative —
+# these are the extensions that mimetypes.py either doesn't
+# recognize (.log, .conf) or labels as application/* despite
+# being plaintext (.yaml, .json). Without this list, the
+# preview pane would refuse to show a 200-line .log file.
+_TEXT_EXTS = frozenset({
+    ".txt", ".log", ".md", ".rst", ".csv", ".tsv",
+    ".yaml", ".yml", ".json", ".xml", ".toml", ".ini",
+    ".conf", ".cfg", ".env", ".properties",
+    ".html", ".htm", ".css", ".scss", ".less",
+    ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs",
+    ".py", ".pyi", ".pyx", ".rb", ".go", ".rs",
+    ".java", ".kt", ".kts", ".scala", ".groovy",
+    ".c", ".h", ".cpp", ".hpp", ".cc", ".cs", ".m", ".mm",
+    ".sh", ".bash", ".zsh", ".fish", ".ps1", ".bat", ".cmd",
+    ".sql", ".graphql", ".gql", ".proto",
+    ".diff", ".patch", ".tex", ".bib",
+    ".dockerfile", ".editorconfig", ".gitignore",
+    ".npmrc", ".yarnrc", ".babelrc", ".eslintrc",
+})
+
+# Bytes used to detect "is this text or binary?" when the
+# extension doesn't tell us. 8 KB is enough to find a null
+# byte in any non-text file with negligible cost.
+_TEXT_PEEK_BYTES = 8192
+
 _TEXT_MAX = 1 * 1024 * 1024   # 1 MB — anything bigger becomes a download hint
 
 
@@ -276,6 +303,24 @@ def mime_guess(path: str) -> str:
 
 
 def _classify(path: str) -> str:
+    """Classify a file as text, image, pdf, video, audio, or binary.
+
+    The decision tree:
+
+      1. Recognized binary extension (image / pdf / video /
+         audio) wins immediately.
+      2. Recognized text extension (or mimetypes says
+         ``text/...``) → text.
+      3. Otherwise, peek at the first :data:`_TEXT_PEEK_BYTES`
+         bytes. A null byte anywhere in that sample is taken
+         as proof of binary; otherwise we call it text.
+
+    This is the reason ``.log``, ``.conf``, ``.bashrc`` and
+    other extensionless or unknown files preview correctly —
+    the heuristic catches them while still flagging actual
+    binary blobs (images-with-wrong-extension, tarballs,
+    compiled objects, …) as binary.
+    """
     ext = os.path.splitext(path)[1].lower()
     if ext in _IMAGE_EXTS:
         return "image"
@@ -285,9 +330,22 @@ def _classify(path: str) -> str:
         return "video"
     if ext in _AUDIO_EXTS:
         return "audio"
+    if ext in _TEXT_EXTS:
+        return "text"
     if mime_guess(path).startswith("text/"):
         return "text"
-    return "binary"
+    # No recognized extension and mimetypes came up empty —
+    # peek at the bytes. The previous behaviour of returning
+    # "binary" silently is what hid .log files from the
+    # preview pane; this is the fix.
+    try:
+        with open(path, "rb") as f:
+            chunk = f.read(_TEXT_PEEK_BYTES)
+    except OSError:
+        return "binary"
+    if b"\x00" in chunk:
+        return "binary"
+    return "text"
 
 
 def preview(path: str, max_bytes: Optional[int] = None) -> Dict[str, Any]:
@@ -340,7 +398,11 @@ def preview(path: str, max_bytes: Optional[int] = None) -> Dict[str, Any]:
         try:
             out["content"] = data.decode("utf-8")
         except UnicodeDecodeError:
-            # Try latin-1 as a permissive fallback.
+            # Try latin-1 as a permissive fallback. latin-1
+            # maps every byte to a valid character so this
+            # never raises — the only "downside" is that any
+            # binary blob will be rendered as mojibake. The
+            # user can still download the file.
             try:
                 out["content"] = data.decode("latin-1")
                 out["encoding"] = "latin-1"
