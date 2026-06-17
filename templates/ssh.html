@@ -165,28 +165,24 @@
     </style>
 </head>
 <body class="text-[var(--text-primary)] min-h-screen">
-    <header class="border-b border-[var(--border-subtle)] bg-[var(--bg-card)]/60 backdrop-blur-md sticky top-0 z-30">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
-            <div class="flex items-center gap-3 min-w-0">
-                <a href="/" class="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors" title="Back to dashboard">
-                    <i data-lucide="arrow-left" class="w-4 h-4"></i>
-                </a>
-                <i data-lucide="key-round" class="w-5 h-5 text-[var(--accent-purple)] flex-shrink-0"></i>
-                <h1 class="text-base sm:text-lg font-semibold truncate">SSH Keys</h1>
-                <span id="count-badge" class="hidden sm:inline-flex badge badge-gray">0 keys</span>
-            </div>
-            <div class="flex items-center gap-2">
-                <button class="btn" onclick="loadList()" title="Refresh">
-                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-                    <span class="hidden sm:inline">Refresh</span>
-                </button>
-                <button class="btn btn-primary" onclick="openAdd()">
-                    <i data-lucide="plus" class="w-3.5 h-3.5"></i>
-                    <span>Add Key</span>
-                </button>
-            </div>
-        </div>
-    </header>
+    {% import "_macros.html" as ui %}
+    {% set actions %}
+        <button class="btn" onclick="loadList()" title="Refresh">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Refresh</span>
+        </button>
+        <button class="btn btn-primary" onclick="openAdd()">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            <span>Add Key</span>
+        </button>
+    {% endset %}
+    {{ ui.header(
+        title="SSH Keys",
+        icon="key-round",
+        icon_color="var(--accent-purple)",
+        badge_id="count-badge",
+        actions=actions,
+    ) }}
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
         <div id="warning-banner"></div>

@@ -138,38 +138,31 @@
 </head>
 <body class="bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-screen">
     <div class="max-w-7xl mx-auto p-4 sm:p-6">
-        <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 animate-fade-in">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-blue-600 flex items-center justify-center shadow-lg shadow-purple-500/20">
-                    <i data-lucide="history" class="w-5 h-5 text-white"></i>
-                </div>
-                <div>
-                    <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">Activity Log</h1>
-                    <p class="text-[var(--text-muted)] text-xs font-medium">Audit trail of every privileged action</p>
-                </div>
-            </div>
-            <div class="flex items-center gap-2 flex-wrap">
-                <a href="/" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
-                    <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Dashboard</span>
-                </a>
-                <a href="/system-services" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
-                    <i data-lucide="server-cog" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">System</span>
-                </a>
-                <a href="/cron" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
-                    <i data-lucide="calendar-clock" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Cron</span>
-                </a>
-                <a href="/notifications" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
-                    <i data-lucide="bell-ring" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Health</span>
-                </a>
-                <a href="/logout" class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20 rounded-lg hover:bg-[var(--accent-red)]/20 transition-all text-sm font-medium">
-                    <i data-lucide="log-out" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Logout</span>
-                </a>
-            </div>
+        {% import "_macros.html" as ui %}
+        {% set actions %}
+            <a href="/system-services" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
+                <i data-lucide="server-cog" class="w-4 h-4"></i>
+                <span class="hidden sm:inline">System</span>
+            </a>
+            <a href="/cron" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
+                <i data-lucide="calendar-clock" class="w-4 h-4"></i>
+                <span class="hidden sm:inline">Cron</span>
+            </a>
+            <a href="/notifications" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
+                <i data-lucide="bell-ring" class="w-4 h-4"></i>
+                <span class="hidden sm:inline">Health</span>
+            </a>
+            <a href="/logout" class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20 rounded-lg hover:bg-[var(--accent-red)]/20 transition-all text-sm font-medium">
+                <i data-lucide="log-out" class="w-4 h-4"></i>
+                <span class="hidden sm:inline">Logout</span>
+            </a>
+        {% endset %}
+        {{ ui.header(
+            title="Activity Log",
+            icon="history",
+            icon_color="var(--accent-purple)",
+            actions=actions,
+        ) }}
         </header>
 
         <!-- Summary cards -->

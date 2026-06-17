@@ -1,0 +1,72 @@
+{# -----------------------------------------------------------------
+   Shared UI macros. Every page in the app imports this file and
+   uses the `header` macro to render its top navigation bar so
+   the look is identical across pages (back arrow, page icon,
+   title, optional badge, action buttons).
+
+   Usage in a page template:
+
+     {% import "_macros.html" as ui %}
+     {% set actions %}
+       <button class="btn" onclick="loadList()">Refresh</button>
+       <button class="btn btn-primary" onclick="openAdd()">Add</button>
+     {% endset %}
+     {{ ui.header(
+         title="SSH Keys",
+         icon="key-round",
+         icon_color="var(--accent-purple)",
+         badge_id="count-badge",
+         actions=actions,
+     ) }}
+
+   Parameters:
+     title        - the page name shown after the icon
+     icon         - lucide icon name
+     icon_color   - CSS color (any valid value)
+     badge_id     - optional id of a badge element rendered between
+                   the title and the action buttons (the page sets
+                   its content via setBadge())
+     actions      - HTML for the right-side buttons
+   ----------------------------------------------------------------- #}
+{% macro header(title, icon, icon_color, badge_id=None, badge_html='', actions='') %}
+<header class="border-b border-[var(--border-subtle)] bg-[var(--bg-card)]/60 backdrop-blur-md sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3 min-w-0">
+            <a href="/" class="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+               title="Back to dashboard">
+                <i data-lucide="arrow-left" class="w-4 h-4"></i>
+            </a>
+            <i data-lucide="{{ icon }}" class="w-5 h-5 flex-shrink-0"
+               style="color: {{ icon_color }}"></i>
+            <h1 class="text-base sm:text-lg font-semibold truncate">{{ title }}</h1>
+            {% if badge_id %}
+            <span id="{{ badge_id }}" class="hidden sm:inline-flex badge badge-gray">…</span>
+            {% elif badge_html %}
+            <span class="hidden sm:inline-flex">{{ badge_html|safe }}</span>
+            {% endif %}
+        </div>
+        <div class="flex items-center gap-2 flex-wrap justify-end">
+            {{ actions|safe }}
+        </div>
+    </div>
+</header>
+{% endmacro %}
+
+
+{# Renders the page-level "scanning…" / "loading" indicator strip
+   used by pages whose backend may take a few seconds to respond
+   (disk usage, file tree, etc). Page just calls
+   setScanning(true|false) to toggle. #}
+{% macro scanning_strip() %}
+<div id="scanning-strip" class="hidden items-center gap-2 text-xs text-[var(--text-muted)] panel-card px-3 py-2">
+    <i data-lucide="loader" class="w-3.5 h-3.5 animate-spin"></i>
+    <span>scanning…</span>
+</div>
+{% endmacro %}
+
+
+{# A small page-level banner that pages can populate with arbitrary
+   HTML via setBanner() (warnings, info, errors, etc). #}
+{% macro banner() %}
+<div id="page-banner"></div>
+{% endmacro %}

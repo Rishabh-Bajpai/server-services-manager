@@ -174,28 +174,24 @@
     </style>
 </head>
 <body class="text-[var(--text-primary)] min-h-screen">
-    <header class="border-b border-[var(--border-subtle)] bg-[var(--bg-card)]/60 backdrop-blur-md sticky top-0 z-30">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
-            <div class="flex items-center gap-3 min-w-0">
-                <a href="/" class="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
-                    <i data-lucide="arrow-left" class="w-4 h-4"></i>
-                </a>
-                <i data-lucide="bell-ring" class="w-5 h-5 text-[var(--accent-yellow)] flex-shrink-0"></i>
-                <h1 class="text-base sm:text-lg font-semibold truncate">Alert History</h1>
-                <span class="hidden sm:inline-flex badge badge-yellow">notification log</span>
-            </div>
-            <div class="flex items-center gap-2">
-                <a href="/api/alerts/export.csv" class="btn" target="_blank">
-                    <i data-lucide="download" class="w-3.5 h-3.5"></i>
-                    <span class="hidden sm:inline">Export CSV</span>
-                </a>
-                <button class="btn btn-primary" onclick="loadAll()">
-                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-                    <span class="hidden sm:inline">Refresh</span>
-                </button>
-            </div>
-        </div>
-    </header>
+    {% import "_macros.html" as ui %}
+    {% set actions %}
+        <a href="/api/alerts/export.csv" class="btn" target="_blank">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Export CSV</span>
+        </a>
+        <button class="btn btn-primary" onclick="loadAll()">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Refresh</span>
+        </button>
+    {% endset %}
+    {{ ui.header(
+        title="Alert History",
+        icon="bell-ring",
+        icon_color="var(--accent-yellow)",
+        badge_html='<span class="badge badge-yellow">notification log</span>',
+        actions=actions,
+    ) }}
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
         <section id="summary-cards" class="grid grid-cols-2 sm:grid-cols-5 gap-3"></section>
