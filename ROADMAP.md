@@ -52,15 +52,18 @@ terminal, file manager, control panel, auth, responsive UI.
 > **User says:** "List, start/stop, logs, stats, exec. Natural sibling of
 > the systemd UI — same CRUD + log streaming pattern."
 
-- New `app/docker_manager.py` — wraps `docker` CLI or SDK
+- New `app/docker_manager.py` — wraps Python `docker` SDK
 - List containers (running/stopped/all), start/stop/restart
 - Stream logs (reuse SSE pattern from `app/log_streamer.py`)
 - Container stats (CPU, memory, network) → frontend charts
 - Exec into a container (PTY terminal, reuse `app/terminal_manager.py`)
 - New `/docker` page with containers table + side panel (details/logs/stats/exec)
 - `docker-compose` support (list projects, up/down/logs)
+- **Missing-socket UX:** page detects absent/unreadable `/var/run/docker.sock`
+  and renders a hint card with the exact `sudo usermod -aG docker $USER`
+  command, rather than crashing. The page is reachable even without Docker.
 - **Reuses:** `templates/system-services.html` pattern, log streamer, terminal manager
-- **Tests:** mocked docker CLI calls, container lifecycle, log parsing
+- **Tests:** mocked docker SDK calls, container lifecycle, log parsing
 
 ---
 
@@ -91,8 +94,9 @@ terminal, file manager, control panel, auth, responsive UI.
 - New `/packages` page: table of pending updates with checkbox select,
   "Select All", "Install Selected", progress log
 - Security updates flagged with a warning badge
-- **Value:** The most common "I need to SSH into the server and do something"
-  action, now in the browser
+- **Refresh model:** manual — `apt update` runs only when the user clicks
+  the "Refresh" button. If the cached list is older than 1 hour, the page
+  shows a "stale data" warning.
 - **Reuses:** SSE streaming, control panel password-reauth pattern
 - **Tests:** mock apt/dnf output, install simulation
 
@@ -135,15 +139,18 @@ terminal, file manager, control panel, auth, responsive UI.
 > **User says:** "Set up periodic backups of config, databases, or
 > directories via systemd timers."
 
+- **Destinations in v1:** local disk only. Remote destinations (S3, SFTP)
+  deferred — easy to add later as a destination plugin.
 - Extend `app/schedules.py` (the systemd timer infrastructure) with a
   backup-specific UI
 - New `/backups` page:
   - List existing backup jobs (reading from systemd timers)
-  - Create new: path or database URL, schedule expression, retention count
+  - Create new: source path or database URL, destination path, schedule
+    expression, retention count
   - One-shot "run now" button
   - Status: last run, last size, next run, success/failure
 - Backups are just `ssm-backup-<name>.service` + `ssm-backup-<name>.timer`
-  units (oneshot `rsync` / `tar` / `pg_dump` etc.)
+  units (oneshot `tar` / `pg_dump` etc.)
 - **Reuses:** `app/schedules.py`, systemd timer lifecycle, activity log
 - **Tests:** timer creation, backup unit file validation
 
@@ -198,13 +205,14 @@ terminal, file manager, control panel, auth, responsive UI.
 > **User says:** "Link multiple devices all running this app on the local
 > network, see their state in one dashboard."
 
+- **Scope:** LAN-only. No public-internet support in v1.
 - **Architecture:** No central server — every instance is peer-to-peer.
   Each node discovers others via mDNS / Zeroconf (`avahi` / `Bonjour`),
   broadcasting its hostname, port, and a shared cluster secret.
-- **Discovery:** 
+- **Discovery:**
   - mDNS service type: `_ssm-manager._tcp`
   - On startup, browse the network for peers; UI shows a "Nearby nodes" list
-  - Manual add by `host:port` for non-mDNS networks
+  - Manual add by `host:port` as a fallback for networks without mDNS
 - **Aggregated dashboard:**
   - New `/cluster` page: cards for each node (hostname, uptime, CPU/memory bar,
     service counts, health status)
@@ -216,10 +224,13 @@ terminal, file manager, control panel, auth, responsive UI.
     own API (auth via shared secret or cookie forwarding)
   - Reachability check: ping each peer every 10s, track last-seen timestamp
 - **Security:**
-  - Shared cluster secret in `config.yaml` (`cluster_secret:`)
+  - Shared plaintext secret in `config.yaml` (`cluster_secret:`)
   - Every peer-to-peer API call includes `X-SSM-Cluster-Secret` header
-  - No secrets ever sent over the wire unencrypted (HTTPS recommended)
-  - Peers authenticate each other on first contact via challenge-response
+  - No secrets sent in cleartext on the wire — **HTTPS recommended for
+    any production-like deployment**. The app works over plain HTTP
+    on trusted home/office LANs.
+  - No challenge-response in v1 — a single shared secret is sufficient
+    given the LAN-only model
 - **Config:**
   ```yaml
   cluster:
@@ -243,7 +254,8 @@ delete, and rename/move. Missing:
 
 - **Preview:** tab for text files (syntax-highlighted), image thumbnails,
   video/audio playback, PDF inline view
-- **Editor:** monaco-editor or CodeMirror for text files; save writes back
+- **Editor:** Monaco via CDN — full VS Code editing experience with
+  syntax highlighting for the common languages (loads from CDN, no build)
 - **Tree view:** expandable directory tree in the sidebar (lazy-load)
 - **Drag & drop:** upload by dragging files from the OS
 - **Bulk operations:** select multiple, delete, move, download as zip
@@ -252,6 +264,8 @@ delete, and rename/move. Missing:
 - **Path breadcrumbs:** clickable directory path above the file list
 - **Context menu:** right-click on files for rename, copy, cut, paste,
   download, delete
+- **Preview cap:** 50 MB. Files larger than that show "too large to preview"
+  and offer download only — avoids browser tab crashes from 2 GB log files
 
 - **Reuses:** existing `/api/files/*` endpoints, chroot logic
 - **Frontend:** new `/files` page, self-contained
