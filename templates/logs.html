@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log Search - Server Services Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --border-subtle: #1e1e2a;
+            --border-active: #2d2d3a;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+        * { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        code, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+        body {
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(ellipse at top left, rgba(59, 130, 246, 0.04) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(139, 92, 246, 0.04) 0%, transparent 50%);
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+
+        .panel-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+        }
+        .search-input, .select-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.5rem 0.875rem;
+            color: var(--text-primary);
+            font-size: 0.8125rem; outline: none;
+            transition: border-color 0.15s; width: 100%;
+        }
+        .search-input:focus, .select-input:focus { border-color: var(--accent-blue); }
+
+        .log-line {
+            font-family: 'JetBrains Mono', ui-monospace, monospace;
+            font-size: 0.75rem;
+            line-height: 1.5;
+            color: var(--text-primary);
+            white-space: pre-wrap;
+            word-break: break-all;
+            padding: 0.0625rem 0;
+        }
+        .log-line .highlight {
+            background: rgba(245, 158, 11, 0.25);
+            color: var(--accent-yellow);
+            padding: 0 0.125rem;
+            border-radius: 0.125rem;
+        }
+
+        .btn {
+            display: inline-flex; align-items: center; gap: 0.375rem;
+            padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+            font-size: 0.8125rem; font-weight: 600;
+            background: var(--bg-secondary); border: 1px solid var(--border-subtle);
+            color: var(--text-primary); cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .btn:hover { background: var(--border-subtle); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--accent-blue); color: #061a30; border-color: var(--accent-blue); }
+        .btn-primary:hover { background: #60a5fa; }
+
+        .empty-state {
+            text-align: center; padding: 3rem 1.5rem;
+            color: var(--text-muted);
+        }
+        .toast-container {
+            position: fixed; top: 1rem; right: 1rem;
+            z-index: 100; display: flex; flex-direction: column; gap: 0.5rem;
+        }
+        .toast {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem; font-size: 0.8125rem;
+            color: var(--text-primary);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            animation: fadeIn 0.2s ease-out;
+        }
+        .toast.success { border-left: 3px solid var(--accent-green); }
+        .toast.error { border-left: 3px solid var(--accent-red); }
+        .toast.info { border-left: 3px solid var(--accent-cyan); }
+
+        .stat-pill {
+            display: inline-flex; align-items: center; gap: 0.25rem;
+            padding: 0.125rem 0.5rem; border-radius: 999px;
+            background: var(--bg-secondary); border: 1px solid var(--border-subtle);
+            font-size: 0.6875rem; font-family: 'JetBrains Mono', monospace;
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+<body class="text-[var(--text-primary)] min-h-screen">
+    <header class="border-b border-[var(--border-subtle)] bg-[var(--bg-card)]/60 backdrop-blur-md sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+            <div class="flex items-center gap-3 min-w-0">
+                <a href="/" class="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+                    <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                </a>
+                <i data-lucide="search" class="w-5 h-5 text-[var(--accent-blue)] flex-shrink-0"></i>
+                <h1 class="text-base sm:text-lg font-semibold truncate">Log Search</h1>
+            </div>
+            <div class="flex items-center gap-2">
+                <button class="btn btn-primary" onclick="runSearch(true)">
+                    <i data-lucide="search" class="w-3.5 h-3.5"></i>
+                    <span class="hidden sm:inline">Search</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+        <section class="panel-card p-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+                <div class="lg:col-span-2">
+                    <label class="block text-[0.625rem] uppercase tracking-wider text-[var(--text-muted)] mb-1">Source</label>
+                    <select id="kind" class="select-input" onchange="onKindChange()">
+                        <option value="program">Managed program</option>
+                        <option value="systemd">Systemd unit</option>
+                    </select>
+                </div>
+                <div class="lg:col-span-2">
+                    <label class="block text-[0.625rem] uppercase tracking-wider text-[var(--text-muted)] mb-1">Name</label>
+                    <input id="name" type="text" class="search-input" placeholder="e.g. api or nginx.service" onkeydown="if(event.key==='Enter')runSearch(true)">
+                </div>
+                <div>
+                    <label class="block text-[0.625rem] uppercase tracking-wider text-[var(--text-muted)] mb-1">Since</label>
+                    <input id="since" type="text" class="search-input" placeholder="5m, 1h, 2d, or ISO">
+                </div>
+                <div>
+                    <label class="block text-[0.625rem] uppercase tracking-wider text-[var(--text-muted)] mb-1">Until</label>
+                    <input id="until" type="text" class="search-input" placeholder="optional">
+                </div>
+                <div class="lg:col-span-3">
+                    <label class="block text-[0.625rem] uppercase tracking-wider text-[var(--text-muted)] mb-1">Search</label>
+                    <input id="q" type="text" class="search-input" placeholder="substring to match in each line">
+                </div>
+                <div id="source-wrap" class="hidden">
+                    <label class="block text-[0.625rem] uppercase tracking-wider text-[var(--text-muted)] mb-1">Storage</label>
+                    <select id="source" class="select-input">
+                        <option value="all">All (memory + disk)</option>
+                        <option value="memory">In-memory only</option>
+                        <option value="disk">Persisted only</option>
+                    </select>
+                </div>
+                <div id="priority-wrap" class="hidden">
+                    <label class="block text-[0.625rem] uppercase tracking-wider text-[var(--text-muted)] mb-1">Priority</label>
+                    <select id="priority" class="select-input">
+                        <option value="all">All</option>
+                        <option value="emerg">emerg</option>
+                        <option value="alert">alert</option>
+                        <option value="crit">crit</option>
+                        <option value="err">err</option>
+                        <option value="warning">warning</option>
+                        <option value="notice">notice</option>
+                        <option value="info" selected>info</option>
+                        <option value="debug">debug</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[0.625rem] uppercase tracking-wider text-[var(--text-muted)] mb-1">Page size</label>
+                    <select id="limit" class="select-input">
+                        <option>50</option>
+                        <option selected>200</option>
+                        <option>500</option>
+                        <option>2000</option>
+                    </select>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel-card">
+            <div class="p-3 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2 flex-wrap">
+                <div class="flex items-center gap-2 text-xs">
+                    <span class="stat-pill"><span class="text-[var(--text-muted)]">total</span> <span id="stat-total">0</span></span>
+                    <span class="stat-pill"><span class="text-[var(--text-muted)]">matched</span> <span id="stat-matched">0</span></span>
+                    <span class="stat-pill"><span class="text-[var(--text-muted)]">showing</span> <span id="stat-showing">0</span></span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="btn-load-more" class="btn" onclick="loadMore()" disabled>
+                        <i data-lucide="plus" class="w-3.5 h-3.5"></i> Load more
+                    </button>
+                </div>
+            </div>
+            <div id="log-output" class="p-3 max-h-[70vh] overflow-y-auto bg-[var(--bg-primary)]">
+                <div class="empty-state">Enter a name and click Search.</div>
+            </div>
+        </section>
+    </main>
+
+    <div id="toasts" class="toast-container"></div>
+
+    <script>
+    let currentOffset = 0;
+    let currentLimit = 200;
+    let currentMatched = 0;
+    let currentSearch = '';
+    let currentLines = [];
+    let requestSeq = 0;
+
+    function toast(message, kind) {
+        kind = kind || 'info';
+        const el = document.createElement('div');
+        el.className = 'toast ' + kind;
+        el.textContent = message;
+        document.getElementById('toasts').appendChild(el);
+        setTimeout(() => el.remove(), 3500);
+    }
+    function escAttr(s) { return String(s == null ? '' : s).replace(/[<>"&]/g, c => ({'<':'&lt;','>':'&gt;','"':'&quot;','&':'&amp;'}[c])); }
+    function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+    function escHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function onKindChange() {
+        const kind = document.getElementById('kind').value;
+        document.getElementById('source-wrap').classList.toggle('hidden', kind !== 'program');
+        document.getElementById('priority-wrap').classList.toggle('hidden', kind !== 'systemd');
+    }
+
+    function buildQuery(offset) {
+        const params = new URLSearchParams();
+        const q = document.getElementById('q').value.trim();
+        if (q) params.set('search', q);
+        const since = document.getElementById('since').value.trim();
+        if (since) params.set('since', since);
+        const until = document.getElementById('until').value.trim();
+        if (until) params.set('until', until);
+        params.set('limit', String(currentLimit));
+        params.set('offset', String(offset));
+        if (document.getElementById('kind').value === 'program') {
+            params.set('source', document.getElementById('source').value);
+        } else {
+            params.set('priority', document.getElementById('priority').value);
+        }
+        return params;
+    }
+
+    function runSearch(reset) {
+        const name = document.getElementById('name').value.trim();
+        if (!name) {
+            toast('Name is required', 'error');
+            return;
+        }
+        const kind = document.getElementById('kind').value;
+        currentLimit = parseInt(document.getElementById('limit').value, 10) || 200;
+        currentSearch = document.getElementById('q').value.trim();
+        if (reset) {
+            currentOffset = 0;
+            currentLines = [];
+            document.getElementById('log-output').innerHTML = '';
+        }
+        const params = buildQuery(currentOffset);
+        const base = kind === 'program' ? '/api/programs/' : '/api/system-services/';
+        const url = base + encodeURIComponent(name) + '/logs/search?' + params.toString();
+        const mySeq = ++requestSeq;
+        fetch(url).then(r => r.json().then(data => ({ status: r.status, data })))
+            .then(({ status, data }) => {
+                if (mySeq !== requestSeq) return; // a newer request superseded us
+                if (status !== 200) {
+                    toast(data.error || 'search failed', 'error');
+                    return;
+                }
+                currentMatched = data.matched || 0;
+                currentOffset = (data.offset || 0) + (data.logs || []).length;
+                currentLines = currentLines.concat(data.logs || []);
+                renderLines();
+                document.getElementById('stat-total').textContent = data.total != null ? data.total : '?';
+                document.getElementById('stat-matched').textContent = data.matched || 0;
+                document.getElementById('stat-showing').textContent = currentLines.length;
+                document.getElementById('btn-load-more').disabled = !data.has_more;
+            });
+    }
+
+    function loadMore() {
+        runSearch(false);
+    }
+
+    function renderLines() {
+        const out = document.getElementById('log-output');
+        if (!currentLines.length) {
+            out.innerHTML = '<div class="empty-state">No matches.</div>';
+            return;
+        }
+        const q = currentSearch;
+        const qEsc = q ? escapeRegex(q) : '';
+        const html = currentLines.map(line => {
+            let body = escHtml(line);
+            if (qEsc) {
+                body = body.replace(new RegExp('(' + qEsc + ')', 'gi'), '<span class="highlight">$1</span>');
+            }
+            return '<div class="log-line">' + body + '</div>';
+        }).join('');
+        out.innerHTML = html;
+    }
+
+    onKindChange();
+    lucide.createIcons();
+    </script>
+</body>
+</html>

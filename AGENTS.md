@@ -14,7 +14,7 @@ journalctl --user -u server-services-manager -f
 
 ## Architecture
 - **Entrypoint:** `server.py` — single Flask app with SocketIO, eventlet monkey-patch at line 4-5
-- **Routes** (`server.py`): `/` dashboard, `/monitor` system monitor, `/system-services` systemd units, `/docker` docker containers, `/cron` system cron jobs, `/notifications` health-check dashboard, `/alerts` notification delivery log, `/packages` package updates, `/activity` activity log, `/control` whitelisted system commands, `/programs/*` CRUD, `/api/files/*` file manager, `/api/system-services/*`, `/api/docker/*`, `/api/packages/*`, `/api/programs/<name>/{autostart,schedule,limits}`, `/api/palette/search`, `/api/alerts/*`, `/api/plugins`, `/login`, `/logout`, `/health` (no auth)
+- **Routes** (`server.py`): `/` dashboard, `/monitor` system monitor, `/system-services` systemd units, `/docker` docker containers, `/cron` system cron jobs, `/notifications` health-check dashboard, `/alerts` notification delivery log, `/packages` package updates, `/logs` log search, `/activity` activity log, `/control` whitelisted system commands, `/programs/*` CRUD, `/api/files/*` file manager, `/api/system-services/*`, `/api/docker/*`, `/api/packages/*`, `/api/programs/<name>/{autostart,schedule,limits}`, `/api/programs/<name>/logs/search`, `/api/system-services/<name>/logs/search`, `/api/palette/search`, `/api/alerts/*`, `/api/plugins`, `/login`, `/logout`, `/health` (no auth)
 - **WebSocket events:** `update` (program cards, 1s interval), `system_stats` (monitor, 2s), `terminal_*`, `service_event` (state-change toasts), `health_event`
 - **Backend modules:**
   - `app/process_manager.py` — Program, ProcessManager, ProgramConfig (name/command/cwd/autostart/schedule/environment), `on_state_change` hook fired on every transition
@@ -206,7 +206,7 @@ new contributor knows the format) and your local
 
 ## Testing
 ```bash
-python -m pytest tests/ -v --tb=short    # 441 tests
+python -m pytest tests/ -v --tb=short    # 455 tests
 ```
 - Tests use `unittest.mock` to avoid real subprocesses
 - Fixtures in `tests/conftest.py` provide `temp_config` (yaml), `process_manager`, `program_config`

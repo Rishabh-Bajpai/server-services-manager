@@ -365,6 +365,136 @@ def get_logs(name):
     return jsonify({"logs": list(program.logs)})
 
 
+@app.route('/api/programs/<name>/logs/search', methods=['GET'])
+def api_program_logs_search(name):
+    """Server-side log filtering + pagination for the program logs panel.
+
+    Query params:
+      search   — substring (case-insensitive) to match in each line
+      since    — relative ("5m", "1h", "2d") or unix timestamp; if set,
+                 only lines with a parseable timestamp >= since are kept
+      until    — relative or unix timestamp; only lines <= until kept
+      offset   — number of matching lines to skip (for pagination)
+      limit    — max lines to return (default 200, max 5000)
+      source   — "memory" (in-memory deque) or "disk" (persisted tail)
+                 or "all" (default; both, deduped)
+    """
+    program = pm.get_program(name)
+    if program is None:
+        return jsonify({"error": "Program not found"}), 404
+    from app import log_persistence
+    import re
+    import time as _time
+
+    search = (request.args.get('search') or '').lower()
+    source = request.args.get('source', 'all')
+    try:
+        offset = max(0, int(request.args.get('offset', '0')))
+    except ValueError:
+        offset = 0
+    try:
+        limit = max(1, min(5000, int(request.args.get('limit', '200'))))
+    except ValueError:
+        limit = 200
+
+    since_raw = request.args.get('since')
+    until_raw = request.args.get('until')
+
+    def parse_ts(arg):
+        if not arg:
+            return None
+        arg = arg.strip()
+        if len(arg) >= 2 and arg[-1] in "smhd" and arg[:-1].isdigit():
+            n = int(arg[:-1])
+            mult = {"s": 1, "m": 60, "h": 3600, "d": 86400}[arg[-1]]
+            return _time.time() - n * mult
+        try:
+            return float(arg)
+        except ValueError:
+            pass
+        # ISO date / datetime
+        from datetime import datetime
+        for fmt in ('%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S',
+                    '%Y-%m-%dT%H:%M', '%Y-%m-%d %H:%M', '%Y-%m-%d'):
+            try:
+                return datetime.strptime(arg, fmt).timestamp()
+            except ValueError:
+                continue
+        return None
+    since_ts = parse_ts(since_raw)
+    until_ts = parse_ts(until_raw)
+
+    # Collect lines
+    lines: list = []
+    if source in ("all", "memory"):
+        try:
+            lines.extend(list(program.logs))
+        except Exception:  # noqa: BLE001
+            pass
+    if source in ("all", "disk"):
+        try:
+            lines.extend(log_persistence.read_tail(name, 5000))
+        except Exception:  # noqa: BLE001
+            pass
+    # Dedupe, preserving order
+    seen = set()
+    deduped = []
+    for ln in lines:
+        if ln in seen:
+            continue
+        seen.add(ln)
+        deduped.append(ln)
+    total = len(deduped)
+
+    # Filter by search
+    if search:
+        deduped = [ln for ln in deduped if search in ln.lower()]
+
+    # Filter by date range, when lines have parseable timestamps.
+    # Patterns tried, in order: ISO 8601 ("2024-01-02T03:04:05"),
+    # classic ("2024-01-02 03:04:05"), date-only ("2024-01-02").
+    ts_re = re.compile(
+        r'(?P<ts>\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?)'
+    )
+    if since_ts is not None or until_ts is not None:
+        def in_range(line: str) -> bool:
+            m = ts_re.search(line)
+            if not m:
+                # No timestamp = keep (don't silently drop)
+                return True
+            from datetime import datetime
+            try:
+                raw = m.group('ts').replace('T', ' ')
+                if len(raw) == 10:  # date-only
+                    dt = datetime.strptime(raw, '%Y-%m-%d')
+                elif len(raw) >= 19:
+                    dt = datetime.strptime(raw[:19], '%Y-%m-%d %H:%M:%S')
+                else:
+                    dt = datetime.strptime(raw, '%Y-%m-%d %H:%M')
+                ts = dt.timestamp()
+            except Exception:  # noqa: BLE001
+                return True
+            if since_ts is not None and ts < since_ts:
+                return False
+            if until_ts is not None and ts > until_ts:
+                return False
+            return True
+        deduped = [ln for ln in deduped if in_range(ln)]
+
+    matched = len(deduped)
+    page = deduped[offset:offset + limit]
+    has_more = (offset + limit) < matched
+    return jsonify({
+        "name": name,
+        "logs": page,
+        "total": total,
+        "matched": matched,
+        "offset": offset,
+        "limit": limit,
+        "has_more": has_more,
+    })
+
+
 @app.route('/programs/<name>/logs/tail', methods=['GET'])
 def get_logs_tail(name):
     """Return the persisted tail of the service's log file.
@@ -640,6 +770,96 @@ def api_system_services_logs(name):
         return jsonify({"name": name, "logs": logs})
     except system_services.SystemServicesError as e:
         return jsonify({"error": str(e), "code": e.code}), 500
+
+
+@app.route('/api/system-services/<path:name>/logs/search', methods=['GET'])
+def api_system_services_logs_search(name):
+    """Server-side journalctl log search/filter.
+
+    Query params:
+      search   — substring match
+      since    — relative ("5m", "1h") or unix timestamp
+      until    — relative or unix timestamp
+      priority — comma-separated journalctl priorities (emerg..debug)
+      offset   — pagination offset
+      limit    — max lines (default 200, max 5000)
+    """
+    import subprocess
+    import time as _time
+    search = (request.args.get('search') or '').lower()
+    priority = request.args.get('priority') or 'info'
+    try:
+        offset = max(0, int(request.args.get('offset', '0')))
+    except ValueError:
+        offset = 0
+    try:
+        limit = max(1, min(5000, int(request.args.get('limit', '200'))))
+    except ValueError:
+        limit = 200
+
+    def parse_ts(arg):
+        if not arg:
+            return None
+        arg = arg.strip()
+        if len(arg) >= 2 and arg[-1] in "smhd" and arg[:-1].isdigit():
+            n = int(arg[:-1])
+            mult = {"s": 1, "m": 60, "h": 3600, "d": 86400}[arg[-1]]
+            return _time.time() - n * mult
+        try:
+            return float(arg)
+        except ValueError:
+            pass
+        from datetime import datetime
+        for fmt in ('%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S',
+                    '%Y-%m-%dT%H:%M', '%Y-%m-%d %H:%M', '%Y-%m-%d'):
+            try:
+                return datetime.strptime(arg, fmt).timestamp()
+            except ValueError:
+                continue
+        return None
+    since_ts = parse_ts(request.args.get('since'))
+    until_ts = parse_ts(request.args.get('until'))
+
+    # Get a wider window when filters are present so we can post-filter
+    # in Python; otherwise just ask for ``limit`` lines from the end.
+    fetch_count = 5000 if (search or since_ts or until_ts) else limit
+    cmd = [
+        "journalctl", "-u", name, "-n", str(fetch_count), "--no-pager", "-o", "short",
+    ]
+    if priority and priority != "all":
+        cmd += ["-p", priority]
+    if since_ts:
+        from datetime import datetime
+        cmd += ["--since", datetime.fromtimestamp(since_ts).isoformat()]
+    if until_ts:
+        from datetime import datetime
+        cmd += ["--until", datetime.fromtimestamp(until_ts).isoformat()]
+
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+    except FileNotFoundError:
+        return jsonify({"error": "journalctl not installed", "code": "missing_tool"}), 500
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "journalctl timed out", "code": "timeout"}), 500
+    if proc.returncode != 0:
+        err = (proc.stderr or "").strip() or "journalctl failed"
+        return jsonify({"error": err, "code": "error"}), 500
+
+    lines = proc.stdout.splitlines()
+    if search:
+        lines = [ln for ln in lines if search in ln.lower()]
+
+    matched = len(lines)
+    page = lines[offset:offset + limit]
+    has_more = (offset + limit) < matched
+    return jsonify({
+        "name": name,
+        "logs": page,
+        "matched": matched,
+        "offset": offset,
+        "limit": limit,
+        "has_more": has_more,
+    })
 
 
 @app.route('/api/system-services/<path:name>/logs/stream', methods=['GET'])
@@ -1479,6 +1699,12 @@ def api_alerts_export():
 @app.route('/packages')
 def packages_page():
     return render_template('packages.html')
+
+
+# Log search
+@app.route('/logs')
+def logs_search_page():
+    return render_template('logs.html')
 
 
 @app.route('/api/packages/manager')

@@ -219,8 +219,8 @@ class HealthMonitor:
             callback = self._on_event
 
         if new_event is not None:
-            from app.notifier import fanout
-            fanout(notifiers, new_event)
+            from app.alert_log import fanout_with_logging
+            fanout_with_logging(notifiers, new_event)
             if callback is not None:
                 try:
                     callback(new_event)
