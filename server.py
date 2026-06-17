@@ -23,6 +23,7 @@ from app import docker_manager
 from app import alert_log
 from app import package_manager
 from app import firewall_manager
+from app import backup_manager
 from app.health import HealthCheck, HealthMonitor
 from app.notifier import build_notifiers, Event as HealthEvent
 from app import activity
@@ -1837,6 +1838,115 @@ def api_firewall_delete_rule():
                      detail=f"{e.code}: {e}", ip=request.remote_addr or "")
         http = 403 if e.code == "permission" else 400 if e.code == "invalid" else 500
         return jsonify({"error": str(e), "code": e.code}), http
+
+
+# Backup scheduler
+@app.route('/backups')
+def backups_page():
+    return render_template('backups.html')
+
+
+@app.route('/api/backups', methods=['GET'])
+def api_backups_list():
+    jobs = [j.to_dict() for j in backup_manager.list_jobs()]
+    return jsonify({"jobs": jobs})
+
+
+@app.route('/api/backups', methods=['POST'])
+def api_backups_create():
+    data = request.get_json(silent=True) or {}
+    password = data.get('password', '')
+    required = ['name', 'type', 'source', 'destination', 'schedule']
+    for k in required:
+        if not data.get(k):
+            return jsonify({"error": f"{k} is required"}), 400
+    try:
+        job = backup_manager.create_job(
+            name=data['name'],
+            type_=data['type'],
+            source=data['source'],
+            destination=data['destination'],
+            schedule=data['schedule'],
+            retention=int(data.get('retention', 7)),
+            enabled=bool(data.get('enabled', True)),
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e), "code": "invalid"}), 400
+
+    # If enabled and password provided, try to enable the timer too
+    if job.enabled and password:
+        ok, err = backup_manager.enable_job(job.name, password=password)
+        if not ok:
+            activity.log("backup.create", target=job.name, status="partial",
+                         detail=f"created but enable failed: {err}", ip=request.remote_addr or "")
+            return jsonify({"job": job.to_dict(), "warning": f"enable failed: {err}"})
+
+    activity.log("backup.create", target=job.name, status="ok",
+                 detail=f"{job.type} {job.source}->{job.destination}", ip=request.remote_addr or "")
+    return jsonify({"job": job.to_dict()})
+
+
+@app.route('/api/backups/<name>', methods=['DELETE'])
+def api_backups_delete(name):
+    if not backup_manager.delete_job(name):
+        return jsonify({"error": "not_found"}), 404
+    activity.log("backup.delete", target=name, status="ok", ip=request.remote_addr or "")
+    return jsonify({"ok": True})
+
+
+@app.route('/api/backups/<name>/enable', methods=['POST'])
+def api_backups_enable(name):
+    data = request.get_json(silent=True) or {}
+    password = data.get('password', '')
+    if not password:
+        return jsonify({"error": "auth_required"}), 401
+    ok, err = backup_manager.enable_job(name, password=password)
+    if not ok:
+        activity.log("backup.enable", target=name, status="error",
+                     detail=err, ip=request.remote_addr or "")
+        http = 403 if "permission" in err.lower() or "password" in err.lower() else 500
+        return jsonify({"error": err, "code": "permission" if http == 403 else "error"}), http
+    activity.log("backup.enable", target=name, status="ok", ip=request.remote_addr or "")
+    return jsonify({"ok": True})
+
+
+@app.route('/api/backups/<name>/disable', methods=['POST'])
+def api_backups_disable(name):
+    data = request.get_json(silent=True) or {}
+    password = data.get('password', '')
+    if not password:
+        return jsonify({"error": "auth_required"}), 401
+    ok, err = backup_manager.disable_job(name, password=password)
+    if not ok:
+        activity.log("backup.disable", target=name, status="error",
+                     detail=err, ip=request.remote_addr or "")
+        return jsonify({"error": err, "code": "error"}), 500
+    activity.log("backup.disable", target=name, status="ok", ip=request.remote_addr or "")
+    return jsonify({"ok": True})
+
+
+@app.route('/api/backups/<name>/run', methods=['POST'])
+def api_backups_run(name):
+    data = request.get_json(silent=True) or {}
+    password = data.get('password', '')
+    if not password:
+        return jsonify({"error": "auth_required"}), 401
+    ok, err = backup_manager.trigger_now(name, password=password)
+    if not ok:
+        activity.log("backup.run", target=name, status="error",
+                     detail=err, ip=request.remote_addr or "")
+        return jsonify({"error": err, "code": "error"}), 500
+    activity.log("backup.run", target=name, status="ok", ip=request.remote_addr or "")
+    return jsonify({"ok": True})
+
+
+@app.route('/api/backups/<name>/status')
+def api_backups_status(name):
+    job = backup_manager.get_job(name)
+    if not job:
+        return jsonify({"error": "not_found"}), 404
+    status = backup_manager.get_status(name)
+    return jsonify({"job": job.to_dict(), "timer": status})
 
 
 @app.route('/api/packages/manager')

@@ -237,7 +237,7 @@ breaking the manager. See `app/plugins.py` for the full API.
 pip install -r requirements.txt
 
 # Run tests
-python -m pytest tests/ -v --tb=short   # 491 tests
+python -m pytest tests/ -v --tb=short   # 524 tests
 
 # Run with auto-reload
 FLASK_DEBUG=1 python server.py
