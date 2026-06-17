@@ -22,6 +22,7 @@ from app import cron_manager
 from app import docker_manager
 from app import alert_log
 from app import package_manager
+from app import firewall_manager
 from app.health import HealthCheck, HealthMonitor
 from app.notifier import build_notifiers, Event as HealthEvent
 from app import activity
@@ -1705,6 +1706,137 @@ def packages_page():
 @app.route('/logs')
 def logs_search_page():
     return render_template('logs.html')
+
+
+# Firewall management
+@app.route('/firewall')
+def firewall_page():
+    return render_template('firewall.html')
+
+
+@app.route('/api/firewall/status')
+def api_firewall_status():
+    # Optional password query param; if provided, the read is elevated
+    # so the user can see the full rules list.
+    password = request.args.get('password', '') or None
+    if not password:
+        password = None
+    return jsonify(firewall_manager.get_status(password=password).to_dict())
+
+
+@app.route('/api/firewall/enable', methods=['POST'])
+def api_firewall_enable():
+    data = request.get_json(silent=True) or {}
+    password = data.get('password', '')
+    if not password:
+        return jsonify({"error": "auth_required"}), 401
+    try:
+        result = firewall_manager.enable(password)
+        activity.log("firewall.enable", target="", status="ok",
+                     detail=result.get("output", ""), ip=request.remote_addr or "")
+        return jsonify(result)
+    except firewall_manager.FirewallError as e:
+        activity.log("firewall.enable", target="", status="error",
+                     detail=f"{e.code}: {e}", ip=request.remote_addr or "")
+        http = 403 if e.code == "permission" else 500
+        return jsonify({"error": str(e), "code": e.code}), http
+
+
+@app.route('/api/firewall/disable', methods=['POST'])
+def api_firewall_disable():
+    data = request.get_json(silent=True) or {}
+    password = data.get('password', '')
+    if not password:
+        return jsonify({"error": "auth_required"}), 401
+    try:
+        result = firewall_manager.disable(password)
+        activity.log("firewall.disable", target="", status="ok",
+                     detail=result.get("output", ""), ip=request.remote_addr or "")
+        return jsonify(result)
+    except firewall_manager.FirewallError as e:
+        activity.log("firewall.disable", target="", status="error",
+                     detail=f"{e.code}: {e}", ip=request.remote_addr or "")
+        http = 403 if e.code == "permission" else 500
+        return jsonify({"error": str(e), "code": e.code}), http
+
+
+@app.route('/api/firewall/reload', methods=['POST'])
+def api_firewall_reload():
+    data = request.get_json(silent=True) or {}
+    password = data.get('password', '')
+    if not password:
+        return jsonify({"error": "auth_required"}), 401
+    try:
+        result = firewall_manager.reload(password)
+        activity.log("firewall.reload", target="", status="ok",
+                     detail=result.get("output", ""), ip=request.remote_addr or "")
+        return jsonify(result)
+    except firewall_manager.FirewallError as e:
+        activity.log("firewall.reload", target="", status="error",
+                     detail=f"{e.code}: {e}", ip=request.remote_addr or "")
+        http = 403 if e.code == "permission" else 500
+        return jsonify({"error": str(e), "code": e.code}), http
+
+
+@app.route('/api/firewall/default', methods=['POST'])
+def api_firewall_default():
+    data = request.get_json(silent=True) or {}
+    password = data.get('password', '')
+    policy = data.get('policy', '')
+    direction = data.get('direction', '')
+    if not password:
+        return jsonify({"error": "auth_required"}), 401
+    try:
+        result = firewall_manager.set_default(policy, direction, password)
+        activity.log("firewall.default", target=f"{direction}={policy}", status="ok",
+                     detail=result.get("output", ""), ip=request.remote_addr or "")
+        return jsonify(result)
+    except firewall_manager.FirewallError as e:
+        activity.log("firewall.default", target=f"{direction}={policy}", status="error",
+                     detail=f"{e.code}: {e}", ip=request.remote_addr or "")
+        http = 403 if e.code == "permission" else 400 if e.code in ("invalid", "unsupported") else 500
+        return jsonify({"error": str(e), "code": e.code}), http
+
+
+@app.route('/api/firewall/rules', methods=['POST'])
+def api_firewall_add_rule():
+    data = request.get_json(silent=True) or {}
+    password = data.get('password', '')
+    spec = {k: v for k, v in data.items() if k != 'password'}
+    if not password:
+        return jsonify({"error": "auth_required"}), 401
+    try:
+        result = firewall_manager.add_rule(spec, password)
+        activity.log("firewall.add_rule",
+                     target=f"{spec.get('action')}/{spec.get('port')}/{spec.get('protocol', 'any')}",
+                     status="ok", detail=result.get("output", ""), ip=request.remote_addr or "")
+        return jsonify(result)
+    except firewall_manager.FirewallError as e:
+        activity.log("firewall.add_rule",
+                     target=f"{spec.get('action')}/{spec.get('port')}",
+                     status="error", detail=f"{e.code}: {e}", ip=request.remote_addr or "")
+        http = 403 if e.code == "permission" else 400 if e.code == "invalid" else 500
+        return jsonify({"error": str(e), "code": e.code}), http
+
+
+@app.route('/api/firewall/rules', methods=['DELETE'])
+def api_firewall_delete_rule():
+    data = request.get_json(silent=True) or {}
+    password = data.get('password', '')
+    spec = {k: v for k, v in data.items() if k != 'password'}
+    if not password:
+        return jsonify({"error": "auth_required"}), 401
+    try:
+        result = firewall_manager.delete_rule(spec, password)
+        target = str(spec.get('number')) if spec.get('number') else f"{spec.get('action')}/{spec.get('port')}"
+        activity.log("firewall.delete_rule", target=target, status="ok",
+                     detail=result.get("output", ""), ip=request.remote_addr or "")
+        return jsonify(result)
+    except firewall_manager.FirewallError as e:
+        activity.log("firewall.delete_rule", target="", status="error",
+                     detail=f"{e.code}: {e}", ip=request.remote_addr or "")
+        http = 403 if e.code == "permission" else 400 if e.code == "invalid" else 500
+        return jsonify({"error": str(e), "code": e.code}), http
 
 
 @app.route('/api/packages/manager')
