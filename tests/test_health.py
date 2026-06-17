@@ -1,10 +1,14 @@
 import subprocess
+import tempfile
+import threading as _threading
 import time
+import os
 from unittest.mock import patch, MagicMock
 from urllib.error import URLError
 
 import pytest
 
+import app.activity as _activity_mod
 from app.notifier import (
     Event, Notifier, NtfyNotifier, WebhookNotifier, TelegramNotifier, EmailNotifier,
     build_notifier, build_notifiers, fanout, _safe_send,
@@ -13,6 +17,39 @@ from app.health import (
     HealthCheck, CheckResult, ServiceState, HealthMonitor,
     run_check, _run_http, _run_tcp, _run_cmd,
 )
+
+
+@pytest.fixture
+def isolated_activity_db(monkeypatch):
+    """Redirect the activity DB to a tmpfile so tests don't pollute the live DB.
+
+    Also waits briefly for any pending notifier threads to finish before
+    swapping the path, so they write to the same DB the rest of the test sees
+    rather than racing the swap and hitting the live DB.
+    """
+    # Drain in-flight notifier threads from any previous test
+    deadline = time.time() + 2.0
+    while time.time() < deadline:
+        alive = [t for t in _threading.enumerate() if t.name.startswith("notifier-")]
+        if not alive:
+            break
+        time.sleep(0.02)
+    fd, path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    monkeypatch.setattr(_activity_mod, "_DB_PATH", path)
+    monkeypatch.setattr(_activity_mod, "_CONN", None)
+    yield path
+    # Drain again so threads don't outlive the tmpfile
+    deadline = time.time() + 2.0
+    while time.time() < deadline:
+        alive = [t for t in _threading.enumerate() if t.name.startswith("notifier-")]
+        if not alive:
+            break
+        time.sleep(0.02)
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
 
 
 class TestHealthCheck:
@@ -188,7 +225,7 @@ class TestServiceState:
 
 
 class TestHealthMonitor:
-    def test_records_transitions_and_emits_event(self):
+    def test_records_transitions_and_emits_event(self, isolated_activity_db):
         notifier = MagicMock()
         notifier.send = MagicMock(return_value=True)
         captured = []

@@ -20,6 +20,7 @@ from app import system_services
 from app.log_streamer import get_streamer
 from app import cron_manager
 from app import docker_manager
+from app import alert_log
 from app.health import HealthCheck, HealthMonitor
 from app.notifier import build_notifiers, Event as HealthEvent
 from app import activity
@@ -90,9 +91,10 @@ def _on_program_state_change(program, old_status, new_status):
     # Off-thread fanout so a slow webhook doesn't stall the
     # program loop. The notifier module wraps each notifier in a
     # try/except too, so a single bad endpoint can't poison the
-    # others.
+    # others. alert_log.fanout_with_logging records each delivery
+    # attempt to the notification_events table for /alerts.
     threading.Thread(
-        target=_notifier_mod.fanout,
+        target=alert_log.fanout_with_logging,
         args=(notifiers, event),
         daemon=True,
     ).start()
@@ -1395,6 +1397,80 @@ def api_activity_export():
     return app.response_class(
         csv, mimetype="text/csv",
         headers={"Content-Disposition": f'attachment; filename="activity.csv"'},
+    )
+
+
+# Alert history (notification delivery log)
+@app.route('/alerts')
+def alerts_page():
+    return render_template('alerts.html')
+
+
+def _parse_since(arg):
+    """Parse a ``since=`` query value as either a relative duration
+    string ("24h", "7d", "30m") or an absolute unix timestamp.
+    Returns a float or None on failure.
+    """
+    if not arg:
+        return None
+    arg = arg.strip()
+    if not arg:
+        return None
+    # Relative: "30s", "5m", "2h", "7d"
+    if len(arg) >= 2 and arg[-1] in "smhd" and arg[:-1].isdigit():
+        n = int(arg[:-1])
+        mult = {"s": 1, "m": 60, "h": 3600, "d": 86400}[arg[-1]]
+        return time.time() - n * mult
+    try:
+        return float(arg)
+    except ValueError:
+        return None
+
+
+@app.route('/api/alerts/events', methods=['GET'])
+def api_alerts_events():
+    try:
+        limit = max(1, min(5000, int(request.args.get('limit', '200'))))
+    except ValueError:
+        limit = 200
+    channel = request.args.get('channel') or None
+    service = request.args.get('service') or None
+    success_raw = request.args.get('success')
+    success = None
+    if success_raw is not None:
+        if success_raw.lower() in ("1", "true", "yes"):
+            success = True
+        elif success_raw.lower() in ("0", "false", "no"):
+            success = False
+    since = _parse_since(request.args.get('since'))
+    until = _parse_since(request.args.get('until'))
+    events = alert_log.list_events(
+        channel=channel, service=service, success=success,
+        since=since, until=until, limit=limit,
+    )
+    return jsonify({"events": events})
+
+
+@app.route('/api/alerts/stats', methods=['GET'])
+def api_alerts_stats():
+    since = _parse_since(request.args.get('since'))
+    return jsonify({
+        "channels": alert_log.channel_stats(since=since),
+        "summary": alert_log.summary(since=since),
+    })
+
+
+@app.route('/api/alerts/export.csv', methods=['GET'])
+def api_alerts_export():
+    try:
+        limit = max(1, min(10000, int(request.args.get('limit', '1000'))))
+    except ValueError:
+        limit = 1000
+    entries = alert_log.list_events(limit=limit)
+    csv = alert_log.export_csv(entries)
+    return app.response_class(
+        csv, mimetype="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="alerts.csv"'},
     )
 
 
