@@ -47,7 +47,7 @@ terminal, file manager, control panel, auth, responsive UI.
 
 ---
 
-## Phases 18–24 (✅ Delivered)
+## Phases 18–25 (✅ Delivered)
 
 | # | Feature | Status |
 |---|---------|--------|
@@ -58,21 +58,7 @@ terminal, file manager, control panel, auth, responsive UI.
 | 22 | Firewall manager (`app/firewall_manager.py`, `/firewall`) | ✅ |
 | 23 | Backup scheduler (`app/backup_manager.py`, `/backups`) | ✅ |
 | 24 | API documentation (`app/openapi.py`, `/openapi.json`, `/docs/`) | ✅ |
-
----
-
-## Phase 25 — Disk Usage Analyzer (🔜 Next)
-
-> **User says:** "Visual breakdown per directory (think ncdu in the browser)."
-
-- New `app/disk_manager.py` — runs `du` with chroot + size caps
-- `GET /api/disk/usage?path=&depth=` — returns tree of (name, size, type)
-- New `/disk` page:
-  - Treemap (Canvas) of children of the current directory
-  - Click a block to drill into that directory
-  - Sidebar with largest items (top 20 by size)
-- **Reuses:** file manager's chroot logic, monitor's Chart.js
-- **Tests:** du output parsing, path validation, chroot enforcement
+| 25 | Disk usage analyzer (`app/disk_manager.py`, `/disk`) | ✅ |
 
 ---
 

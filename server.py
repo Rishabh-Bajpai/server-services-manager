@@ -24,6 +24,7 @@ from app import alert_log
 from app import package_manager
 from app import firewall_manager
 from app import backup_manager
+from app import disk_manager
 from app import openapi as openapi_mod
 from app.health import HealthCheck, HealthMonitor
 from app.notifier import build_notifiers, Event as HealthEvent
@@ -2061,6 +2062,65 @@ def api_backups_status(name):
         return jsonify({"error": "not_found"}), 404
     status = backup_manager.get_status(name)
     return jsonify({"job": job.to_dict(), "timer": status})
+
+
+# Disk usage analyzer (Phase 25)
+@app.route('/disk')
+def disk_page():
+    return render_template('disk.html')
+
+
+@app.route('/api/disk/usage', methods=['GET'])
+@openapi_mod.describe(
+    summary="Disk usage for a path under $HOME",
+    description=(
+        "Returns the immediate children of `path` (relative to "
+        "$HOME) with their apparent sizes in bytes, sorted by size "
+        "descending. `depth` is capped at 3. Paths outside $HOME "
+        "are rejected."
+    ),
+    tag="Disk Usage",
+)
+def api_disk_usage():
+    path = request.args.get("path", "")
+    depth = request.args.get("depth", "1")
+    try:
+        result = disk_manager.get_usage(path=path, depth=depth)
+    except disk_manager.DiskError as e:
+        if e.code == "outside_home":
+            activity.log(
+                "disk.usage", target=path, status="denied",
+                detail=str(e), ip=request.remote_addr or "",
+            )
+            return jsonify({"error": str(e), "code": e.code}), 403
+        if e.code == "not_found":
+            return jsonify({"error": str(e), "code": e.code}), 404
+        return jsonify({"error": str(e), "code": e.code}), 400
+    except Exception as e:  # noqa: BLE001
+        logger.exception(f"disk usage failed for path={path!r}")
+        return jsonify({"error": str(e), "code": "internal"}), 500
+
+    result["largest"] = disk_manager.largest_items(result.get("items", []), n=20)
+    result["breadcrumb"] = disk_manager.breadcrumb(result.get("path", "."))
+    return jsonify(result)
+
+
+@app.route('/api/disk/breadcrumb', methods=['GET'])
+@openapi_mod.describe(
+    summary="Resolve a path into breadcrumb segments",
+    description=(
+        "Splits a path relative to $HOME into clickable breadcrumb "
+        "segments. Returns 403 if the path escapes $HOME."
+    ),
+    tag="Disk Usage",
+)
+def api_disk_breadcrumb():
+    path = request.args.get("path", "")
+    try:
+        crumbs = disk_manager.breadcrumb(path)
+    except disk_manager.DiskError as e:
+        return jsonify({"error": str(e), "code": e.code}), 403
+    return jsonify({"breadcrumb": crumbs})
 
 
 @app.route('/api/packages/manager')
