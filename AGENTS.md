@@ -14,7 +14,7 @@ journalctl --user -u server-services-manager -f
 
 ## Architecture
 - **Entrypoint:** `server.py` — single Flask app with SocketIO, eventlet monkey-patch at line 4-5
-- **Routes** (`server.py`): `/` dashboard, `/monitor` system monitor, `/system-services` systemd units, `/docker` docker containers, `/cron` system cron jobs, `/notifications` health-check dashboard, `/alerts` notification delivery log, `/activity` activity log, `/control` whitelisted system commands, `/programs/*` CRUD, `/api/files/*` file manager, `/api/system-services/*`, `/api/docker/*`, `/api/programs/<name>/{autostart,schedule,limits}`, `/api/palette/search`, `/api/alerts/*`, `/api/plugins`, `/login`, `/logout`, `/health` (no auth)
+- **Routes** (`server.py`): `/` dashboard, `/monitor` system monitor, `/system-services` systemd units, `/docker` docker containers, `/cron` system cron jobs, `/notifications` health-check dashboard, `/alerts` notification delivery log, `/packages` package updates, `/activity` activity log, `/control` whitelisted system commands, `/programs/*` CRUD, `/api/files/*` file manager, `/api/system-services/*`, `/api/docker/*`, `/api/packages/*`, `/api/programs/<name>/{autostart,schedule,limits}`, `/api/palette/search`, `/api/alerts/*`, `/api/plugins`, `/login`, `/logout`, `/health` (no auth)
 - **WebSocket events:** `update` (program cards, 1s interval), `system_stats` (monitor, 2s), `terminal_*`, `service_event` (state-change toasts), `health_event`
 - **Backend modules:**
   - `app/process_manager.py` — Program, ProcessManager, ProgramConfig (name/command/cwd/autostart/schedule/environment), `on_state_change` hook fired on every transition
@@ -33,6 +33,7 @@ journalctl --user -u server-services-manager -f
   - `app/plugins.py` — drop-in Python plugin loader, `PluginBase` ABC, `load_all()` runs at startup
   - `app/docker_manager.py` — Docker SDK wrapper (list/inspect/logs/stats/control); `is_available()` returns availability + reason; logs streaming via SSE `/api/docker/containers/<id>/logs/stream`
   - `app/alert_log.py` — Notification delivery log (separate `notification_events` table in activity.db); `fanout_with_logging()` is a drop-in replacement for `notifier.fanout()` that records each delivery's success/failure, latency, channel, recipient; per-channel stats aggregation
+  - `app/package_manager.py` — apt/dnf/yum wrapper with security-update detection; manual refresh (`apt update` / `dnf check-update`), cached result with 1h stale threshold; install runs in background with log-tail polling
 - **Frontend:** All inline JS in `templates/index.html` (~1700 lines, 4 script blocks). Monitor at `templates/monitor.html` uses Chart.js. System services at `templates/system-services.html` (~600 lines, side-panel detail view with Overview/Dependencies/Unit File/Logs tabs). Docker at `templates/docker.html` (containers table + side panel with Details/Stats/Logs tabs, live log streaming). Cron at `templates/cron.html`, notifications at `templates/notifications.html`, activity at `templates/activity.html`, control at `templates/control.html`. No build step, no framework.
 - **Config:** `config.yaml` (gitignored) defines services; can also be managed via UI
 - **State persistence:** Running PIDs saved to `~/.server-services-manager/state.json`, re-attached on restart
@@ -205,7 +206,7 @@ new contributor knows the format) and your local
 
 ## Testing
 ```bash
-python -m pytest tests/ -v --tb=short    # 415 tests
+python -m pytest tests/ -v --tb=short    # 441 tests
 ```
 - Tests use `unittest.mock` to avoid real subprocesses
 - Fixtures in `tests/conftest.py` provide `temp_config` (yaml), `process_manager`, `program_config`

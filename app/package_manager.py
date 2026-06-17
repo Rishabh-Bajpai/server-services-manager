@@ -1,0 +1,445 @@
+"""Package manager wrapper for the dashboard's "Updates" page.
+
+Detects the host's package manager (apt, dnf, yum) and exposes:
+- list of pending upgrades (security upgrades flagged)
+- manual cache refresh (``apt update`` / ``dnf check-update``)
+- install of selected packages with live progress streaming
+- cached state with stale-data detection (warning at 1 hour)
+
+The actual install runs in a background thread; output is written to
+a temp file and can be streamed to the UI via a poll endpoint.
+"""
+import logging
+import os
+import shutil
+import subprocess
+import threading
+import time
+from dataclasses import dataclass, field
+from typing import Callable, List, Optional
+
+logger = logging.getLogger("PackageManager")
+
+STALE_SECONDS = 3600  # 1 hour
+
+
+@dataclass
+class Update:
+    name: str
+    current_version: str
+    new_version: str
+    is_security: bool = False
+    repo: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "current_version": self.current_version,
+            "new_version": self.new_version,
+            "is_security": self.is_security,
+            "repo": self.repo,
+        }
+
+
+@dataclass
+class UpdateState:
+    """Cached result of the most recent ``refresh`` call."""
+    manager: str
+    fetched_at: float
+    updates: List[Update] = field(default_factory=list)
+    last_error: str = ""
+
+    @property
+    def is_stale(self) -> bool:
+        return (time.time() - self.fetched_at) > STALE_SECONDS
+
+    def to_dict(self) -> dict:
+        return {
+            "manager": self.manager,
+            "fetched_at": self.fetched_at,
+            "fetched_human": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.fetched_at)),
+            "is_stale": self.is_stale,
+            "last_error": self.last_error,
+            "updates": [u.to_dict() for u in self.updates],
+            "count": len(self.updates),
+            "security_count": sum(1 for u in self.updates if u.is_security),
+        }
+
+
+# ---------------------------------------------------------------------------
+# Manager detection
+# ---------------------------------------------------------------------------
+
+def detect_manager() -> str:
+    """Return the package manager name on this host, or 'unknown'."""
+    for cmd, name in (("apt-get", "apt"), ("dnf", "dnf"), ("yum", "yum")):
+        if shutil.which(cmd):
+            return name
+    return "unknown"
+
+
+# ---------------------------------------------------------------------------
+# Refresh
+# ---------------------------------------------------------------------------
+
+_LOCK = threading.Lock()
+_STATE: Optional[UpdateState] = None
+
+
+def get_state() -> Optional[UpdateState]:
+    """Return the most recent cached state, or None if never refreshed."""
+    return _STATE
+
+
+def list_updates() -> List[Update]:
+    """Return cached updates (or empty list if never refreshed)."""
+    s = get_state()
+    return list(s.updates) if s else []
+
+
+def refresh(manager: Optional[str] = None) -> UpdateState:
+    """Run ``apt update`` (or distro equivalent) and re-parse the upgrade list.
+
+    Returns the new state. The result is cached and exposed via
+    :func:`get_state`. If the cache-refresh step can't run (e.g. sudo
+    needs a password and the user is non-root), the existing cache is
+    used and a warning is included in the state.
+    """
+    global _STATE
+    mngr = manager or detect_manager()
+    updates: List[Update] = []
+    error = ""
+
+    try:
+        if mngr == "apt":
+            refreshed = _run_apt_update()
+            if not refreshed:
+                error = "could not refresh apt cache (sudo password required); showing last known list"
+            updates = _parse_apt_upgradable()
+        elif mngr == "dnf":
+            _run_dnf_check_update()
+            updates = _parse_dnf_check_update()
+        elif mngr == "yum":
+            _run_yum_check_update()
+            updates = _parse_yum_check_update()
+        else:
+            error = f"unsupported package manager: {mngr}"
+    except subprocess.TimeoutExpired:
+        error = "package update timed out"
+    except subprocess.CalledProcessError as e:
+        error = f"package update failed: {e}"
+    except FileNotFoundError as e:
+        error = f"package tool missing: {e}"
+    except Exception as e:  # noqa: BLE001
+        error = str(e) or type(e).__name__
+
+    with _LOCK:
+        _STATE = UpdateState(manager=mngr, fetched_at=time.time(),
+                             updates=updates, last_error=error)
+    return _STATE
+
+
+# ---------------------------------------------------------------------------
+# apt backend
+# ---------------------------------------------------------------------------
+
+def _run_apt_update() -> bool:
+    """Try to refresh the apt cache. Returns True on success, False if
+    the call was attempted but couldn't run (e.g. sudo needs a password).
+    Raises on other failures.
+    """
+    proc = subprocess.run(
+        ["sudo", "-n", "apt-get", "update"],
+        capture_output=True, text=True, timeout=60,
+    )
+    if proc.returncode == 0:
+        return True
+    err = (proc.stderr or "").lower()
+    if "password" in err:
+        # sudo needs a password. Try running without sudo — works if
+        # we're already root or if apt-get is NOPASSWD.
+        proc2 = subprocess.run(
+            ["apt-get", "update"],
+            capture_output=True, text=True, timeout=60,
+        )
+        if proc2.returncode == 0:
+            return True
+        # Both failed; the cache may be stale but the list call below
+        # will still work, so signal "couldn't refresh" rather than raising.
+        return False
+    raise subprocess.CalledProcessError(
+        proc.returncode, proc.args,
+        output=proc.stdout, stderr=proc.stderr,
+    )
+
+
+def _parse_apt_upgradable() -> List[Update]:
+    proc = subprocess.run(
+        ["apt", "list", "--upgradable"],
+        capture_output=True, text=True, timeout=30,
+    )
+    if proc.returncode != 0:
+        raise subprocess.CalledProcessError(proc.returncode, proc.args, output=proc.stdout, stderr=proc.stderr)
+    out: List[Update] = []
+    security_packages = _apt_security_package_names()
+    for line in (proc.stdout or "").splitlines():
+        line = line.strip()
+        if not line or line.startswith("Listing") or "/" not in line:
+            continue
+        # Format: "package/source new-version arch [upgradable from: old]"
+        name, _, rest = line.partition("/")
+        if "upgradable" not in rest:
+            continue
+        # Tokens after the source
+        parts = rest.split()
+        if len(parts) < 2:
+            continue
+        new_version = parts[1] if len(parts) > 1 else ""
+        old_version = ""
+        if "upgradable from:" in rest:
+            try:
+                old_version = rest.split("upgradable from:")[1].split("]")[0].strip()
+            except Exception:  # noqa: BLE001
+                pass
+        # Source repo (between the first / and the next space)
+        repo = rest.split(" ")[0]
+        is_security = name in security_packages or "security" in repo.lower()
+        out.append(Update(
+            name=name, current_version=old_version, new_version=new_version,
+            is_security=is_security, repo=repo,
+        ))
+    return out
+
+
+def _apt_security_package_names() -> set:
+    """Return a set of package names that come from -security pocket.
+
+    Uses ``apt list`` to look for packages whose repo ends in '-security'.
+    """
+    try:
+        proc = subprocess.run(
+            ["apt", "list", "--all-versions"],
+            capture_output=True, text=True, timeout=30,
+        )
+    except Exception:  # noqa: BLE001
+        return set()
+    out = set()
+    for line in (proc.stdout or "").splitlines():
+        line = line.strip()
+        if "/noble-security" not in line and "/noble-security" not in line.lower():
+            continue
+        if "/" not in line:
+            continue
+        name, _, _ = line.partition("/")
+        if name:
+            out.add(name)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# dnf / yum backend
+# ---------------------------------------------------------------------------
+
+def _run_dnf_check_update() -> None:
+    # ``dnf check-update`` returns 0 when nothing to update, 100 when updates exist
+    subprocess.run(
+        ["dnf", "-q", "check-update"],
+        capture_output=True, text=True, timeout=60,
+    )
+
+
+def _parse_dnf_check_update() -> List[Update]:
+    proc = subprocess.run(
+        ["dnf", "-q", "check-update"],
+        capture_output=True, text=True, timeout=30,
+    )
+    out: List[Update] = []
+    for line in (proc.stdout or "").splitlines():
+        line = line.strip()
+        if not line or line.startswith("Last metadata") or line.startswith("Obsoleting"):
+            continue
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        # Format: name  version  repo
+        name, new_version, repo = parts[0], parts[1], parts[2]
+        is_security = "security" in repo.lower()
+        out.append(Update(
+            name=name, current_version="", new_version=new_version,
+            is_security=is_security, repo=repo,
+        ))
+    return out
+
+
+def _run_yum_check_update() -> None:
+    subprocess.run(
+        ["yum", "-q", "check-update"],
+        capture_output=True, text=True, timeout=60,
+    )
+
+
+def _parse_yum_check_update() -> List[Update]:
+    proc = subprocess.run(
+        ["yum", "-q", "check-update"],
+        capture_output=True, text=True, timeout=30,
+    )
+    out: List[Update] = []
+    for line in (proc.stdout or "").splitlines():
+        line = line.strip()
+        if not line or line.startswith("Last metadata") or line.startswith("Obsoleting"):
+            continue
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        name, new_version, repo = parts[0], parts[1], parts[2]
+        is_security = "security" in repo.lower()
+        out.append(Update(
+            name=name, current_version="", new_version=new_version,
+            is_security=is_security, repo=repo,
+        ))
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Install
+# ---------------------------------------------------------------------------
+
+# Module-level install jobs, keyed by a job id
+_JOBS_LOCK = threading.Lock()
+_JOBS: dict = {}
+
+
+def install_packages(packages: List[str], manager: Optional[str] = None,
+                     on_done: Optional[Callable[[str, bool, str], None]] = None) -> str:
+    """Start an install in the background. Returns a job id.
+
+    The job's progress is exposed via :func:`get_job`. When done, the
+    ``on_done(job_id, success, output)`` callback is invoked.
+    """
+    mngr = manager or detect_manager()
+    job_id = f"job-{int(time.time() * 1000)}"
+    log_path = _create_log_path(job_id)
+    job = {
+        "id": job_id,
+        "manager": mngr,
+        "packages": list(packages),
+        "started_at": time.time(),
+        "ended_at": 0.0,
+        "success": False,
+        "log_path": log_path,
+        "tail": "",
+    }
+    with _JOBS_LOCK:
+        _JOBS[job_id] = job
+    t = threading.Thread(
+        target=_run_install, args=(job, on_done), daemon=True,
+        name=f"pkg-install-{job_id}",
+    )
+    t.start()
+    return job_id
+
+
+def _create_log_path(job_id: str) -> str:
+    base = os.path.expanduser("~/.server-services-manager/installs")
+    os.makedirs(base, exist_ok=True)
+    return os.path.join(base, f"{job_id}.log")
+
+
+def get_job(job_id: str) -> Optional[dict]:
+    with _JOBS_LOCK:
+        job = _JOBS.get(job_id)
+        if not job:
+            return None
+        out = dict(job)
+    if os.path.exists(out["log_path"]):
+        try:
+            with open(out["log_path"], "r", errors="replace") as f:
+                # Last 4KB for the polled tail
+                f.seek(0, os.SEEK_END)
+                size = f.tell()
+                f.seek(max(0, size - 4096))
+                out["tail"] = f.read()
+                out["log_size"] = size
+        except OSError:
+            out["tail"] = ""
+            out["log_size"] = 0
+    else:
+        out["tail"] = ""
+        out["log_size"] = 0
+    return out
+
+
+def list_jobs(limit: int = 20) -> List[dict]:
+    with _JOBS_LOCK:
+        jobs = sorted(_JOBS.values(), key=lambda j: j["started_at"], reverse=True)[:limit]
+    out = []
+    for job in jobs:
+        d = dict(job)
+        d.pop("log_path", None)
+        d["running"] = d["ended_at"] == 0
+        out.append(d)
+    return out
+
+
+def _run_install(job: dict, on_done: Optional[Callable]) -> None:
+    mngr = job["manager"]
+    packages = job["packages"]
+    log_path = job["log_path"]
+    success = False
+    try:
+        if not packages:
+            _append_log(log_path, "no packages specified\n")
+            with _JOBS_LOCK:
+                job["ended_at"] = time.time()
+                job["success"] = False
+            return
+        if mngr == "apt":
+            cmd = ["sudo", "-n", "apt-get", "install", "-y"] + packages
+            # Probe whether sudo will work without a password; if it needs
+            # one, fail fast with a clear message rather than hanging.
+            probe = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            if probe.returncode != 0 and "password" in (probe.stderr or "").lower():
+                _append_log(log_path, "sudo requires a password; cannot install unattended.\n")
+                with _JOBS_LOCK:
+                    job["ended_at"] = time.time()
+                    job["success"] = False
+                return
+            if probe.returncode == 0:
+                # Probe may have actually installed (e.g. packages already
+                # up to date) — but typically it just exited because it
+                # saw a "Do you want to continue?" prompt. Re-run with
+                # DEBIAN_FRONTEND=noninteractive and -y to actually install.
+                cmd = ["sudo", "-n", "apt-get", "install", "-y",
+                       "-o", "Dpkg::Options::=--force-confdef",
+                       "-o", "Dpkg::Options::=--force-confold"] + packages
+        elif mngr in ("dnf", "yum"):
+            cmd = [mngr, "install", "-y"] + packages
+        else:
+            _append_log(log_path, f"unsupported manager: {mngr}\n")
+            return
+        with open(log_path, "w") as logf:
+            proc = subprocess.Popen(cmd, stdout=logf, stderr=subprocess.STDOUT, text=True)
+            proc.wait()
+            success = proc.returncode == 0
+        with _JOBS_LOCK:
+            job["ended_at"] = time.time()
+            job["success"] = success
+    except Exception as e:  # noqa: BLE001
+        _append_log(log_path, f"\n[error] {e}\n")
+        with _JOBS_LOCK:
+            job["ended_at"] = time.time()
+            job["success"] = False
+    finally:
+        if on_done is not None:
+            try:
+                on_done(job["id"], success, "")
+            except Exception:  # noqa: BLE001
+                pass
+
+
+def _append_log(path: str, line: str) -> None:
+    try:
+        with open(path, "a") as f:
+            f.write(line)
+    except OSError:
+        pass

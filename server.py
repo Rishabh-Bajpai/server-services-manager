@@ -21,6 +21,7 @@ from app.log_streamer import get_streamer
 from app import cron_manager
 from app import docker_manager
 from app import alert_log
+from app import package_manager
 from app.health import HealthCheck, HealthMonitor
 from app.notifier import build_notifiers, Event as HealthEvent
 from app import activity
@@ -1472,6 +1473,78 @@ def api_alerts_export():
         csv, mimetype="text/csv",
         headers={"Content-Disposition": 'attachment; filename="alerts.csv"'},
     )
+
+
+# Package updates
+@app.route('/packages')
+def packages_page():
+    return render_template('packages.html')
+
+
+@app.route('/api/packages/manager')
+def api_packages_manager():
+    return jsonify({"manager": package_manager.detect_manager()})
+
+
+@app.route('/api/packages/updates', methods=['GET'])
+def api_packages_updates_list():
+    state = package_manager.get_state()
+    if state is None:
+        return jsonify({
+            "manager": package_manager.detect_manager(),
+            "fetched_at": 0,
+            "fetched_human": "never",
+            "is_stale": True,
+            "last_error": "",
+            "updates": [],
+            "count": 0,
+            "security_count": 0,
+            "needs_refresh": True,
+        })
+    d = state.to_dict()
+    d["needs_refresh"] = state.is_stale
+    return jsonify(d)
+
+
+@app.route('/api/packages/refresh', methods=['POST'])
+def api_packages_refresh():
+    state = package_manager.refresh()
+    activity.log("packages.refresh", target=state.manager, status="ok" if not state.last_error else "error",
+                 detail=state.last_error[:200] if state.last_error else "",
+                 ip=request.remote_addr or "")
+    return jsonify(state.to_dict())
+
+
+@app.route('/api/packages/install', methods=['POST'])
+def api_packages_install():
+    data = request.get_json(silent=True) or {}
+    packages = data.get('packages', [])
+    if not isinstance(packages, list) or not packages:
+        return jsonify({"error": "no packages specified"}), 400
+    # Sanitize package names: only [A-Za-z0-9._+:\-]
+    import re
+    safe = []
+    for p in packages:
+        if not isinstance(p, str) or not re.match(r'^[A-Za-z0-9._+:\-]+$', p):
+            return jsonify({"error": f"invalid package name: {p!r}"}), 400
+        safe.append(p)
+    job_id = package_manager.install_packages(safe)
+    activity.log("packages.install", target=job_id, status="ok",
+                 detail=",".join(safe), ip=request.remote_addr or "")
+    return jsonify({"job_id": job_id, "packages": safe})
+
+
+@app.route('/api/packages/jobs/<job_id>')
+def api_packages_job(job_id):
+    job = package_manager.get_job(job_id)
+    if job is None:
+        return jsonify({"error": "not_found"}), 404
+    return jsonify(job)
+
+
+@app.route('/api/packages/jobs', methods=['GET'])
+def api_packages_jobs_list():
+    return jsonify({"jobs": package_manager.list_jobs()})
 
 
 @app.route('/api/notifications/state', methods=['GET'])

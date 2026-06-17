@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Package Updates - Server Services Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --border-subtle: #1e1e2a;
+            --border-active: #2d2d3a;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-purple: #8b5cf6;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+        * { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        code, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+        body {
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(ellipse at top left, rgba(16, 185, 129, 0.04) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(245, 158, 11, 0.04) 0%, transparent 50%);
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+
+        .badge {
+            display: inline-flex; align-items: center; gap: 0.25rem;
+            padding: 0.125rem 0.5rem; border-radius: 0.375rem;
+            font-size: 0.6875rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .badge-green { background: rgba(16,185,129,0.12); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.25); }
+        .badge-red { background: rgba(239,68,68,0.12); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.25); }
+        .badge-blue { background: rgba(59,130,246,0.12); color: var(--accent-blue); border: 1px solid rgba(59,130,246,0.25); }
+        .badge-yellow { background: rgba(245,158,11,0.12); color: var(--accent-yellow); border: 1px solid rgba(245,158,11,0.25); }
+        .badge-gray { background: rgba(100,116,139,0.12); color: var(--text-secondary); border: 1px solid rgba(100,116,139,0.25); }
+
+        .panel-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+        }
+
+        .summary-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            padding: 1rem 1.25rem;
+            display: flex; flex-direction: column; gap: 0.25rem;
+        }
+        .summary-value {
+            font-size: 1.5rem; font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .summary-label {
+            font-size: 0.6875rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-muted);
+        }
+
+        .btn {
+            display: inline-flex; align-items: center; gap: 0.375rem;
+            padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+            font-size: 0.8125rem; font-weight: 600;
+            background: var(--bg-secondary); border: 1px solid var(--border-subtle);
+            color: var(--text-primary); cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .btn:hover { background: var(--border-subtle); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--accent-green); color: #04231a; border-color: var(--accent-green); }
+        .btn-primary:hover { background: #34d399; }
+        .btn-danger { background: rgba(239,68,68,0.15); color: var(--accent-red); border-color: rgba(239,68,68,0.3); }
+        .btn-danger:hover { background: rgba(239,68,68,0.25); }
+
+        .filter-tab {
+            padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+            font-size: 0.8125rem; font-weight: 600;
+            color: var(--text-secondary); background: transparent;
+            border: 1px solid var(--border-subtle);
+            cursor: pointer; transition: all 0.15s ease;
+        }
+        .filter-tab:hover { background: rgba(255,255,255,0.04); color: var(--text-primary); }
+        .filter-tab.active { background: rgba(16,185,129,0.12); color: var(--accent-green); border-color: rgba(16,185,129,0.35); }
+
+        .search-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.5rem 0.875rem 0.5rem 2.25rem;
+            color: var(--text-primary);
+            font-size: 0.8125rem; outline: none;
+            transition: border-color 0.15s; width: 100%;
+        }
+        .search-input:focus { border-color: var(--accent-green); }
+
+        .table-wrap { overflow-x: auto; }
+        .data-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+        .data-table th {
+            text-align: left; font-size: 0.6875rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.05em;
+            color: var(--text-muted); padding: 0.625rem 0.875rem;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .data-table td {
+            padding: 0.625rem 0.875rem;
+            border-bottom: 1px solid var(--border-subtle);
+            font-size: 0.8125rem; color: var(--text-primary);
+            vertical-align: middle;
+        }
+        .data-table tbody tr:hover td { background: rgba(255,255,255,0.02); }
+
+        .stale-banner {
+            background: rgba(245,158,11,0.08);
+            border: 1px solid rgba(245,158,11,0.3);
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem;
+            color: var(--accent-yellow);
+            font-size: 0.8125rem;
+        }
+        .error-banner {
+            background: rgba(239,68,68,0.08);
+            border: 1px solid rgba(239,68,68,0.3);
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem;
+            color: var(--accent-red);
+            font-size: 0.8125rem;
+        }
+
+        .log-box {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            line-height: 1.5;
+            color: var(--text-primary);
+            max-height: 32rem;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 12px; height: 12px;
+            border: 2px solid var(--border-subtle);
+            border-top-color: var(--accent-green);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+
+        .empty-state {
+            text-align: center; padding: 3rem 1.5rem;
+            color: var(--text-muted);
+        }
+
+        .toast-container {
+            position: fixed; top: 1rem; right: 1rem;
+            z-index: 100; display: flex; flex-direction: column; gap: 0.5rem;
+        }
+        .toast {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem; font-size: 0.8125rem;
+            color: var(--text-primary);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            animation: fadeIn 0.2s ease-out;
+        }
+        .toast.success { border-left: 3px solid var(--accent-green); }
+        .toast.error { border-left: 3px solid var(--accent-red); }
+        .toast.info { border-left: 3px solid var(--accent-blue); }
+    </style>
+</head>
+<body class="text-[var(--text-primary)] min-h-screen">
+    <header class="border-b border-[var(--border-subtle)] bg-[var(--bg-card)]/60 backdrop-blur-md sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+            <div class="flex items-center gap-3 min-w-0">
+                <a href="/" class="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+                    <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                </a>
+                <i data-lucide="package" class="w-5 h-5 text-[var(--accent-green)] flex-shrink-0"></i>
+                <h1 class="text-base sm:text-lg font-semibold truncate">Package Updates</h1>
+                <span id="manager-badge" class="hidden sm:inline-flex badge badge-green"></span>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="btn-refresh" class="btn btn-primary" onclick="doRefresh()">
+                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                    <span>Refresh</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+        <div id="banners"></div>
+
+        <section id="summary-cards" class="grid grid-cols-2 sm:grid-cols-3 gap-3"></section>
+
+        <section class="panel-card">
+            <div class="p-3 border-b border-[var(--border-subtle)] flex flex-wrap items-center gap-2">
+                <div class="flex gap-1">
+                    <button class="filter-tab active" data-filter="all" onclick="setFilter('all', this)">All</button>
+                    <button class="filter-tab" data-filter="security" onclick="setFilter('security', this)">Security only</button>
+                </div>
+                <div class="relative flex-1 min-w-[12rem]">
+                    <i data-lucide="search" class="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+                    <input id="search" type="text" class="search-input" placeholder="Filter by name..." oninput="renderRows()">
+                </div>
+                <label class="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer whitespace-nowrap">
+                    <input id="select-all" type="checkbox" onchange="toggleSelectAll(this.checked)">
+                    Select all
+                </label>
+                <button id="btn-install" class="btn btn-primary" onclick="doInstall()" disabled>
+                    <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                    Install (<span id="install-count">0</span>)
+                </button>
+            </div>
+            <div class="table-wrap">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 2.5rem" class="text-center"><input id="header-check" type="checkbox" onchange="toggleSelectAll(this.checked)"></th>
+                            <th style="width: 32%">Package</th>
+                            <th style="width: 22%">Current</th>
+                            <th style="width: 22%">New</th>
+                            <th style="width: 20%">Repo</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rows"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="jobs-section" class="panel-card hidden">
+            <div class="p-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
+                <h2 class="text-sm font-semibold flex items-center gap-2">
+                    <i data-lucide="terminal" class="w-4 h-4 text-[var(--accent-green)]"></i>
+                    Install progress
+                </h2>
+                <span id="job-status" class="text-xs text-[var(--text-muted)]"></span>
+            </div>
+            <div class="p-4">
+                <div class="flex flex-wrap items-center gap-3 mb-3 text-xs">
+                    <span class="font-mono"><span class="text-[var(--text-muted)]">job:</span> <span id="job-id" class="text-[var(--text-primary)]"></span></span>
+                    <span class="font-mono"><span class="text-[var(--text-muted)]">packages:</span> <span id="job-packages" class="text-[var(--text-primary)]"></span></span>
+                    <span id="job-spinner" class="hidden"><span class="spinner"></span> running</span>
+                </div>
+                <div id="job-log" class="log-box"></div>
+            </div>
+        </section>
+    </main>
+
+    <div id="toasts" class="toast-container"></div>
+
+    <script>
+    let allUpdates = [];
+    let currentFilter = 'all';
+    let selected = new Set();
+    let activeJobId = null;
+    let jobPollTimer = null;
+
+    function toast(message, kind) {
+        kind = kind || 'info';
+        const el = document.createElement('div');
+        el.className = 'toast ' + kind;
+        el.textContent = message;
+        document.getElementById('toasts').appendChild(el);
+        setTimeout(() => el.remove(), 4000);
+    }
+    function escAttr(s) { return String(s == null ? '' : s).replace(/[<>"&]/g, c => ({'<':'&lt;','>':'&gt;','"':'&quot;','&':'&amp;'}[c])); }
+    function fmtAgo(ts) {
+        if (!ts) return '—';
+        const sec = Math.floor(Date.now() / 1000 - ts);
+        if (sec < 60) return sec + 's ago';
+        if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
+        if (sec < 86400) return Math.floor(sec / 3600) + 'h ago';
+        return Math.floor(sec / 86400) + 'd ago';
+    }
+    function api(path, opts) {
+        return fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts || {}))
+            .then(r => r.json().then(data => ({ ok: r.ok, status: r.status, data })));
+    }
+
+    function setFilter(f, btn) {
+        currentFilter = f;
+        document.querySelectorAll('.filter-tab').forEach(b => b.classList.toggle('active', b === btn));
+        renderRows();
+    }
+    function toggleSelectAll(checked) {
+        const filtered = filteredRows();
+        if (checked) filtered.forEach(u => selected.add(u.name));
+        else filtered.forEach(u => selected.delete(u.name));
+        renderRows();
+        updateInstallButton();
+    }
+    function toggleRow(name, checked) {
+        if (checked) selected.add(name); else selected.delete(name);
+        document.getElementById('header-check').checked = false;
+        document.getElementById('select-all').checked = false;
+        updateInstallButton();
+    }
+    function filteredRows() {
+        const q = (document.getElementById('search').value || '').toLowerCase();
+        return allUpdates.filter(u =>
+            (currentFilter !== 'security' || u.is_security) &&
+            (!q || u.name.toLowerCase().includes(q))
+        );
+    }
+    function updateInstallButton() {
+        const count = selected.size;
+        document.getElementById('install-count').textContent = count;
+        document.getElementById('btn-install').disabled = count === 0;
+    }
+
+    function renderBanners(state) {
+        const banners = document.getElementById('banners');
+        if (!state.last_error) banners.innerHTML = '';
+        else banners.innerHTML = `<div class="error-banner mb-3">${escAttr(state.last_error)}</div>`;
+        if (state.is_stale && state.fetched_at) {
+            const existing = document.getElementById('stale-msg');
+            if (!existing) {
+                const el = document.createElement('div');
+                el.id = 'stale-msg';
+                el.className = 'stale-banner mb-3';
+                el.innerHTML = `<div class="flex items-center gap-2"><i data-lucide="alert-triangle" class="w-4 h-4"></i> Cache is older than 1 hour. Click Refresh to fetch the latest list.</div>`;
+                banners.appendChild(el);
+                lucide.createIcons();
+            }
+        } else {
+            const existing = document.getElementById('stale-msg');
+            if (existing) existing.remove();
+        }
+    }
+
+    function renderSummary(state) {
+        const cards = document.getElementById('summary-cards');
+        cards.innerHTML = `
+            <div class="summary-card">
+                <div class="summary-label">Total updates</div>
+                <div class="summary-value">${state.count || 0}</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Security</div>
+                <div class="summary-value" style="color:var(--accent-red)">${state.security_count || 0}</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Last refresh</div>
+                <div class="summary-value text-base" style="font-size:0.95rem">${state.fetched_at ? fmtAgo(state.fetched_at) : 'never'}</div>
+            </div>`;
+    }
+
+    function renderRows() {
+        const rows = filteredRows();
+        const tbody = document.getElementById('rows');
+        if (!rows.length) {
+            tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state">No updates match this filter. Click Refresh to fetch the latest list.</div></td></tr>`;
+            return;
+        }
+        tbody.innerHTML = rows.map(u => {
+            const secBadge = u.is_security
+                ? '<span class="badge badge-red"><i data-lucide="shield-alert" style="width:10px;height:10px"></i>security</span>'
+                : '';
+            const checked = selected.has(u.name) ? 'checked' : '';
+            return `<tr>
+                <td class="text-center"><input type="checkbox" ${checked} onchange="toggleRow('${escAttr(u.name)}', this.checked)"></td>
+                <td><div class="font-semibold font-mono">${escAttr(u.name)}</div></td>
+                <td class="font-mono text-xs text-[var(--text-muted)]">${escAttr(u.current_version) || '—'}</td>
+                <td class="font-mono text-xs">${escAttr(u.new_version)}</td>
+                <td class="text-xs">${escAttr(u.repo) || ''} ${secBadge}</td>
+            </tr>`;
+        }).join('');
+        lucide.createIcons();
+    }
+
+    function loadState() {
+        api('/api/packages/updates').then(({ data }) => {
+            allUpdates = data.updates || [];
+            document.getElementById('manager-badge').textContent = data.manager || 'unknown';
+            renderBanners(data);
+            renderSummary(data);
+            renderRows();
+        });
+    }
+
+    function doRefresh() {
+        const btn = document.getElementById('btn-refresh');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> <span>Refreshing…</span>';
+        api('/api/packages/refresh', { method: 'POST' }).then(({ data }) => {
+            if (data.last_error) {
+                toast('refresh: ' + data.last_error, 'error');
+            } else {
+                toast('refreshed: ' + data.count + ' updates', 'success');
+            }
+            loadState();
+        }).finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i><span>Refresh</span>';
+            lucide.createIcons();
+        });
+    }
+
+    function doInstall() {
+        if (selected.size === 0) return;
+        const pkgs = Array.from(selected);
+        api('/api/packages/install', { method: 'POST', body: JSON.stringify({ packages: pkgs }) })
+            .then(({ ok, data }) => {
+                if (!ok) { toast(data.error || 'install failed', 'error'); return; }
+                activeJobId = data.job_id;
+                document.getElementById('jobs-section').classList.remove('hidden');
+                document.getElementById('job-id').textContent = data.job_id;
+                document.getElementById('job-packages').textContent = data.packages.join(', ');
+                document.getElementById('job-log').textContent = '';
+                document.getElementById('job-spinner').classList.remove('hidden');
+                document.getElementById('job-status').textContent = '';
+                pollJob();
+            });
+    }
+
+    function pollJob() {
+        if (!activeJobId) return;
+        api('/api/packages/jobs/' + activeJobId).then(({ data }) => {
+            if (!data) return;
+            document.getElementById('job-log').textContent = data.tail || '';
+            const log = document.getElementById('job-log');
+            log.scrollTop = log.scrollHeight;
+            if (data.ended_at && data.ended_at !== 0) {
+                document.getElementById('job-spinner').classList.add('hidden');
+                if (data.success) {
+                    document.getElementById('job-status').innerHTML = '<span class="badge badge-green"><i data-lucide="check" style="width:10px;height:10px"></i>success</span>';
+                    toast('install completed', 'success');
+                } else {
+                    document.getElementById('job-status').innerHTML = '<span class="badge badge-red"><i data-lucide="x" style="width:10px;height:10px"></i>failed</span>';
+                    toast('install failed (see log)', 'error');
+                }
+                lucide.createIcons();
+                if (jobPollTimer) { clearInterval(jobPollTimer); jobPollTimer = null; }
+                return;
+            }
+            if (!jobPollTimer) jobPollTimer = setInterval(pollJob, 1000);
+        });
+    }
+
+    lucide.createIcons();
+    loadState();
+    </script>
+</body>
+</html>
