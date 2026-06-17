@@ -47,7 +47,7 @@ terminal, file manager, control panel, auth, responsive UI.
 
 ---
 
-## Phases 18–25 (✅ Delivered)
+## Phases 18–26 (✅ Delivered)
 
 | # | Feature | Status |
 |---|---------|--------|
@@ -59,24 +59,14 @@ terminal, file manager, control panel, auth, responsive UI.
 | 23 | Backup scheduler (`app/backup_manager.py`, `/backups`) | ✅ |
 | 24 | API documentation (`app/openapi.py`, `/openapi.json`, `/docs/`) | ✅ |
 | 25 | Disk usage analyzer (`app/disk_manager.py`, `/disk`) | ✅ |
+| 26 | SSH key manager (`app/ssh_manager.py`, `/ssh`) | ✅ |
 
 ---
 
-## Phase 26 — SSH Key Manager (🔜 Next)
+## Phase 27 — Multi-host Cluster Management (🔜 Next)
 
-> **User says:** "Add/remove authorized keys via UI."
-
-- New `app/ssh_manager.py` — read/write `~/.ssh/authorized_keys`
-- `GET /api/ssh/keys` — list keys (comment, fingerprint, algorithm)
-- `POST /api/ssh/keys` — add key (paste public key text)
-- `DELETE /api/ssh/keys/<id>` — remove key (by comment/fingerprint)
-- Upload from file OR paste from clipboard
-- Warning before removing last remaining key (lockout protection)
-- **Tests:** key parsing (RFC 4253), add/remove round-trip, lockout guard
-
----
-
-## Phase 27 — Multi-host Cluster Management
+> **User says:** "Link multiple devices all running this app on the local
+> network, see their state in one dashboard."
 
 > **User says:** "Link multiple devices all running this app on the local
 > network, see their state in one dashboard."

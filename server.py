@@ -25,6 +25,7 @@ from app import package_manager
 from app import firewall_manager
 from app import backup_manager
 from app import disk_manager
+from app import ssh_manager
 from app import openapi as openapi_mod
 from app.health import HealthCheck, HealthMonitor
 from app.notifier import build_notifiers, Event as HealthEvent
@@ -2121,6 +2122,107 @@ def api_disk_breadcrumb():
     except disk_manager.DiskError as e:
         return jsonify({"error": str(e), "code": e.code}), 403
     return jsonify({"breadcrumb": crumbs})
+
+
+# SSH authorized_keys manager (Phase 26)
+@app.route('/ssh')
+def ssh_page():
+    return render_template('ssh.html')
+
+
+@app.route('/api/ssh/keys', methods=['GET'])
+@openapi_mod.describe(
+    summary="List authorized SSH keys",
+    description=(
+        "Reads ~/.ssh/authorized_keys and returns each key's "
+        "algorithm, SHA256 fingerprint, comment, and any "
+        "sshd-style options prefix. Returns an empty list when "
+        "the file doesn't exist (which is normal for a fresh "
+        "user)."
+    ),
+    tag="SSH Keys",
+)
+def api_ssh_keys_list():
+    try:
+        return jsonify(ssh_manager.list_keys())
+    except ssh_manager.SSHKeyError as e:
+        return jsonify({"error": str(e), "code": e.code}), 500
+
+
+@app.route('/api/ssh/keys', methods=['POST'])
+@openapi_mod.describe(
+    summary="Add an authorized SSH key",
+    description=(
+        "Appends a key to ~/.ssh/authorized_keys. The request "
+        "body must include a `key` field with the full public-"
+        "key line (algorithm + base64 + optional comment). "
+        "Returns 409 if the fingerprint is already present."
+    ),
+    tag="SSH Keys",
+)
+def api_ssh_keys_add():
+    payload = request.get_json(silent=True) or {}
+    key_text = (payload.get("key") or "").strip()
+    if not key_text:
+        return jsonify({"error": "missing 'key' field", "code": "empty_input"}), 400
+    try:
+        parsed = ssh_manager.add_key(key_text)
+    except ssh_manager.SSHKeyError as e:
+        if e.code == "ssh_dir_missing":
+            activity.log(
+                "ssh.add_key", target="", status="error",
+                detail=str(e), ip=request.remote_addr or "",
+            )
+        if e.code == "duplicate":
+            return jsonify({"error": str(e), "code": e.code}), 409
+        if e.code in ("empty_input", "invalid_format", "invalid_base64", "unknown_algorithm"):
+            return jsonify({"error": str(e), "code": e.code}), 400
+        return jsonify({"error": str(e), "code": e.code}), 500
+    except Exception as e:  # noqa: BLE001
+        logger.exception(f"ssh add_key failed")
+        return jsonify({"error": str(e), "code": "internal"}), 500
+    activity.log(
+        "ssh.add_key", target=parsed.get("fingerprint", ""), status="ok",
+        detail=parsed.get("comment", ""), ip=request.remote_addr or "",
+    )
+    return jsonify({"key": parsed})
+
+
+@app.route('/api/ssh/keys/<path:identifier>', methods=['DELETE'])
+@openapi_mod.describe(
+    summary="Remove an authorized SSH key",
+    description=(
+        "Removes a key by its fingerprint or full comment. By "
+        "default refuses to delete the last remaining key "
+        "(`lockout_risk` -> 409). Pass `confirm_last=true` in "
+        "the JSON body to override — only do this if you have "
+        "another way into the box."
+    ),
+    tag="SSH Keys",
+)
+def api_ssh_keys_remove(identifier):
+    payload = request.get_json(silent=True) or {}
+    confirm_last = bool(payload.get("confirm_last", False))
+    try:
+        result = ssh_manager.remove_key(identifier, confirm_last=confirm_last)
+    except ssh_manager.SSHKeyError as e:
+        if e.code == "lockout_risk":
+            return jsonify({"error": str(e), "code": e.code,
+                            "requires_confirm": True}), 409
+        if e.code == "not_found":
+            return jsonify({"error": str(e), "code": e.code}), 404
+        if e.code == "empty_identifier":
+            return jsonify({"error": str(e), "code": e.code}), 400
+        return jsonify({"error": str(e), "code": e.code}), 500
+    except Exception as e:  # noqa: BLE001
+        logger.exception(f"ssh remove_key failed")
+        return jsonify({"error": str(e), "code": "internal"}), 500
+    activity.log(
+        "ssh.remove_key", target=identifier, status="ok",
+        detail=f"removed={result['removed']} remaining={result['remaining']}",
+        ip=request.remote_addr or "",
+    )
+    return jsonify(result)
 
 
 @app.route('/api/packages/manager')
