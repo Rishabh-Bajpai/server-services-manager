@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Files - Server Services Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --border-subtle: #1e1e2a;
+            --border-active: #2d2d3a;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+        * { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        code, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+        body {
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(ellipse at top left, rgba(245, 158, 11, 0.04) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(6, 182, 212, 0.04) 0%, transparent 50%);
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        .badge {
+            display: inline-flex; align-items: center; gap: 0.25rem;
+            padding: 0.125rem 0.5rem; border-radius: 0.375rem;
+            font-size: 0.6875rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .badge-green { background: rgba(16,185,129,0.12); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.25); }
+        .badge-red { background: rgba(239,68,68,0.12); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.25); }
+        .badge-blue { background: rgba(59,130,246,0.12); color: var(--accent-blue); border: 1px solid rgba(59,130,246,0.25); }
+        .badge-yellow { background: rgba(245,158,11,0.12); color: var(--accent-yellow); border: 1px solid rgba(245,158,11,0.25); }
+        .badge-gray { background: rgba(100,116,139,0.12); color: var(--text-secondary); border: 1px solid rgba(100,116,139,0.25); }
+        .panel-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+        }
+        .btn {
+            display: inline-flex; align-items: center; gap: 0.375rem;
+            padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+            font-size: 0.8125rem; font-weight: 600;
+            background: var(--bg-secondary); border: 1px solid var(--border-subtle);
+            color: var(--text-primary); cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .btn:hover { background: var(--border-subtle); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--accent-blue); color: #061a30; border-color: var(--accent-blue); }
+        .btn-primary:hover { background: #60a5fa; }
+        .btn-danger { background: rgba(239,68,68,0.15); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.3); }
+        .btn-danger:hover { background: rgba(239,68,68,0.25); }
+        .text-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.5rem 0.875rem;
+            color: var(--text-primary);
+            font-size: 0.8125rem; outline: none; width: 100%;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .text-input:focus { border-color: var(--accent-blue); }
+        .empty-state {
+            padding: 2rem 1rem; text-align: center;
+            color: var(--text-muted); font-size: 0.875rem;
+        }
+        .crumb {
+            display: inline-flex; align-items: center; gap: 0.25rem;
+            padding: 0.25rem 0.5rem; border-radius: 0.375rem;
+            font-size: 0.8125rem; font-family: 'JetBrains Mono', monospace;
+            color: var(--text-secondary); cursor: pointer;
+        }
+        .crumb:hover { background: var(--bg-secondary); color: var(--text-primary); }
+        .crumb.current { color: var(--text-primary); background: var(--bg-secondary); }
+        .crumb-sep { color: var(--text-muted); font-size: 0.75rem; user-select: none; }
+        .tree {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8125rem;
+            user-select: none;
+        }
+        .tree-row {
+            display: flex; align-items: center; gap: 0.375rem;
+            padding: 0.25rem 0.5rem; border-radius: 0.25rem;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .tree-row:hover { background: var(--bg-secondary); }
+        .tree-row.current { background: rgba(59, 130, 246, 0.15); color: var(--text-primary); }
+        .tree-row .name {
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .tree-children { padding-left: 1rem; border-left: 1px solid var(--border-subtle); margin-left: 0.5rem; }
+        .item-row {
+            display: grid;
+            grid-template-columns: auto 1fr auto auto auto;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem 0.875rem;
+            border-bottom: 1px solid var(--border-subtle);
+            transition: background 0.1s ease;
+            cursor: pointer;
+        }
+        .item-row:hover { background: var(--bg-secondary); }
+        .item-row:last-child { border-bottom: none; }
+        .item-row.selected { background: rgba(59, 130, 246, 0.12); }
+        .item-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8125rem;
+            color: var(--text-primary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .item-size {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+        .item-mode {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6875rem;
+            color: var(--text-muted);
+        }
+        .preview-pane {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            max-height: 600px;
+            overflow: auto;
+        }
+        .preview-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-primary);
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .preview-image {
+            max-width: 100%;
+            max-height: 480px;
+            border-radius: 0.375rem;
+        }
+        .toast-container {
+            position: fixed; bottom: 1rem; right: 1rem; z-index: 50;
+            display: flex; flex-direction: column; gap: 0.5rem;
+        }
+        .toast {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.625rem 0.875rem;
+            font-size: 0.8125rem;
+            color: var(--text-primary);
+            min-width: 240px; max-width: 360px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            animation: fadeIn 0.2s ease-out forwards;
+        }
+        .toast.error { border-left: 3px solid var(--accent-red); }
+        .toast.success { border-left: 3px solid var(--accent-green); }
+        .toast.info { border-left: 3px solid var(--accent-blue); }
+        .modal-backdrop {
+            position: fixed; inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 100;
+            display: none;
+            align-items: center; justify-content: center;
+        }
+        .modal-backdrop.open { display: flex; }
+        .modal {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            max-width: 480px; width: 90%;
+        }
+    </style>
+</head>
+<body class="text-[var(--text-primary)] min-h-screen">
+    <header class="border-b border-[var(--border-subtle)] bg-[var(--bg-card)]/60 backdrop-blur-md sticky top-0 z-30">
+        <div class="max-w-[1600px] mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+            <div class="flex items-center gap-3 min-w-0">
+                <a href="/" class="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors" title="Back to dashboard">
+                    <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                </a>
+                <i data-lucide="folder-open" class="w-5 h-5 text-[var(--accent-yellow)] flex-shrink-0"></i>
+                <h1 class="text-base sm:text-lg font-semibold truncate">Files</h1>
+            </div>
+            <div class="flex items-center gap-2 flex-1 max-w-md">
+                <div class="relative w-full">
+                    <i data-lucide="search" class="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"></i>
+                    <input id="search-input" class="text-input pl-9" placeholder="Search filenames…" oninput="onSearchInput(this.value)">
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button class="btn" onclick="uploadFile()" title="Upload to current dir">
+                    <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+                    <span class="hidden sm:inline">Upload</span>
+                </button>
+                <button class="btn" onclick="downloadZip()" id="btn-zip" disabled title="Download selected as zip">
+                    <i data-lucide="archive" class="w-3.5 h-3.5"></i>
+                    <span class="hidden sm:inline">Zip</span>
+                </button>
+                <button class="btn btn-danger" onclick="deleteSelected()" id="btn-delete" disabled title="Delete selected">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    <span class="hidden sm:inline">Delete</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-[1600px] mx-auto px-4 sm:px-6 py-4">
+        <div class="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4">
+            <aside class="panel-card p-3 max-h-[78vh] overflow-y-auto">
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Tree</h2>
+                    <button class="text-[var(--text-muted)] hover:text-[var(--text-primary)]" onclick="loadTree()" title="Refresh">
+                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                    </button>
+                </div>
+                <div id="tree" class="tree">
+                    <div class="empty-state">Loading…</div>
+                </div>
+            </aside>
+
+            <div class="space-y-3 min-w-0">
+                <section class="panel-card p-3">
+                    <div id="breadcrumb" class="flex flex-wrap items-center gap-1 min-h-[2rem]">
+                        <span class="empty-state py-1">~</span>
+                    </div>
+                </section>
+
+                <div class="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-4">
+                    <section class="panel-card">
+                        <div class="p-3 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2">
+                            <h2 class="text-sm font-semibold flex items-center gap-2">
+                                <i data-lucide="list" class="w-4 h-4 text-[var(--accent-yellow)]"></i>
+                                <span id="dir-name">~</span>
+                            </h2>
+                            <div class="text-xs text-[var(--text-muted)]" id="dir-stats">—</div>
+                        </div>
+                        <div id="items-list" class="max-h-[600px] overflow-y-auto">
+                            <div class="empty-state">Loading…</div>
+                        </div>
+                    </section>
+
+                    <section class="panel-card">
+                        <div class="p-3 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2">
+                            <h2 class="text-sm font-semibold flex items-center gap-2">
+                                <i data-lucide="eye" class="w-4 h-4 text-[var(--accent-cyan)]"></i>
+                                Preview
+                            </h2>
+                            <button class="text-[var(--text-muted)] hover:text-[var(--text-primary)]" onclick="closePreview()" title="Close preview">
+                                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                        <div id="preview-pane" class="preview-pane m-3 empty-state">
+                            Click a file to preview.
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="modal-backdrop" id="modal-perm" onclick="if(event.target===this) closePerm()">
+        <div class="modal">
+            <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
+                <i data-lucide="lock" class="w-5 h-5 text-[var(--accent-yellow)]"></i>
+                Change permissions
+            </h3>
+            <p class="text-xs text-[var(--text-secondary)] mb-2" id="perm-path">—</p>
+            <input id="perm-mode" class="text-input" placeholder="0644" value="0644">
+            <div id="perm-error" class="text-xs text-[var(--accent-red)] mt-2 hidden"></div>
+            <div class="flex justify-end gap-2 mt-4">
+                <button class="btn" onclick="closePerm()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitPerm()">Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <input type="file" id="upload-input" style="display:none" onchange="doUpload(this.files)">
+
+    <script>
+        let currentPath = '.';
+        let treeCache = null;
+        let searchTimeout = null;
+        let selected = new Set();  // paths of currently selected items
+
+        function api(url, opts = {}) {
+            return fetch(url, {
+                credentials: 'same-origin',
+                ...opts,
+                headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+            }).then(r => r.json().then(j => ({ status: r.status, ok: r.ok, data: j })));
+        }
+
+        function toast(message, kind = 'info', timeout = 4000) {
+            const c = document.getElementById('toast-container');
+            const t = document.createElement('div');
+            t.className = `toast ${kind}`;
+            t.textContent = message;
+            c.appendChild(t);
+            setTimeout(() => t.remove(), timeout);
+        }
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+        }
+
+        function humanizeSize(bytes) {
+            const n = Number(bytes) || 0;
+            if (n < 1024) return n + ' B';
+            const u = ['KB', 'MB', 'GB', 'TB', 'PB'];
+            let v = n / 1024;
+            for (const x of u) { if (v < 1024) return v.toFixed(1) + ' ' + x; v /= 1024; }
+            return v.toFixed(1) + ' EB';
+        }
+
+        function buildBreadcrumb() {
+            const wrap = document.getElementById('breadcrumb');
+            wrap.innerHTML = '';
+            const crumbs = [{ label: '~', path: '.' }];
+            if (currentPath && currentPath !== '.') {
+                const parts = currentPath.split('/');
+                let cur = '';
+                for (const p of parts) {
+                    if (!p) continue;
+                    cur = cur ? cur + '/' + p : p;
+                    crumbs.push({ label: p, path: cur });
+                }
+            }
+            crumbs.forEach((c, i) => {
+                if (i > 0) {
+                    const s = document.createElement('span');
+                    s.className = 'crumb-sep'; s.textContent = '/';
+                    wrap.appendChild(s);
+                }
+                const el = document.createElement('span');
+                el.className = 'crumb' + (i === crumbs.length - 1 ? ' current' : '');
+                el.textContent = c.label;
+                el.onclick = () => navigateTo(c.path);
+                wrap.appendChild(el);
+            });
+            document.getElementById('dir-name').textContent =
+                currentPath === '.' ? '~' : currentPath.split('/').pop();
+        }
+
+        function loadTree() {
+            api('/api/files/tree?path=.&depth=2').then(({ status, data }) => {
+                if (status >= 400) { toast(data.error || 'HTTP ' + status, 'error'); return; }
+                treeCache = data;
+                renderTree(data.entries || [], null);
+            });
+        }
+
+        function renderTree(entries, parentPath) {
+            const wrap = document.getElementById('tree');
+            if (!entries.length) {
+                wrap.innerHTML = '<div class="empty-state">Empty</div>';
+                return;
+            }
+            const rows = entries.filter(e => e.is_dir).map(e => {
+                const fullPath = parentPath ? parentPath + '/' + e.name : e.name;
+                return `<div class="tree-row" data-path="${escapeHtml(fullPath)}">
+                    <i data-lucide="folder" class="w-3.5 h-3.5 text-[var(--accent-blue)] flex-shrink-0"></i>
+                    <span class="name" title="${escapeHtml(e.name)}">${escapeHtml(e.name)}</span>
+                </div>`;
+            }).join('');
+            wrap.innerHTML = rows;
+            // Wire up clicks
+            wrap.querySelectorAll('.tree-row').forEach(row => {
+                row.onclick = () => {
+                    wrap.querySelectorAll('.tree-row').forEach(r => r.classList.remove('current'));
+                    row.classList.add('current');
+                    navigateTo(row.dataset.path);
+                };
+            });
+            lucide.createIcons();
+        }
+
+        function loadDir(path) {
+            api('/api/files?path=' + encodeURIComponent(path))
+                .then(({ status, data }) => {
+                    if (status >= 400) { toast(data.error || 'HTTP ' + status, 'error'); return; }
+                    renderItems(data);
+                });
+        }
+
+        function renderItems(data) {
+            const wrap = document.getElementById('items-list');
+            const items = data.files || [];
+            if (!items.length) {
+                wrap.innerHTML = '<div class="empty-state">Empty directory</div>';
+                document.getElementById('dir-stats').textContent = '0 items';
+                return;
+            }
+            const files = items.filter(i => !i.is_dir).length;
+            const dirs = items.length - files;
+            document.getElementById('dir-stats').textContent =
+                `${items.length} item${items.length === 1 ? '' : 's'} (${dirs} dir, ${files} file)`;
+            const rows = items.map(it => {
+                const isSel = selected.has(it.name);
+                const checked = isSel ? 'checked' : '';
+                const icon = it.is_dir ? 'folder' : 'file';
+                const color = it.is_dir ? 'var(--accent-blue)' : 'var(--accent-yellow)';
+                const click = it.is_dir
+                    ? `navigateTo('${escapeAttr(joinPath(currentPath, it.name))}')`
+                    : `previewFile('${escapeAttr(joinPath(currentPath, it.name))}')`;
+                return `<div class="item-row ${isSel ? 'selected' : ''}" onclick="${click}">
+                    <input type="checkbox" ${checked} onclick="event.stopPropagation(); toggleSelect('${escapeAttr(it.name)}', this.checked)" class="accent-[var(--accent-blue)]">
+                    <span class="item-name" title="${escapeHtml(it.name)}">
+                        <i data-lucide="${icon}" class="w-3.5 h-3.5 inline ${it.is_dir ? 'text-[var(--accent-blue)]' : ''}" style="color:${it.is_dir ? 'var(--accent-blue)' : 'var(--accent-yellow)'}"></i>
+                        ${escapeHtml(it.name)}
+                    </span>
+                    <span class="item-mode">${it.is_dir ? 'd' : '-'}${formatMode(it.mode)}</span>
+                    <span class="item-size">${it.is_dir ? '—' : humanizeSize(it.size)}</span>
+                    <button class="text-[var(--text-muted)] hover:text-[var(--accent-yellow)]" onclick="event.stopPropagation(); openPerm('${escapeAttr(joinPath(currentPath, it.name))}', '${it.mode}')" title="chmod">
+                        <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+                    </button>
+                </div>`;
+            }).join('');
+            wrap.innerHTML = rows;
+            lucide.createIcons();
+            updateButtons();
+        }
+
+        function formatMode(m) {
+            // rwxrwxrwx
+            const s = ['---', '--x', '-w-', '-wx', 'r--', 'r-x', 'rw-', 'rwx'];
+            const u = (m >> 6) & 7, g = (m >> 3) & 7, o = m & 7;
+            return s[u] + s[g] + s[o];
+        }
+
+        function joinPath(parent, name) {
+            if (parent === '.' || !parent) return name;
+            return parent + '/' + name;
+        }
+
+        function escapeAttr(s) { return String(s).replace(/'/g, "\\'"); }
+
+        function navigateTo(path) {
+            currentPath = path;
+            selected.clear();
+            closePreview();
+            buildBreadcrumb();
+            loadDir(path);
+        }
+
+        function toggleSelect(name, on) {
+            if (on) selected.add(name);
+            else selected.delete(name);
+            // Re-render to update checkbox state
+            loadDir(currentPath);
+        }
+
+        function updateButtons() {
+            document.getElementById('btn-zip').disabled = selected.size === 0;
+            document.getElementById('btn-delete').disabled = selected.size === 0;
+        }
+
+        function closePreview() {
+            document.getElementById('preview-pane').innerHTML =
+                '<div class="empty-state">Click a file to preview.</div>';
+        }
+
+        function previewFile(path) {
+            const pane = document.getElementById('preview-pane');
+            pane.innerHTML = '<div class="empty-state">Loading…</div>';
+            api('/api/files/preview?path=' + encodeURIComponent(path))
+                .then(({ status, data }) => {
+                    if (status >= 400) {
+                        pane.innerHTML = `<div class="text-[var(--accent-red)] text-xs">${escapeHtml(data.error || 'HTTP ' + status)}</div>`;
+                        return;
+                    }
+                    if (data.kind === 'text') {
+                        const truncated = data.truncated ? '\n\n[... truncated, file is ' + humanizeSize(data.size) + ']' : '';
+                        const tooBig = data.too_large_for_inline_text ? '\n\n[File is large; consider downloading it instead.]' : '';
+                        pane.innerHTML = `<div class="preview-text">${escapeHtml(data.content || '')}${escapeHtml(truncated)}${escapeHtml(tooBig)}</div>`;
+                    } else if (data.kind === 'image') {
+                        pane.innerHTML = `<div class="text-xs text-[var(--text-muted)] mb-2">${escapeHtml(data.name)} · ${humanizeSize(data.size)} · ${escapeHtml(data.mime)}</div><img class="preview-image" src="data:${escapeHtml(data.mime)};base64,${data.data_b64}" alt="${escapeHtml(data.name)}">`;
+                    } else if (data.kind === 'pdf') {
+                        pane.innerHTML = `<div class="text-xs text-[var(--text-muted)] mb-2">${escapeHtml(data.name)} · ${humanizeSize(data.size)}</div><embed src="data:application/pdf;base64,${data.data_b64}" type="application/pdf" width="100%" height="480px">`;
+                    } else {
+                        pane.innerHTML = `<div class="empty-state">${escapeHtml(data.name)}<br><span class="text-[var(--text-muted)] text-xs">${humanizeSize(data.size)} · ${escapeHtml(data.mime || data.kind)}</span><br><a class="text-[var(--accent-blue)] underline" href="/api/files/download?path=${encodeURIComponent(path)}">Download</a></div>`;
+                    }
+                });
+        }
+
+        function uploadFile() {
+            document.getElementById('upload-input').click();
+        }
+
+        function doUpload(files) {
+            if (!files || !files.length) return;
+            const fd = new FormData();
+            for (const f of files) fd.append('file', f);
+            fd.append('path', currentPath);
+            fetch('/api/files/upload', {
+                method: 'POST', body: fd, credentials: 'same-origin',
+            }).then(r => r.json().then(j => ({ status: r.status, data: j })))
+              .then(({ status, data }) => {
+                  if (status >= 400) { toast(data.error || 'HTTP ' + status, 'error'); return; }
+                  toast('Uploaded ' + (data.filename || files[0].name), 'success');
+                  loadDir(currentPath);
+              });
+            document.getElementById('upload-input').value = '';
+        }
+
+        function deleteSelected() {
+            if (!selected.size) return;
+            if (!confirm(`Delete ${selected.size} item(s)?`)) return;
+            const paths = [...selected].map(n => joinPath(currentPath, n));
+            api('/api/files/bulk-delete', {
+                method: 'POST',
+                body: JSON.stringify({ paths }),
+            }).then(({ status, data }) => {
+                if (status >= 400) { toast(data.error || 'HTTP ' + status, 'error'); return; }
+                toast(`Deleted ${data.deleted}/${data.deleted + data.failed}`, data.failed ? 'info' : 'success');
+                selected.clear();
+                loadDir(currentPath);
+                loadTree();
+            });
+        }
+
+        function downloadZip() {
+            if (!selected.size) return;
+            const paths = [...selected].map(n => joinPath(currentPath, n));
+            fetch('/api/files/zip', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ paths }),
+                credentials: 'same-origin',
+            }).then(r => {
+                if (!r.ok) return r.json().then(j => { throw new Error(j.error || 'HTTP ' + r.status); });
+                return r.blob();
+            }).then(blob => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = 'selection.zip';
+                a.click();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                toast('Zip downloaded', 'success');
+            }).catch(e => toast(e.message || 'zip failed', 'error'));
+        }
+
+        function openPerm(path, currentMode) {
+            document.getElementById('perm-path').textContent = path;
+            document.getElementById('perm-mode').value = '0' + (currentMode || 644).toString(8);
+            document.getElementById('perm-error').classList.add('hidden');
+            document.getElementById('modal-perm').classList.add('open');
+        }
+        function closePerm() {
+            document.getElementById('modal-perm').classList.remove('open');
+        }
+        function submitPerm() {
+            const mode = document.getElementById('perm-mode').value.trim();
+            const path = document.getElementById('perm-path').textContent;
+            api('/api/files/chmod', {
+                method: 'POST',
+                body: JSON.stringify({ path, mode }),
+            }).then(({ status, data }) => {
+                if (status >= 400) {
+                    document.getElementById('perm-error').textContent = data.error || 'HTTP ' + status;
+                    document.getElementById('perm-error').classList.remove('hidden');
+                    return;
+                }
+                closePerm();
+                toast(`Mode set to ${data.mode_str}`, 'success');
+                loadDir(currentPath);
+            });
+        }
+
+        function onSearchInput(q) {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => doSearch(q), 300);
+        }
+
+        function doSearch(q) {
+            const wrap = document.getElementById('items-list');
+            if (!q || !q.trim()) {
+                loadDir(currentPath);
+                return;
+            }
+            api('/api/files/search?q=' + encodeURIComponent(q) + '&path=' + encodeURIComponent(currentPath))
+                .then(({ status, data }) => {
+                    if (status >= 400) {
+                        wrap.innerHTML = '<div class="empty-state">Search failed</div>';
+                        return;
+                    }
+                    const items = (data.matches || []).map(m => ({
+                        name: m.path.split('/').pop(),
+                        is_dir: m.is_dir,
+                        size: m.size,
+                        mode: m.mode,
+                        modified: m.mtime,
+                    }));
+                    renderItems({ files: items });
+                });
+        }
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') closePerm();
+        });
+
+        lucide.createIcons();
+        buildBreadcrumb();
+        loadTree();
+        loadDir('.');
+    </script>
+</body>
+</html>

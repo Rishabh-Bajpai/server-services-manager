@@ -47,7 +47,7 @@ terminal, file manager, control panel, auth, responsive UI.
 
 ---
 
-## Phases 18–27 (✅ Delivered)
+## Phases 18–28 (✅ Delivered)
 
 | # | Feature | Status |
 |---|---------|--------|
@@ -61,34 +61,7 @@ terminal, file manager, control panel, auth, responsive UI.
 | 25 | Disk usage analyzer (`app/disk_manager.py`, `/disk`) | ✅ |
 | 26 | SSH key manager (`app/ssh_manager.py`, `/ssh`) | ✅ |
 | 27 | Multi-host cluster manager (`app/cluster_manager.py`, `/cluster`) | ✅ |
-
----
-
-## Phase 28 — Full File Explorer (🔜 Next)
-
-> **User says:** "Better file explorer with file preview etc."
-
-The current `/api/files/*` endpoints support list, upload, download,
-delete, and rename/move. Missing:
-
-- **Preview:** tab for text files (syntax-highlighted), image thumbnails,
-  video/audio playback, PDF inline view
-- **Editor:** Monaco via CDN — full VS Code editing experience with
-  syntax highlighting for the common languages (loads from CDN, no build)
-- **Tree view:** expandable directory tree in the sidebar (lazy-load)
-- **Drag & drop:** upload by dragging files from the OS
-- **Bulk operations:** select multiple, delete, move, download as zip
-- **Search:** find files by name in the current directory tree
-- **Permissions:** show file mode, owner/group, ability to chmod
-- **Path breadcrumbs:** clickable directory path above the file list
-- **Context menu:** right-click on files for rename, copy, cut, paste,
-  download, delete
-- **Preview cap:** 50 MB. Files larger than that show "too large to preview"
-  and offer download only — avoids browser tab crashes from 2 GB log files
-
-- **Reuses:** existing `/api/files/*` endpoints, chroot logic
-- **Frontend:** new `/files` page, self-contained
-- **Tests:** preview mime-type detection, path traversal defense, bulk ops
+| 28 | Full file explorer (`app/file_explorer.py`, `/files`) | ✅ |
 
 ---
 

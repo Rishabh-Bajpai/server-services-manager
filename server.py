@@ -26,6 +26,7 @@ from app import firewall_manager
 from app import backup_manager
 from app import cluster_manager
 from app import disk_manager
+from app import file_explorer
 from app import ssh_manager
 from app import openapi as openapi_mod
 from app.health import HealthCheck, HealthMonitor
@@ -2224,6 +2225,176 @@ def api_ssh_keys_remove(identifier):
         ip=request.remote_addr or "",
     )
     return jsonify(result)
+
+
+# Full file explorer (Phase 28)
+@app.route('/files')
+def files_page():
+    return render_template('files.html')
+
+
+@app.route('/api/files/tree', methods=['GET'])
+@openapi_mod.describe(
+    summary="Recursive directory tree",
+    description=(
+        "Returns a tree of children up to `depth` levels deep "
+        "(capped at 6). Hidden files (dotfiles) are excluded by "
+        "default; pass `hidden=true` to include them. The "
+        "response carries `truncated=true` if the result hit "
+        "the 5,000-entry cap."
+    ),
+    tag="Files",
+)
+def api_files_tree():
+    path = request.args.get("path", "")
+    depth = request.args.get("depth", "2")
+    hidden = request.args.get("hidden", "false").lower() in ("1", "true", "yes")
+    try:
+        return jsonify(file_explorer.tree(path=path, depth=depth, hidden=hidden))
+    except file_explorer.FileExplorerError as e:
+        if e.code == "outside_home":
+            return jsonify({"error": str(e), "code": e.code}), 403
+        if e.code == "not_a_directory":
+            return jsonify({"error": str(e), "code": e.code}), 404
+        return jsonify({"error": str(e), "code": e.code}), 400
+
+
+@app.route('/api/files/search', methods=['GET'])
+@openapi_mod.describe(
+    summary="Search filenames recursively under a path",
+    description=(
+        "Case-insensitive substring match against file/dir "
+        "names under the given path. Returns up to 500 "
+        "matches."
+    ),
+    tag="Files",
+)
+def api_files_search():
+    q = request.args.get("q", "")
+    path = request.args.get("path", ".")
+    try:
+        return jsonify(file_explorer.search(q, path=path))
+    except file_explorer.FileExplorerError as e:
+        if e.code in ("empty_query", "query_too_long"):
+            return jsonify({"error": str(e), "code": e.code}), 400
+        if e.code == "outside_home":
+            return jsonify({"error": str(e), "code": e.code}), 403
+        return jsonify({"error": str(e), "code": e.code}), 500
+
+
+@app.route('/api/files/preview', methods=['GET'])
+@openapi_mod.describe(
+    summary="Preview a file's contents (text or base64 image/pdf)",
+    description=(
+        "Returns the file's first 50 MB (configurable via "
+        "`max_bytes`). Text files come back as decoded UTF-8 "
+        "string; images and PDFs as base64 (`data_b64`). The "
+        "browser can render both inline."
+    ),
+    tag="Files",
+)
+def api_files_preview():
+    path = request.args.get("path", "")
+    max_bytes = request.args.get("max_bytes")
+    try:
+        return jsonify(file_explorer.preview(path=path, max_bytes=max_bytes))
+    except file_explorer.FileExplorerError as e:
+        if e.code in ("not_found", "outside_home"):
+            return jsonify({"error": str(e), "code": e.code}), 404
+        return jsonify({"error": str(e), "code": e.code}), 400
+
+
+@app.route('/api/files/chmod', methods=['POST'])
+@openapi_mod.describe(
+    summary="Change file mode (chmod)",
+    description=(
+        "Body: `{path, mode}` where `mode` is either an "
+        "octal string (`'0755'`) or an integer (493). Mode "
+        "is clamped to 0-0o7777."
+    ),
+    tag="Files",
+)
+def api_files_chmod():
+    payload = request.get_json(silent=True) or {}
+    path = (payload.get("path") or "").strip()
+    mode = payload.get("mode")
+    if not path:
+        return jsonify({"error": "path is required", "code": "invalid_path"}), 400
+    try:
+        result = file_explorer.chmod(path, mode)
+    except file_explorer.FileExplorerError as e:
+        if e.code == "outside_home":
+            return jsonify({"error": str(e), "code": e.code}), 403
+        if e.code == "not_found":
+            return jsonify({"error": str(e), "code": e.code}), 404
+        return jsonify({"error": str(e), "code": e.code}), 400
+    activity.log(
+        "files.chmod", target=path, status="ok",
+        detail=result.get("mode_str", ""), ip=request.remote_addr or "",
+    )
+    return jsonify(result)
+
+
+@app.route('/api/files/bulk-delete', methods=['POST'])
+@openapi_mod.describe(
+    summary="Delete multiple files / directories in one call",
+    description=(
+        "Body: `{paths: ['a', 'sub/b', ...]}`. Refuses more "
+        "than 1,000 entries at once. Returns per-path "
+        "results so the caller can show which deletes failed."
+    ),
+    tag="Files",
+)
+def api_files_bulk_delete():
+    payload = request.get_json(silent=True) or {}
+    paths = payload.get("paths") or []
+    if not isinstance(paths, list):
+        return jsonify({"error": "paths must be a list", "code": "invalid"}), 400
+    try:
+        result = file_explorer.bulk_delete(paths)
+    except file_explorer.FileExplorerError as e:
+        return jsonify({"error": str(e), "code": e.code}), 400
+    activity.log(
+        "files.bulk_delete", target=",".join(paths[:5]), status="ok",
+        detail=f"deleted={result['deleted']} failed={result['failed']}",
+        ip=request.remote_addr or "",
+    )
+    return jsonify(result)
+
+
+@app.route('/api/files/zip', methods=['POST'])
+@openapi_mod.describe(
+    summary="Bundle selected paths into a single zip",
+    description=(
+        "Body: `{paths: [...]}`. The response is the raw "
+        "zip bytes (application/zip). Refuses more than "
+        "1,000 entries or >256 MB of uncompressed data."
+    ),
+    tag="Files",
+)
+def api_files_zip():
+    payload = request.get_json(silent=True) or {}
+    paths = payload.get("paths") or []
+    if not isinstance(paths, list):
+        return jsonify({"error": "paths must be a list", "code": "invalid"}), 400
+    try:
+        data, suggested = file_explorer.make_zip(paths)
+    except file_explorer.FileExplorerError as e:
+        return jsonify({"error": str(e), "code": e.code}), 400
+    activity.log(
+        "files.zip", target=",".join(paths[:5]), status="ok",
+        detail=f"{len(data)} bytes, {len(paths)} paths",
+        ip=request.remote_addr or "",
+    )
+    return Response(
+        data,
+        status=200,
+        headers={
+            "Content-Type": "application/zip",
+            "Content-Disposition": f'attachment; filename="{suggested}"',
+            "Content-Length": str(len(data)),
+        },
+    )
 
 
 @app.route('/api/packages/manager')
