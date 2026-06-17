@@ -4,3 +4,4 @@ eventlet
 pyyaml
 python-dotenv
 psutil
+docker

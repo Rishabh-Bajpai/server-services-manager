@@ -14,7 +14,7 @@ journalctl --user -u server-services-manager -f
 
 ## Architecture
 - **Entrypoint:** `server.py` — single Flask app with SocketIO, eventlet monkey-patch at line 4-5
-- **Routes** (`server.py`): `/` dashboard, `/monitor` system monitor, `/system-services` systemd units, `/cron` system cron jobs, `/notifications` health-check dashboard, `/activity` activity log, `/control` whitelisted system commands, `/programs/*` CRUD, `/api/files/*` file manager, `/api/system-services/*`, `/api/programs/<name>/{autostart,schedule,limits}`, `/api/palette/search`, `/api/plugins`, `/login`, `/logout`, `/health` (no auth)
+- **Routes** (`server.py`): `/` dashboard, `/monitor` system monitor, `/system-services` systemd units, `/docker` docker containers, `/cron` system cron jobs, `/notifications` health-check dashboard, `/activity` activity log, `/control` whitelisted system commands, `/programs/*` CRUD, `/api/files/*` file manager, `/api/system-services/*`, `/api/docker/*`, `/api/programs/<name>/{autostart,schedule,limits}`, `/api/palette/search`, `/api/plugins`, `/login`, `/logout`, `/health` (no auth)
 - **WebSocket events:** `update` (program cards, 1s interval), `system_stats` (monitor, 2s), `terminal_*`, `service_event` (state-change toasts), `health_event`
 - **Backend modules:**
   - `app/process_manager.py` — Program, ProcessManager, ProgramConfig (name/command/cwd/autostart/schedule/environment), `on_state_change` hook fired on every transition
@@ -31,7 +31,8 @@ journalctl --user -u server-services-manager -f
   - `app/log_persistence.py` — per-service log tail persisted to `~/.server-services-manager/logs/<name>.log` (rotated at 512KB)
   - `app/config_schema.py` — pydantic schema for `config.yaml` (lenient `extra="allow"`, name regex, unique-name enforcement, notifier type discriminators)
   - `app/plugins.py` — drop-in Python plugin loader, `PluginBase` ABC, `load_all()` runs at startup
-- **Frontend:** All inline JS in `templates/index.html` (~1700 lines, 4 script blocks). Monitor at `templates/monitor.html` uses Chart.js. System services at `templates/system-services.html` (~600 lines, side-panel detail view with Overview/Dependencies/Unit File/Logs tabs). Cron at `templates/cron.html`, notifications at `templates/notifications.html`, activity at `templates/activity.html`, control at `templates/control.html`. No build step, no framework.
+  - `app/docker_manager.py` — Docker SDK wrapper (list/inspect/logs/stats/control); `is_available()` returns availability + reason; logs streaming via SSE `/api/docker/containers/<id>/logs/stream`
+- **Frontend:** All inline JS in `templates/index.html` (~1700 lines, 4 script blocks). Monitor at `templates/monitor.html` uses Chart.js. System services at `templates/system-services.html` (~600 lines, side-panel detail view with Overview/Dependencies/Unit File/Logs tabs). Docker at `templates/docker.html` (containers table + side panel with Details/Stats/Logs tabs, live log streaming). Cron at `templates/cron.html`, notifications at `templates/notifications.html`, activity at `templates/activity.html`, control at `templates/control.html`. No build step, no framework.
 - **Config:** `config.yaml` (gitignored) defines services; can also be managed via UI
 - **State persistence:** Running PIDs saved to `~/.server-services-manager/state.json`, re-attached on restart
 
@@ -88,6 +89,17 @@ journalctl --user -u server-services-manager -f
   jobs = cron_manager.list_all()
   cron_manager.toggle_system_job("/etc/cron.d/foo", line_number=3,
                                  enabled=False, password=user_password)
+  ```
+
+- **Docker page** (`/docker`): browse and control Docker containers on the host. Uses the Python `docker` SDK (not the CLI). `is_available()` probes `/var/run/docker.sock` and returns a human-readable reason when the daemon is unreachable (typical cases: socket missing, daemon stopped, or the current user not in the `docker` group — in which case the UI shows the exact `sudo usermod -aG docker $USER` command). All read operations (list, inspect, logs tail, stats snapshot) work without root. Lifecycle actions (start, stop, restart, kill, pause, unpause) and remove also go through the socket — no sudo needed if the user is in the docker group. Logs tab streams live output via SSE (same pattern as systemd unit logs); Stats tab polls every 2s and renders CPU/memory/network/disk bars.
+
+  ```python
+  from app import docker_manager
+  docker_manager.is_available()    # -> {"available": True, "reason": "", "version": "24.0.7"}
+  for c in docker_manager.list_containers(all_containers=True):
+      print(c.name, c.state, c.is_running)
+  docker_manager.control("web", "restart")
+  docker_manager.get_stats("web")
   ```
 
 - **Health checks + notifications** (`app/health.py`, `app/notifier.py`): a `health_check:` block in `config.yaml` describes how to probe each managed service (http / tcp / cmd). A background thread runs all configured checks, tracks each service's last-known state, and emits on transition (healthy <-> unhealthy) via a pluggable notifier (ntfy.sh, generic webhook, Telegram, SMTP email). The `/notifications` page shows a live status dashboard with summary cards and recent events; SocketIO pushes transitions toasts in real time. Configuration:
@@ -192,7 +204,7 @@ new contributor knows the format) and your local
 
 ## Testing
 ```bash
-python -m pytest tests/ -v --tb=short    # 346 tests
+python -m pytest tests/ -v --tb=short    # 391 tests
 ```
 - Tests use `unittest.mock` to avoid real subprocesses
 - Fixtures in `tests/conftest.py` provide `temp_config` (yaml), `process_manager`, `program_config`

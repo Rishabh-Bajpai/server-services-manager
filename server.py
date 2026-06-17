@@ -19,6 +19,7 @@ from app.terminal_manager import TerminalManager
 from app import system_services
 from app.log_streamer import get_streamer
 from app import cron_manager
+from app import docker_manager
 from app.health import HealthCheck, HealthMonitor
 from app.notifier import build_notifiers, Event as HealthEvent
 from app import activity
@@ -692,6 +693,173 @@ def api_system_services_logs_stream(name):
             'Connection': 'keep-alive',
         },
     )
+
+
+# Docker management
+@app.route('/docker')
+def docker_page():
+    return render_template('docker.html')
+
+
+@app.route('/api/docker/availability')
+def api_docker_availability():
+    try:
+        return jsonify(docker_manager.is_available(timeout=0.5))
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"available": False, "reason": str(e), "version": None})
+
+
+@app.route('/api/docker/containers', methods=['GET'])
+def api_docker_containers_list():
+    try:
+        all_containers = request.args.get('all', 'true').lower() != 'false'
+        items = docker_manager.list_containers(all_containers=all_containers)
+        return jsonify({"containers": [c.to_summary() for c in items]})
+    except docker_manager.DockerError as e:
+        code = e.code
+        http = 403 if code == "permission" else 500
+        return jsonify({"error": str(e), "code": code}), http
+
+
+@app.route('/api/docker/containers/<path:id_or_name>', methods=['GET'])
+def api_docker_container_detail(id_or_name):
+    try:
+        c = docker_manager.get_container(id_or_name)
+        if c is None:
+            return jsonify({"error": "not_found", "code": "not_found"}), 404
+        return jsonify(c.to_detail())
+    except docker_manager.DockerError as e:
+        return jsonify({"error": str(e), "code": e.code}), 500
+
+
+@app.route('/api/docker/containers/<path:id_or_name>/logs', methods=['GET'])
+def api_docker_container_logs(id_or_name):
+    try:
+        tail = int(request.args.get('tail', '100'))
+    except ValueError:
+        tail = 100
+    try:
+        lines = docker_manager.get_logs(id_or_name, tail=tail)
+        return jsonify({"container": id_or_name, "logs": lines})
+    except docker_manager.DockerError as e:
+        return jsonify({"error": str(e), "code": e.code}), 500
+
+
+@app.route('/api/docker/containers/<path:id_or_name>/logs/stream', methods=['GET'])
+def api_docker_container_logs_stream(id_or_name):
+    """SSE stream of container logs.
+
+    Yields ``data: {"line": "..."}`` frames; closes when the container stops
+    or the consumer disconnects. The docker SDK's stream is consumed in a
+    background thread; each connected client has its own generator.
+    """
+    try:
+        tail = int(request.args.get('tail', '100'))
+    except ValueError:
+        tail = 100
+
+    queue_obj: queue.Queue = queue.Queue(maxsize=2000)
+    done = threading.Event()
+
+    def pump():
+        try:
+            gen = docker_manager.stream_logs(id_or_name, tail=tail)
+            for line in gen:
+                if done.is_set():
+                    break
+                try:
+                    queue_obj.put_nowait(line)
+                except queue.Full:
+                    pass
+        except docker_manager.DockerError as e:
+            try:
+                queue_obj.put_nowait(f"__error__:{e}")
+            except queue.Full:
+                pass
+        finally:
+            try:
+                queue_obj.put_nowait(None)
+            except queue.Full:
+                pass
+
+    t = threading.Thread(target=pump, daemon=True)
+    t.start()
+
+    def generate():
+        try:
+            while True:
+                try:
+                    item = queue_obj.get(timeout=15)
+                except queue.Empty:
+                    yield ": heartbeat\n\n"
+                    continue
+                if item is None:
+                    yield f"data: {json.dumps({'ended': True, 'container': id_or_name})}\n\n"
+                    break
+                if isinstance(item, str) and item.startswith("__error__:"):
+                    yield f"data: {json.dumps({'error': item.split(':', 1)[1]})}\n\n"
+                    break
+                yield f"data: {json.dumps({'line': item, 'container': id_or_name})}\n\n"
+        finally:
+            done.set()
+
+    return app.response_class(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+            'Connection': 'keep-alive',
+        },
+    )
+
+
+@app.route('/api/docker/containers/<path:id_or_name>/stats', methods=['GET'])
+def api_docker_container_stats(id_or_name):
+    try:
+        return jsonify(docker_manager.get_stats(id_or_name))
+    except docker_manager.DockerError as e:
+        return jsonify({"error": str(e), "code": e.code}), 500
+
+
+@app.route('/api/docker/containers/<path:id_or_name>/<action>', methods=['POST'])
+def api_docker_container_action(id_or_name, action):
+    if action not in docker_manager.LIFECYCLE_ACTIONS:
+        return jsonify({"error": f"Unknown action: {action}"}), 400
+    try:
+        result = docker_manager.control(id_or_name, action)
+        activity.log(f"docker.{action}", target=id_or_name, status="ok",
+                    detail=result.get("output", ""), ip=request.remote_addr or "")
+        return jsonify(result)
+    except docker_manager.DockerError as e:
+        activity.log(f"docker.{action}", target=id_or_name, status="error",
+                    detail=f"{e.code}: {e}", ip=request.remote_addr or "")
+        http = 403 if e.code == "permission" else 404 if e.code == "not_found" else 500
+        return jsonify({"error": str(e), "code": e.code}), http
+
+
+@app.route('/api/docker/containers/<path:id_or_name>', methods=['DELETE'])
+def api_docker_container_remove(id_or_name):
+    force = request.args.get('force', 'false').lower() == 'true'
+    volumes = request.args.get('volumes', 'false').lower() == 'true'
+    try:
+        result = docker_manager.remove_container(id_or_name, force=force, volumes=volumes)
+        activity.log("docker.remove", target=id_or_name, status="ok",
+                    detail=f"force={force} volumes={volumes}", ip=request.remote_addr or "")
+        return jsonify(result)
+    except docker_manager.DockerError as e:
+        activity.log("docker.remove", target=id_or_name, status="error",
+                    detail=f"{e.code}: {e}", ip=request.remote_addr or "")
+        http = 403 if e.code == "permission" else 404 if e.code == "not_found" else 500
+        return jsonify({"error": str(e), "code": e.code}), http
+
+
+@app.route('/api/docker/images', methods=['GET'])
+def api_docker_images_list():
+    try:
+        return jsonify({"images": docker_manager.list_images()})
+    except docker_manager.DockerError as e:
+        return jsonify({"error": str(e), "code": e.code}), 500
 
 
 # Cron management
