@@ -82,6 +82,26 @@
         border-color: rgba(59,130,246,0.4);
         color: var(--accent-blue);
     }
+    .ui-more-dropdown-inner {
+        background: var(--bg-card);
+        border: 1px solid var(--border-subtle);
+        border-radius: 0.75rem;
+        padding: 0.375rem;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    }
+    .ui-more-item {
+        display: flex; align-items: center; gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        border-radius: 0.5rem;
+        color: var(--text-primary);
+        font-size: 0.8125rem;
+        font-weight: 500;
+        text-decoration: none;
+        white-space: nowrap;
+        transition: background 0.1s ease;
+    }
+    .ui-more-item:hover { background: rgba(255,255,255,0.06); }
+    .ui-more-item.active { background: rgba(59,130,246,0.15); color: var(--accent-blue); }
 </style>
 <script>
     // Shared nav mobile-menu toggle. Bound to the hamburger
@@ -102,7 +122,36 @@
         }
         if (willShow && window.lucide) lucide.createIcons();
     };
+    // "More" dropdown toggle for the desktop nav overflow
+    window.uiToggleMore = function() {
+        var dd = document.getElementById('ui-more-dropdown');
+        if (!dd) return;
+        dd.classList.toggle('hidden');
+        var pill = document.getElementById('ui-nav-more-pill');
+        if (pill) {
+            var icon = pill.querySelector('[data-lucide]');
+            if (icon) {
+                var showing = !dd.classList.contains('hidden');
+                icon.setAttribute('data-lucide', showing ? 'chevron-up' : 'chevron-down');
+                if (window.lucide) lucide.createIcons();
+            }
+        }
+    };
     document.addEventListener('click', function(e) {
+        // Close "More" dropdown on outside click
+        var more = document.getElementById('ui-more-dropdown');
+        if (more && !more.classList.contains('hidden')) {
+            if (!e.target.closest('#ui-nav-more')) {
+                more.classList.add('hidden');
+                var pill = document.getElementById('ui-nav-more-pill');
+                if (pill) {
+                    var icon = pill.querySelector('[data-lucide]');
+                    if (icon) icon.setAttribute('data-lucide', 'chevron-down');
+                }
+                if (window.lucide) lucide.createIcons();
+            }
+        }
+        // Mobile menu close on tile click or outside click
         var menu = document.getElementById('ui-mobile-menu');
         if (!menu || menu.classList.contains('hidden')) return;
         if (e.target.closest('.ui-nav-tile')) {
@@ -114,7 +163,7 @@
 </script>{% endraw %}<header class="border-b border-[var(--border-subtle)] bg-[var(--bg-card)]/60 backdrop-blur-md sticky top-0 z-30">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
         <div class="flex items-center gap-3 min-w-0 flex-1">
-            <button onclick="uiToggleMobileMenu()" class="lg:hidden p-1.5 -ml-1 rounded-lg hover:bg-white/5 text-[var(--text-secondary)]" title="Menu" aria-label="Toggle menu" id="ui-menu-btn">
+            <button onclick="uiToggleMobileMenu()" onTouchStart="uiToggleMobileMenu()" class="xl:hidden p-1.5 -ml-1 rounded-lg hover:bg-white/5 text-[var(--text-secondary)]" title="Menu" aria-label="Toggle menu" id="ui-menu-btn">
                 <i data-lucide="menu" class="w-5 h-5"></i>
             </button>
             <a href="/" class="flex items-center gap-2.5 min-w-0" title="Server Services Manager">
@@ -137,7 +186,22 @@
         </div>
         <div class="flex items-center gap-2 flex-wrap justify-end">
             <div id="ui-nav-bar" class="hidden xl:flex items-center gap-1.5 flex-wrap justify-end">
-                {{ _ui_nav_items(current) }}
+                {{ _ui_nav_primary(current) }}
+                <div id="ui-nav-more" class="relative">
+                    <div id="ui-nav-more-pill" class="ui-nav-pill cursor-pointer select-none" onclick="uiToggleMore()" title="More pages">
+                        <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                        <span>More</span>
+                    </div>
+                    <div id="ui-more-dropdown" class="hidden absolute right-0 top-full mt-2 z-40" style="min-width: 200px;">
+                        <div class="ui-more-dropdown-inner flex flex-col gap-0.5">
+                            {{ _ui_nav_more_items(current) }}
+                            <hr class="border-[var(--border-subtle)] my-1">
+                            <a href="/docs/" target="_blank" rel="noopener" class="ui-more-item">
+                                <i data-lucide="book-open" class="w-4 h-4"></i>API Docs
+                            </a>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="flex items-center gap-2 flex-wrap justify-end">
                 {{ actions|safe }}
@@ -147,7 +211,11 @@
     {# Mobile slide-down menu (mirrors the desktop nav) #}
     <div id="ui-mobile-menu" class="xl:hidden hidden border-t border-[var(--border-subtle)] bg-[var(--bg-card)]/95 backdrop-blur-md px-4 py-3 animate-fade-in">
         <div class="grid grid-cols-3 sm:grid-cols-4 gap-2">
-            {{ _ui_nav_items(current, mobile=True) }}
+            {{ _ui_nav_primary(current, mobile=True) }}
+            {{ _ui_nav_more_items(current, mobile=True) }}
+            <a href="/docs/" target="_blank" rel="noopener" class="ui-nav-tile">
+                <i data-lucide="book-open" class="w-4 h-4"></i>API Docs
+            </a>
             <a href="/logout" class="ui-nav-tile text-[var(--accent-red)] border-[var(--accent-red)]/30">
                 <i data-lucide="log-out" class="w-4 h-4"></i>Logout
             </a>
@@ -173,34 +241,48 @@
 {%- endmacro %}
 
 
-{# Renders the full set of nav items. Pages opt into a different
-   "current" value (passed to header()) so the right pill is
-   marked active. #}
-{% macro _ui_nav_items(current, mobile=False) %}
+{# Renders the 7 primary nav items (always visible on desktop). #}
+{% macro _ui_nav_primary(current, mobile=False) %}
     {{ _ui_nav_item('/',                 'layout-dashboard', 'Dashboard',  current, mobile) }}
     {{ _ui_nav_item('/monitor',          'activity',         'Monitor',    current, mobile) }}
-    {{ _ui_nav_item('/control',          'gamepad-2',        'Control',    current, mobile) }}
     {{ _ui_nav_item('/system-services',  'server-cog',       'System',     current, mobile) }}
-    {{ _ui_nav_item('/cron',             'calendar-clock',   'Cron',       current, mobile) }}
-    {{ _ui_nav_item('/notifications',    'bell-ring',        'Health',     current, mobile) }}
-    {{ _ui_nav_item('/activity',         'history',          'Activity',   current, mobile) }}
-    {{ _ui_nav_item('/disk',             'pie-chart',        'Disk',       current, mobile) }}
-    {{ _ui_nav_item('/ssh',              'key-round',        'SSH',        current, mobile) }}
-    {{ _ui_nav_item('/cluster',          'network',          'Cluster',    current, mobile) }}
-    {{ _ui_nav_item('/files',            'folder-open',      'Files',      current, mobile) }}
     {{ _ui_nav_item('/docker',           'container',        'Docker',     current, mobile) }}
-    {{ _ui_nav_item('/plugins',          'plug',             'Plugins',    current, mobile) }}
-    {{ _ui_nav_item('/config',           'file-cog',         'Config',     current, mobile) }}
-    {{ _ui_nav_item('/alerts',           'megaphone',        'Alerts',     current, mobile) }}
-    {{ _ui_nav_item('/packages',         'package',          'Packages',   current, mobile) }}
-    {{ _ui_nav_item('/backups',          'archive',          'Backups',    current, mobile) }}
-    {{ _ui_nav_item('/firewall',         'shield',           'Firewall',   current, mobile) }}
-    {{ _ui_nav_item('/logs',             'file-text',        'Logs',       current, mobile) }}
+    {{ _ui_nav_item('/ssh',              'key-round',        'SSH',        current, mobile) }}
+    {{ _ui_nav_item('/files',            'folder-open',      'Files',      current, mobile) }}
+    {{ _ui_nav_item('/activity',         'history',          'Activity',   current, mobile) }}
+{% endmacro %}
+
+{# Renders a single dropdown item in the "More" menu (desktop only). #}
+{% macro _ui_more_item(href, icon, label, current) -%}
+<a href="{{ href }}" class="ui-more-item{{ ' active' if href == current else '' }}">
+    <i data-lucide="{{ icon }}" class="w-4 h-4"></i>{{ label }}
+</a>
+{%- endmacro %}
+
+{# Renders the overflow nav items for the "More" dropdown (desktop)
+   or as tiles in the mobile slide-down menu. #}
+{% macro _ui_nav_more_items(current, mobile=False) %}
+{% set items = [
+    ('/control', 'gamepad-2', 'Control'),
+    ('/cron', 'calendar-clock', 'Cron'),
+    ('/notifications', 'bell-ring', 'Health'),
+    ('/disk', 'pie-chart', 'Disk'),
+    ('/cluster', 'network', 'Cluster'),
+    ('/plugins', 'plug', 'Plugins'),
+    ('/config', 'file-cog', 'Config'),
+    ('/alerts', 'megaphone', 'Alerts'),
+    ('/packages', 'package', 'Packages'),
+    ('/backups', 'archive', 'Backups'),
+    ('/firewall', 'shield', 'Firewall'),
+    ('/logs', 'file-text', 'Logs'),
+] %}
+{% for href, icon, label in items %}
     {% if mobile %}
-    <a href="/docs/" target="_blank" rel="noopener" class="ui-nav-tile">
-        <i data-lucide="book-open" class="w-4 h-4"></i>API Docs
-    </a>
+        {{ _ui_nav_item(href, icon, label, current, True) }}
+    {% else %}
+        {{ _ui_more_item(href, icon, label, current) }}
     {% endif %}
+{% endfor %}
 {% endmacro %}
 
 
