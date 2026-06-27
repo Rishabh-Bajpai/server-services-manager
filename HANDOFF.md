@@ -15,7 +15,7 @@ running user-defined services. It's running at
 (`PASSWORD` env var, defaults to `admin`).
 
 **Current branch:** `development`
-**Last commit:** `01fe961 fix(nav): unified top nav across all routes + fix auto-start toggle`
+**Last commit:** `5e99596 fix(nav): hamburger breakpoint fix + Pill + More desktop nav`
 **Tests:** 741 passing (`python -m pytest tests/ -q`)
 **Python:** 3.13, eventlet, Flask, Flask-SocketIO, pydantic, psutil
 **Repo state:** clean working tree, all changes committed
@@ -81,7 +81,38 @@ hamburger menu that opens a 3-column grid of all the same
 tiles, mirroring the desktop nav exactly. The Docker tab is
 now visible in the nav (it was missing before).
 
-### 4. Bonus fixes while in the area
+### 4. Docker table column widths (commit `02cb138`)
+
+The Actions column in the Docker containers table was capped at
+4.5rem (72px) but holds three 28px row-action buttons (start,
+stop, restart). The restart button existed in the code but was
+clipped by the narrow column. Fixed by widening to 7rem (112px)
+and rebalancing the other columns (Name 30→28%, Image 25→22%,
+State 18→16%, Ports 18→16%).
+
+### 5. Nav simplification + hamburger fix (commit `5e99596`)
+
+**Hamburger fix:**
+- Changed breakpoint from `lg:hidden` to `xl:hidden` so the
+  hamburger stays visible on screens 1024-1280px (was hidden
+  while the mobile menu was still shown).
+- Added `onTouchStart` fallback so touch events trigger the
+  toggle on mobile.
+
+**"Pill + More" desktop nav:**
+- The 19-item nav was too crowded and wrapped to 2-3 rows on
+  most laptops. Now shows only 7 primary items as pills:
+  Dashboard, Monitor, System, Docker, SSH, Files, Activity.
+- The remaining 12 items (Control, Cron, Health, Disk, Cluster,
+  Plugins, Config, Alerts, Packages, Backups, Firewall, Logs)
+  are grouped under a "More ▼" dropdown.
+- API Docs is in the dropdown too (was previously only in the
+  mobile menu).
+- The dropdown opens/closes on click, the chevron rotates, and
+  clicking outside closes it. Active pages inside the dropdown
+  are highlighted when opened.
+
+### 6. Bonus fixes while in the area
 
 - `app/schedules.py:_run_systemctl` was passing bytes into a
   `text=True` subprocess call → fixed to str.
@@ -329,13 +360,26 @@ commit history. The format is: `[x]` for done, `[ ]` for pending.
 4. **Run `python -m pytest tests/ -q`** before committing.
 5. **Commit each item separately** with a descriptive message.
 6. **Check `git status` for personal info** before committing
-   (the secret-leak guard is `.gitignore`'d but you should still
-   review).
+   (the secret-leak guard is `tools/check-secrets.py` — review
+   your diff for any home paths or passwords).
 7. **Use Playwright MCP** to visually verify UI changes (use
    `resize` for mobile, navigate to each page, screenshot).
 8. **Restart the server** (`systemctl --user restart ...`)
    after template changes; `TEMPLATES_AUTO_RELOAD=True` is set
    but Jinja can still cache the parsed template in-process.
+9. **Known gotcha**: Playwright's `click()` on the hamburger
+   button (`#ui-menu-btn`) doesn't work via the MCP abstraction
+   due to a Playwright + Lucide SVG interaction, but real user
+   taps work fine. Use `page.evaluate('document.getElementById(
+   "ui-menu-btn").dispatchEvent(new MouseEvent("click",
+   {bubbles:true}))')` to programmatically test the mobile menu
+   toggle.
+10. **"More" dropdown active indicator**: When on a page inside
+   the "More" dropdown, the "More" pill itself doesn't show an
+   active state. The active item IS highlighted inside the
+   dropdown once opened. Consider adding the `active` class to
+   the "More" pill when `current` matches any of its 12 routes
+   (requires passing the full route list to the header macro).
 
-The app is stable, the tests pass, and the user is happy with
-the recent fixes. Good luck.
+The app is stable, the tests pass, and all 3 reported issues
+are fixed. Good luck.
