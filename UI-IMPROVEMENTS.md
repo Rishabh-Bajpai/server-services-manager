@@ -73,6 +73,16 @@ so users can discover the OpenAPI explorer.
 
 Files: `templates/index.html`, `templates/_macros.html`
 
+**Status:** Done. Added a "API" button (book-open icon) in the
+dashboard nav row, right after Add Service and before Logout.
+Points to `/docs/` with `target="_blank"`. The `_macros.html`
+action slot is already there — pages can include the link by
+adding it to their `actions` HTML.
+
+Also flipped `app.config['TEMPLATES_AUTO_RELOAD'] = True` in
+server.py so template changes are picked up without a restart
+during development.
+
 ---
 
 ## Tier 2 — Backend Gaps (Feature pages that don't exist)
