@@ -282,11 +282,30 @@ Files: `templates/activity.html`
 
 ## Tier 3 — Mobile Responsiveness
 
-### 3.1 — Dashboard header collapses to hamburger on mobile  `[ ]`
+### 3.1 — Dashboard header collapses to hamburger on mobile  `[x]`
 13+ nav buttons is too many for a mobile top bar. Replace with a
 hamburger icon on `<sm` that opens a slide-down menu.
 
 Files: `templates/index.html`
+
+**Status:** Done.
+  * `templates/index.html`:
+      - New hamburger button (`md:hidden`) before the logo.
+      - New `#mobile-menu` div with a 2-column grid of `.nav-tile`
+        buttons covering every nav item that was on the desktop
+        bar (Monitor, Control, System, Cron, Health, Activity,
+        Disk, SSH, Cluster, Files, Plugins, Config, Import,
+        Export, Add Service, API Docs, Search, Logout). Add
+        Service is highlighted in blue; Logout in red.
+      - The desktop wrapper div was renamed to `#nav-bar` and
+        given `hidden md:flex` so it disappears on phones.
+      - `toggleMobileMenu(force)`: opens/closes the menu,
+        swaps the hamburger icon for an X, and refreshes
+        lucide icons (lucide only renders icons in visible
+        DOM).
+      - Auto-close on tile click and on outside click.
+      - New `.nav-tile` CSS class with the same look as
+        desktop nav pills (border, padding, hover state).
 
 ### 3.2 — Touch support for the resizer  `[ ]`
 The dashboard's drag-resize handle uses mouse events only. Add

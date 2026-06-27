@@ -132,6 +132,21 @@
             animation: status-pulse 2s ease-in-out infinite;
         }
 
+        /* Mobile menu tile — looks like the desktop nav pills but
+           laid out in a grid for finger-friendly tapping. */
+        .nav-tile {
+            display: flex; align-items: center; gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            color: var(--text-primary);
+            font-size: 0.8125rem; font-weight: 500;
+            transition: background 0.15s ease;
+            cursor: pointer;
+        }
+        .nav-tile:hover { background: rgba(255,255,255,0.08); }
+
         .glass-effect {
             background: rgba(18, 18, 26, 0.8);
             backdrop-filter: blur(12px);
@@ -168,6 +183,9 @@
         <!-- Header -->
         <header class="flex-none px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border-subtle)] glass-effect z-10">
             <div class="flex items-center gap-3">
+                <button id="mobile-menu-btn" onclick="toggleMobileMenu()" class="md:hidden p-1.5 -ml-1 rounded-lg hover:bg-white/5 text-[var(--text-secondary)]" title="Menu" aria-label="Toggle menu">
+                    <i data-lucide="menu" class="w-5 h-5"></i>
+                </button>
                 <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
                     <i data-lucide="layout-dashboard" class="w-5 h-5 text-white"></i>
                 </div>
@@ -176,7 +194,7 @@
                     <p class="text-[var(--text-muted)] text-xs font-medium hidden sm:block">Control Center</p>
                 </div>
             </div>
-            <div class="flex items-center gap-2 flex-wrap justify-end">
+            <div id="nav-bar" class="hidden md:flex items-center gap-2 flex-wrap justify-end">
                 <a href="/monitor"
                     class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-green)]/10 text-[var(--accent-green)] border border-[var(--accent-green)]/20 rounded-lg hover:bg-[var(--accent-green)]/20 transition-all text-sm font-medium">
                     <i data-lucide="activity" class="w-4 h-4"></i>
@@ -284,6 +302,67 @@
                 </div>
             </div>
         </header>
+
+        <!-- Mobile slide-down menu. Mirrors the desktop nav-bar items
+             so phones don't lose access to any of them. -->
+        <div id="mobile-menu" class="md:hidden hidden border-b border-[var(--border-subtle)] bg-[var(--bg-card)]/95 backdrop-blur-md px-4 py-3 animate-fade-in">
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <a href="/monitor" class="nav-tile" data-key="monitor">
+                    <i data-lucide="activity" class="w-4 h-4"></i>Monitor
+                </a>
+                <a href="/control" class="nav-tile" data-key="control">
+                    <i data-lucide="gamepad-2" class="w-4 h-4"></i>Control
+                </a>
+                <a href="/system-services" class="nav-tile" data-key="system-services">
+                    <i data-lucide="server-cog" class="w-4 h-4"></i>System
+                </a>
+                <a href="/cron" class="nav-tile" data-key="cron">
+                    <i data-lucide="calendar-clock" class="w-4 h-4"></i>Cron
+                </a>
+                <a href="/notifications" class="nav-tile" data-key="notifications">
+                    <i data-lucide="bell-ring" class="w-4 h-4"></i>Health
+                </a>
+                <a href="/activity" class="nav-tile" data-key="activity">
+                    <i data-lucide="history" class="w-4 h-4"></i>Activity
+                </a>
+                <a href="/disk" class="nav-tile" data-key="disk">
+                    <i data-lucide="pie-chart" class="w-4 h-4"></i>Disk
+                </a>
+                <a href="/ssh" class="nav-tile" data-key="ssh">
+                    <i data-lucide="key-round" class="w-4 h-4"></i>SSH
+                </a>
+                <a href="/cluster" class="nav-tile" data-key="cluster">
+                    <i data-lucide="network" class="w-4 h-4"></i>Cluster
+                </a>
+                <a href="/files" class="nav-tile" data-key="files">
+                    <i data-lucide="folder-open" class="w-4 h-4"></i>Files
+                </a>
+                <a href="/plugins" class="nav-tile" data-key="plugins">
+                    <i data-lucide="plug" class="w-4 h-4"></i>Plugins
+                </a>
+                <a href="/config" class="nav-tile" data-key="config">
+                    <i data-lucide="file-cog" class="w-4 h-4"></i>Config
+                </a>
+                <button onclick="openImportModal()" class="nav-tile text-left w-full">
+                    <i data-lucide="upload" class="w-4 h-4"></i>Import
+                </button>
+                <a href="/api/programs/export" class="nav-tile">
+                    <i data-lucide="download" class="w-4 h-4"></i>Export
+                </a>
+                <button onclick="openModal()" class="nav-tile text-left w-full bg-gradient-to-r from-blue-500/20 to-blue-600/20 text-[var(--accent-blue)] border-[var(--accent-blue)]/30">
+                    <i data-lucide="plus" class="w-4 h-4"></i>Add Service
+                </button>
+                <a href="/docs/" target="_blank" rel="noopener" class="nav-tile">
+                    <i data-lucide="book-open" class="w-4 h-4"></i>API Docs
+                </a>
+                <button onclick="openPalette()" class="nav-tile text-left w-full">
+                    <i data-lucide="search" class="w-4 h-4"></i>Search <span class="text-[10px] opacity-60 ml-auto">⌘K</span>
+                </button>
+                <a href="/logout" class="nav-tile text-[var(--accent-red)] border-[var(--accent-red)]/30">
+                    <i data-lucide="log-out" class="w-4 h-4"></i>Logout
+                </a>
+            </div>
+        </div>
 
         <!-- Main Content (Split View) -->
         <div class="flex-1 flex flex-col min-h-0 relative">
@@ -583,6 +662,41 @@
         const grid = document.getElementById('program-grid');
         const connectionStatus = document.getElementById('connection-status');
         let programsState = {}; // Store local state like auto-scroll per program
+
+        // Mobile menu toggle. Closes on backdrop click and on any
+        // nav tile click. The CSS class is just 'hidden' so we
+        // don't need a separate "open" state.
+        function toggleMobileMenu(force) {
+            const menu = document.getElementById('mobile-menu');
+            if (!menu) return;
+            const willShow = force === true || (force === undefined && menu.classList.contains('hidden'));
+            menu.classList.toggle('hidden', !willShow);
+            // Swap the hamburger icon to an X when the menu is open.
+            const btn = document.getElementById('mobile-menu-btn');
+            if (btn) {
+                const icon = btn.querySelector('[data-lucide]');
+                if (icon) {
+                    icon.setAttribute('data-lucide', willShow ? 'x' : 'menu');
+                    lucide.createIcons();
+                }
+            }
+            // Refresh icons after the menu becomes visible (lucide
+            // only renders icons in visible DOM).
+            if (willShow) lucide.createIcons();
+        }
+        // Auto-close the mobile menu when a nav tile is clicked so
+        // the user immediately sees the new page (not a half-open menu).
+        document.addEventListener('click', (e) => {
+            const menu = document.getElementById('mobile-menu');
+            if (!menu || menu.classList.contains('hidden')) return;
+            if (e.target.closest('.nav-tile')) {
+                toggleMobileMenu(false);
+            } else if (!e.target.closest('#mobile-menu') && !e.target.closest('button[onclick*="toggleMobileMenu"]')) {
+                // Click outside the menu (and not on the hamburger
+                // button) closes it.
+                toggleMobileMenu(false);
+            }
+        });
 
         // Terminal State
         let terminals = {}; // { id: { term: Terminal, fitAddon: FitAddon, container: HTMLElement } }
