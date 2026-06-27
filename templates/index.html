@@ -480,44 +480,60 @@
 
         let isResizing = false;
 
+        function _doResize(clientY) {
+            const containerRect = appContainer.getBoundingClientRect();
+            const newTerminalHeight = containerRect.bottom - clientY;
+            const MIN_TERMINAL_HEIGHT = 150;
+            const MAX_TERMINAL_HEIGHT = containerRect.height - 150;
+            if (newTerminalHeight >= MIN_TERMINAL_HEIGHT && newTerminalHeight <= MAX_TERMINAL_HEIGHT) {
+                terminalPane.style.height = `${newTerminalHeight}px`;
+            }
+        }
+        function _endResize() {
+            isResizing = false;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            if (resizer) resizer.classList.remove('bg-blue-600/20');
+            if (typeof activeTerminalId !== 'undefined' && activeTerminalId && terminals[activeTerminalId]) {
+                const session = terminals[activeTerminalId];
+                session.fitAddon.fit();
+                const dims = session.fitAddon.proposeDimensions();
+                if (dims) {
+                    socket.emit('terminal_resize', { id: activeTerminalId, cols: dims.cols, rows: dims.rows });
+                }
+            }
+        }
+
         if (resizer) {
             resizer.addEventListener('mousedown', (e) => {
                 isResizing = true;
                 document.body.style.cursor = 'row-resize';
+                document.body.style.userSelect = 'none';
                 resizer.classList.add('bg-blue-600/20');
-                e.preventDefault(); // Prevent text selection
+                e.preventDefault();
             });
+            resizer.addEventListener('touchstart', (e) => {
+                isResizing = true;
+                document.body.style.userSelect = 'none';
+                resizer.classList.add('bg-blue-600/20');
+                e.preventDefault();
+            }, { passive: false });
 
             document.addEventListener('mousemove', (e) => {
                 if (!isResizing) return;
-
-                // Calculate new height for terminal pane from bottom
-                const containerRect = appContainer.getBoundingClientRect();
-                const newTerminalHeight = containerRect.bottom - e.clientY;
-
-                // Constraints
-                const MIN_TERMINAL_HEIGHT = 150;
-                const MAX_TERMINAL_HEIGHT = containerRect.height - 150; // Keep space for services
-
-                if (newTerminalHeight >= MIN_TERMINAL_HEIGHT && newTerminalHeight <= MAX_TERMINAL_HEIGHT) {
-                    terminalPane.style.height = `${newTerminalHeight}px`;
-                }
+                _doResize(e.clientY);
             });
+            document.addEventListener('touchmove', (e) => {
+                if (!isResizing) return;
+                _doResize(e.touches[0].clientY);
+            }, { passive: false });
 
             document.addEventListener('mouseup', () => {
-                if (isResizing) {
-                    isResizing = false;
-                    document.body.style.cursor = '';
-                    resizer.classList.remove('bg-blue-600/20');
-
-                    // Trigger resize for terminals to refit
-                    if (typeof activeTerminalId !== 'undefined' && activeTerminalId && terminals[activeTerminalId]) {
-                        const session = terminals[activeTerminalId];
-                        session.fitAddon.fit();
-                        const dims = session.fitAddon.proposeDimensions();
-                        if (dims) {
-                            socket.emit('terminal_resize', { id: activeTerminalId, cols: dims.cols, rows: dims.rows });
-                        }
+                if (isResizing) _endResize();
+            });
+            document.addEventListener('touchend', () => {
+                if (isResizing) _endResize();
+            });
                     }
                 }
             });
@@ -888,11 +904,11 @@
                 const res = await fetch(`/programs/${name}`, { method: 'DELETE' });
                 if (!res.ok) {
                     const err = await res.json();
-                    alert(err.error || 'Failed to delete');
+                    toast(err.error || 'Failed to delete', 'error');
                 }
                 // UI update will happen via websocket
             } catch (err) {
-                alert(err.message);
+                toast(err.message, 'error');
             }
         }
 
@@ -953,7 +969,7 @@
                 const res = await fetch(`/programs/${name}/logs`, { method: 'DELETE' });
                 if (!res.ok) {
                     const err = await res.json();
-                    alert(err.error || 'Failed to clear logs');
+                    toast(err.error || 'Failed to clear logs', 'error');
                 } else {
                     const card = document.getElementById(`card-${name}`);
                     if (card) {
@@ -962,7 +978,7 @@
                     }
                 }
             } catch (err) {
-                alert(err.message);
+                toast(err.message, 'error');
             }
         }
 
@@ -1055,7 +1071,7 @@
             const name = document.getElementById('name').value;
             const originalName = document.getElementById('original-name').value || name;
             if (!originalName) {
-                alert('Save the program first, then set limits.');
+                toast('Save the program first, then set limits.', 'info');
                 return;
             }
             _limitsProgramName = originalName;
@@ -1204,7 +1220,7 @@
             // Quick fix: I'll implement GET /programs/<name> in app.py
             const pRes = await fetch(`/programs/${name}/config`);
             if (!pRes.ok) {
-                alert("Could not fetch program details");
+                toast("Could not fetch program details", 'error');
                 return;
             }
             const p = await pRes.json();
@@ -1282,7 +1298,7 @@
 
                 if (!res.ok) {
                     const err = await res.json();
-                    alert(err.error || 'Failed to save');
+                    toast(err.error || 'Failed to save', 'error');
                 } else {
                     // If a schedule is set, write the systemd units too
                     if (data.schedule) {
@@ -1293,7 +1309,7 @@
                         });
                         if (!schedRes.ok) {
                             const err = await schedRes.json();
-                            alert('Service saved, but schedule failed: ' + (err.error || 'unknown'));
+                            toast('Service saved, but schedule failed: ' + (err.error || 'unknown'), 'error');
                         }
                     } else if (isEditing) {
                         // User cleared a previous schedule — remove units
@@ -1302,7 +1318,7 @@
                     closeModal();
                 }
             } catch (err) {
-                alert(err.message);
+                toast(err.message, 'error');
             }
         };
     </script>
@@ -1480,7 +1496,7 @@
                 renderFiles(data.files);
             } catch (err) {
                 console.error(err);
-                alert(err.message);
+                toast(err.message, 'error');
             }
         }
 
@@ -1571,7 +1587,7 @@
                 fetchFiles(currentPath);
 
             } catch (err) {
-                alert(err.message);
+                toast(err.message, 'error');
             } finally {
                 input.value = ''; // Reset
             }

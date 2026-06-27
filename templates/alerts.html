@@ -229,7 +229,7 @@
                         <option value="1">Success only</option>
                         <option value="0">Failures only</option>
                     </select>
-                    <input id="filter-service" type="text" class="search-input" placeholder="Filter by service…" style="max-width: 240px" oninput="loadEvents()">
+                    <input id="filter-service" type="text" class="search-input" placeholder="Filter by service…" style="max-width: 240px" oninput="debouncedLoad()">
                     <span id="event-count" class="text-xs text-[var(--text-muted)] font-mono whitespace-nowrap ml-auto"></span>
                 </div>
             </div>
@@ -256,6 +256,12 @@
 
     <script>
     let range = 'all';
+    let filterTimer = null;
+
+    function debouncedLoad() {
+        if (filterTimer) clearTimeout(filterTimer);
+        filterTimer = setTimeout(loadEvents, 250);
+    }
 
     function toast(message, kind) {
         kind = kind || 'info';
