@@ -61,13 +61,39 @@ Files: `templates/index.html`, `app/process_manager.py` (verify the API)
     test in `tests/test_schedules.py:TestRunSystemctl` to assert the
     new contract (str input).
 
-### 1.3 — Docker Images tab  `[ ]`
+### 1.3 — Docker Images tab  `[x]`
 The backend has `GET /api/docker/images` returning image data, but
 `docker.html` only shows containers. Add a third tab "Images" with
 a table of images (id, repo:tag, size, created) and a "Remove"
 action with confirmation.
 
 Files: `templates/docker.html`, `app/docker_manager.py`
+
+**Status:** Done.
+  * `templates/docker.html`:
+      - Top-level view switcher (Containers / Images) above the
+        main grid.
+      - New Images view with a table: Repository:Tag, ID, Created,
+        Size, Actions. Includes a search/filter input and a row
+        count chip ("121 images").
+      - Per-row delete (trash icon) that confirms and calls the
+        new DELETE endpoint.
+      - `escapeHtml()` helper added (was missing — renderImages
+        was throwing on first render).
+  * `app/docker_manager.py`:
+      - `remove_image(id_or_name, force=False)` that handles
+        short id, full id, and repo:tag. Resolves via the image
+        list when a direct remove raises not-found (some short
+        ids collide when truncated).
+      - `list_images()` now parses ``Created`` from RFC 3339
+        (Docker's actual format) into a Unix timestamp, so the
+        UI doesn't have to redo the work in JS.
+  * `server.py`:
+      - New `DELETE /api/docker/images/<path:id_or_name>` route
+        that calls `remove_image` and logs to the activity log.
+  * Tests: +3 in `tests/test_docker_manager.py` covering the new
+    RFC 3339 parsing path, the unparseable fallback, and three
+    remove_image scenarios (direct, resolved via list, not-found).
 
 ### 1.4 — Backup timer status (next_run / last_run)  `[ ]`
 `GET /api/backups/<name>/status` returns `timer: {enabled, active,

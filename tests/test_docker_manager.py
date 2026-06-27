@@ -476,6 +476,40 @@ def test_list_images_basic(monkeypatch):
     assert out[1]["tags"] == []  # None coerced to []
 
 
+def test_list_images_rfc3339_created(monkeypatch):
+    """Docker returns ``Created`` as an RFC 3339 string; we should
+    parse it to a Unix timestamp (not a raw string), so the UI
+    doesn't have to redo the work in JS."""
+    img = MagicMock()
+    img.id = "sha256:abc"
+    img.attrs = {
+        "RepoTags": ["nginx:latest"],
+        "Created": "2024-01-15T10:30:00.123456789Z",
+        "Size": 1024,
+    }
+    client = MagicMock()
+    client.images.list.return_value = [img]
+    with patch.object(docker_manager, "_client", return_value=client):
+        out = list_images()
+    assert out[0]["created"] is not None
+    assert isinstance(out[0]["created"], float)
+    # 2024-01-15T10:30:00 UTC = 1705314600
+    assert abs(out[0]["created"] - 1705314600) < 1
+
+
+def test_list_images_unparseable_created(monkeypatch):
+    """When ``Created`` is missing or unparseable, return None so the
+    UI can show '—' instead of 'Invalid Date'."""
+    img = MagicMock()
+    img.id = "sha256:abc"
+    img.attrs = {"RepoTags": ["nginx:latest"], "Created": "not-a-date", "Size": 1024}
+    client = MagicMock()
+    client.images.list.return_value = [img]
+    with patch.object(docker_manager, "_client", return_value=client):
+        out = list_images()
+    assert out[0]["created"] is None
+
+
 # ---------------------------------------------------------------------------
 # Lifecycle (control)
 # ---------------------------------------------------------------------------
@@ -536,4 +570,43 @@ def test_remove_container_not_found(monkeypatch):
     with patch.object(docker_manager, "_client", return_value=client):
         with pytest.raises(DockerError) as exc_info:
             remove_container("gone")
+    assert exc_info.value.code == "not_found"
+
+
+def test_remove_image_ok(monkeypatch):
+    client = MagicMock()
+    with patch.object(docker_manager, "_client", return_value=client):
+        result = docker_manager.remove_image("abc123", force=False)
+    assert result["ok"] is True
+    client.images.remove.assert_called_once_with("abc123", force=False)
+
+
+def test_remove_image_resolves_short_id(monkeypatch):
+    """A short id that isn't found directly should be resolved via list."""
+    client = MagicMock()
+    # First call (direct) raises not-found, second call (after resolve) succeeds.
+    client.images.remove.side_effect = [
+        Exception("No such image: abc123"),
+        None,
+    ]
+    img = MagicMock()
+    img.id = "sha256:abc123def4567890abcdef1234567890abcdef1234567890abcdef1234567890"
+    img.attrs = {"RepoTags": ["nginx:latest"]}
+    client.images.list.return_value = [img]
+    with patch.object(docker_manager, "_client", return_value=client):
+        result = docker_manager.remove_image("abc123def456", force=False)
+    assert result["ok"] is True
+    # The second call should use the full id
+    assert client.images.remove.call_count == 2
+    full_call = client.images.remove.call_args_list[1]
+    assert full_call[0][0].startswith("sha256:")
+
+
+def test_remove_image_not_found(monkeypatch):
+    client = MagicMock()
+    client.images.remove.side_effect = Exception("No such image: gone")
+    client.images.list.return_value = []
+    with patch.object(docker_manager, "_client", return_value=client):
+        with pytest.raises(DockerError) as exc_info:
+            docker_manager.remove_image("gone")
     assert exc_info.value.code == "not_found"

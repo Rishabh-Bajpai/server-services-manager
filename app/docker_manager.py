@@ -13,6 +13,7 @@ import logging
 import os
 import threading
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 logger = logging.getLogger("DockerManager")
@@ -314,11 +315,25 @@ def list_images() -> List[dict]:
     for img in images:
         try:
             tags = img.attrs.get("RepoTags") or []
+            # ``Created`` from the Docker API is an RFC 3339 string
+            # (e.g. "2024-01-15T10:30:00.123456789Z"), not a Unix
+            # timestamp. Parse it once here so the frontend doesn't
+            # have to redo the work — and fall back to None when
+            # unparseable so the UI can show "—".
+            created_raw = img.attrs.get("Created", "")
+            created_ts = None
+            if created_raw:
+                try:
+                    s = created_raw.replace("Z", "+00:00")
+                    dt = datetime.fromisoformat(s)
+                    created_ts = dt.timestamp() if dt.tzinfo else dt.replace(tzinfo=timezone.utc).timestamp()
+                except (ValueError, TypeError):
+                    created_ts = None
             out.append({
                 "id": (img.id or "").replace("sha256:", "")[:12],
                 "full_id": img.id or "",
                 "tags": tags,
-                "created": img.attrs.get("Created", 0),
+                "created": created_ts,
                 "size": img.attrs.get("Size", 0),
             })
         except Exception:  # noqa: BLE001
@@ -363,6 +378,47 @@ def remove_container(id_or_name: str, force: bool = False, volumes: bool = False
         raise DockerError(_format_error(e), code=_classify(e))
     try:
         c.remove(force=force, v=volumes)
+    except Exception as e:  # noqa: BLE001
+        raise DockerError(_format_error(e), code=_classify(e))
+    return {"ok": True, "output": f"removed {id_or_name}"}
+
+
+def remove_image(id_or_name: str, force: bool = False) -> dict:
+    """Remove a Docker image by id (short or full) or tag.
+
+    ``id_or_name`` is what the user passed in; we re-resolve the full id
+    by looking it up in ``client.images.list()`` so the underlying
+    ``client.images.remove()`` always gets a stable identifier (some
+    short ids collide when truncated).
+    """
+    client = _client(timeout=20)
+    target = id_or_name
+    try:
+        # Try direct remove first; if it fails with a not-found we'll
+        # try resolving via list.
+        client.images.remove(target, force=force)
+        return {"ok": True, "output": f"removed {id_or_name}"}
+    except Exception as e:  # noqa: BLE001
+        if not _is_not_found(e):
+            raise DockerError(_format_error(e), code=_classify(e))
+    # Resolve via list: match short id prefix or tag.
+    try:
+        for img in client.images.list():
+            short_id = (img.id or "").replace("sha256:", "")[:12]
+            if short_id == id_or_name or img.id == id_or_name:
+                target = img.id
+                break
+            for tag in img.attrs.get("RepoTags") or []:
+                if tag == id_or_name:
+                    target = img.id
+                    break
+            if target != id_or_name:
+                break
+        else:
+            raise DockerError(f"Image {id_or_name} not found", code="not_found")
+        client.images.remove(target, force=force)
+    except DockerError:
+        raise
     except Exception as e:  # noqa: BLE001
         raise DockerError(_format_error(e), code=_classify(e))
     return {"ok": True, "output": f"removed {id_or_name}"}

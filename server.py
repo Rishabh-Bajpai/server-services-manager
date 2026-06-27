@@ -1151,6 +1151,23 @@ def api_docker_images_list():
         return jsonify({"error": str(e), "code": e.code}), 500
 
 
+@app.route('/api/docker/images/<path:id_or_name>', methods=['DELETE'])
+def api_docker_image_remove(id_or_name):
+    """Remove a Docker image by short id, full id, or repo:tag."""
+    force = (request.args.get('force') or '').lower() in ('1', 'true', 'yes')
+    try:
+        result = docker_manager.remove_image(id_or_name, force=force)
+        activity.log("docker.image.remove", target=id_or_name, status="ok",
+                    detail=result.get("output", ""), ip=request.remote_addr or "")
+        return jsonify(result)
+    except docker_manager.DockerError as e:
+        activity.log("docker.image.remove", target=id_or_name, status="error",
+                    detail=str(e), ip=request.remote_addr or "")
+        if e.code == "not_found":
+            return jsonify({"error": str(e), "code": e.code}), 404
+        return jsonify({"error": str(e), "code": e.code}), 500
+
+
 # Cron management
 @app.route('/cron')
 def cron_page():

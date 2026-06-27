@@ -273,7 +273,17 @@
     <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <div id="availability-banner"></div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-[1fr_24rem] gap-4">
+        <div class="flex items-center gap-1 mb-4">
+            <button class="tab-button active" data-view="containers" onclick="switchView('containers')">
+                <i data-lucide="container" class="w-3.5 h-3.5"></i> Containers
+            </button>
+            <button class="tab-button" data-view="images" onclick="switchView('images')">
+                <i data-lucide="layers" class="w-3.5 h-3.5"></i> Images
+            </button>
+            <span id="view-count" class="ml-auto text-xs text-[var(--text-muted)] font-mono"></span>
+        </div>
+
+        <div id="view-containers" class="grid grid-cols-1 lg:grid-cols-[1fr_24rem] gap-4">
             <section>
                 <div class="panel-card overflow-hidden">
                     <div class="p-3 border-b border-[var(--border-subtle)] flex items-center gap-3">
@@ -365,11 +375,37 @@
                             </div>
                             <div id="log-output" class="bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded p-2 h-80 overflow-y-auto font-mono text-xs"></div>
                         </div>
+                     </div>
+                 </div>
+             </aside>
+         </div>
+
+        <div id="view-images" class="hidden">
+            <div class="panel-card overflow-hidden">
+                <div class="p-3 border-b border-[var(--border-subtle)] flex items-center gap-3">
+                    <div class="relative flex-1">
+                        <i data-lucide="search" class="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+                        <input id="image-search" type="text" class="search-input" placeholder="Filter by tag or id..." oninput="renderImages()">
                     </div>
+                    <span id="image-count" class="text-xs text-[var(--text-muted)] font-mono whitespace-nowrap"></span>
                 </div>
-            </aside>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 30%">Repository:Tag</th>
+                                <th style="width: 14%">ID</th>
+                                <th style="width: 18%">Created</th>
+                                <th style="width: 18%">Size</th>
+                                <th style="width: 4.5rem" class="text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="image-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
         </div>
-    </main>
+     </main>
 
     <div id="remove-modal" class="modal-backdrop hidden">
         <div class="modal-card">
@@ -404,6 +440,8 @@
     let activeTab = 'details';
     let logEventSource = null;
     let statsTimer = null;
+    let images = [];
+    let currentView = 'containers';
 
     // ----- Helpers -----
     function stateDotClass(state) {
@@ -436,6 +474,15 @@
         let i = 0;
         while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
         return n.toFixed(i ? 1 : 0) + ' ' + units[i];
+    }
+    function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
     function fmtAge(seconds) {
         if (!seconds) return '—';
@@ -503,6 +550,78 @@
                         closeDetail();
                     }
                 }
+            });
+    }
+    function loadImages() {
+        return api('/api/docker/images')
+            .then(({ ok, data }) => {
+                if (!ok) {
+                    toast(data.error || 'Failed to load images', 'error');
+                    images = [];
+                    renderImages();
+                    return;
+                }
+                images = data.images || [];
+                renderImages();
+            });
+    }
+    function switchView(view) {
+        currentView = view;
+        document.querySelectorAll('[data-view]').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.view === view);
+        });
+        document.getElementById('view-containers').classList.toggle('hidden', view !== 'containers');
+        document.getElementById('view-images').classList.toggle('hidden', view !== 'images');
+        if (view === 'images') {
+            // Close the detail panel so the images view doesn't have a
+            // stranded aside; it has no detail of its own.
+            closeDetail();
+            loadImages();
+        }
+    }
+    function renderImages() {
+        const tbody = document.getElementById('image-tbody');
+        const countEl = document.getElementById('image-count');
+        const filter = (document.getElementById('image-search').value || '').toLowerCase();
+        const list = images.filter(img => {
+            if (!filter) return true;
+            if ((img.id || '').toLowerCase().includes(filter)) return true;
+            if ((img.tags || []).some(t => t.toLowerCase().includes(filter))) return true;
+            return false;
+        });
+        countEl.textContent = list.length + (list.length === 1 ? ' image' : ' images');
+        if (list.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" class="empty-state">${images.length === 0 ? 'No images on this host yet.' : 'No images match the filter.'}</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = list.map(img => {
+            const tag = (img.tags && img.tags[0]) || '<untagged>';
+            const tagShort = tag.length > 40 ? tag.slice(0, 38) + '…' : tag;
+            const created = img.created ? new Date(img.created * 1000).toLocaleString() : '—';
+            return `<tr>
+                <td class="font-mono" title="${escapeHtml(tag)}">${escapeHtml(tagShort)}</td>
+                <td class="font-mono text-[var(--text-muted)]">${escapeHtml(img.id || '—')}</td>
+                <td class="text-[var(--text-muted)]">${escapeHtml(created)}</td>
+                <td class="text-[var(--text-muted)] font-mono">${escapeHtml(fmtBytes(img.size || 0))}</td>
+                <td class="text-right">
+                    <button class="row-action-btn stop" onclick="removeImage('${escapeHtml(img.id || '')}')" title="Remove this image">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    </button>
+                </td>
+            </tr>`;
+        }).join('');
+        lucide.createIcons();
+    }
+    function removeImage(id) {
+        if (!confirm(`Remove image ${id}? This cannot be undone.`)) return;
+        api('/api/docker/images/' + encodeURIComponent(id), { method: 'DELETE' })
+            .then(({ ok, data }) => {
+                if (!ok) {
+                    toast(data.error || 'Failed to remove', 'error');
+                    return;
+                }
+                toast('Image removed', 'success');
+                loadImages();
             });
     }
     function renderRows() {
