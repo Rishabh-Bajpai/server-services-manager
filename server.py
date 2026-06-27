@@ -2792,6 +2792,15 @@ def api_packages_jobs_list():
     return jsonify({"jobs": package_manager.list_jobs()})
 
 
+@app.route('/api/packages/lookup', methods=['GET'])
+def api_packages_lookup():
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify({"error": "no package name specified"}), 400
+    result = package_manager.lookup_package(q)
+    return jsonify(result)
+
+
 @app.route('/api/notifications/state', methods=['GET'])
 def api_notifications_state():
     if _health_monitor is None:

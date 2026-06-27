@@ -174,7 +174,25 @@
             text-align: center; padding: 3rem 1.5rem;
             color: var(--text-muted);
         }
-
+        .tab-button {
+            padding: 0.5rem 0.875rem; font-size: 0.8125rem; font-weight: 600;
+            color: var(--text-secondary); background: transparent; border: none;
+            border-bottom: 2px solid transparent; cursor: pointer;
+            transition: all 0.15s ease; display: inline-flex; align-items: center; gap: 0.375rem;
+        }
+        .tab-button:hover { color: var(--text-primary); }
+        .tab-button.active { color: var(--accent-green); border-bottom-color: var(--accent-green); }
+        .row-action-btn {
+            width: 28px; height: 28px;
+            display: inline-flex; align-items: center; justify-content: center;
+            border-radius: 0.375rem;
+            background: rgba(255,255,255,0.04);
+            color: var(--text-secondary);
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .row-action-btn:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
         .toast-container {
             position: fixed; top: 1rem; right: 1rem;
             z-index: 100; display: flex; flex-direction: column; gap: 0.5rem;
@@ -215,9 +233,21 @@
     <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
         <div id="banners"></div>
 
-        <section id="summary-cards" class="grid grid-cols-2 sm:grid-cols-3 gap-3"></section>
+        <div class="flex items-center gap-1 mb-2">
+            <button class="tab-button active" data-tab="updates" onclick="switchTab('updates')">
+                <i data-lucide="package" class="w-3.5 h-3.5"></i> Updates
+            </button>
+            <button class="tab-button" data-tab="lookup" onclick="switchTab('lookup')">
+                <i data-lucide="search" class="w-3.5 h-3.5"></i> Lookup
+            </button>
+            <button class="tab-button" data-tab="history" onclick="switchTab('history')">
+                <i data-lucide="clock" class="w-3.5 h-3.5"></i> History
+            </button>
+        </div>
 
-        <section class="panel-card">
+        <div id="tab-updates">
+            <section id="summary-cards" class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4"></section>
+            <section class="panel-card">
             <div class="p-3 border-b border-[var(--border-subtle)] flex flex-wrap items-center gap-2">
                 <div class="flex gap-1">
                     <button class="filter-tab active" data-filter="all" onclick="setFilter('all', this)">All</button>
@@ -252,6 +282,68 @@
                         <tr><td colspan="5" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:25%"></span><span class="sk" style="width:20%;margin-left:1rem"></span><span class="sk" style="width:10%;margin-left:1rem"></span></div></td></tr>
                         <tr><td colspan="5" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:40%"></span><span class="sk" style="width:12%;margin-left:1rem"></span><span class="sk" style="width:18%;margin-left:1rem"></span></div></td></tr>
                         <tr><td colspan="5" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:20%"></span><span class="sk" style="width:25%;margin-left:1rem"></span><span class="sk" style="width:15%;margin-left:1rem"></span></div></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+        </div>
+
+        <section id="tab-lookup-inner" class="p-4 space-y-4 hidden">
+            <div class="flex gap-2">
+                <div class="relative flex-1">
+                    <i data-lucide="search" class="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                    <input id="lookup-query" type="text" class="search-input" placeholder="Search for a package…" onkeydown="if(event.key==='Enter')doLookup()">
+                </div>
+                <button class="btn btn-primary" onclick="doLookup()">
+                    <i data-lucide="search" class="w-3.5 h-3.5"></i> Lookup
+                </button>
+            </div>
+            <div id="lookup-result" class="hidden">
+                <div class="panel-card p-4 space-y-2 text-sm">
+                    <div class="flex items-center gap-3">
+                        <span id="lk-name" class="font-semibold text-base"></span>
+                        <span id="lk-status" class="badge"></span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4 text-xs">
+                        <div><span class="text-[var(--text-muted)]">Installed:</span> <span id="lk-installed" class="font-mono">—</span></div>
+                        <div><span class="text-[var(--text-muted)]">Candidate:</span> <span id="lk-candidate" class="font-mono">—</span></div>
+                    </div>
+                    <div id="lk-action" class="hidden">
+                        <button class="btn btn-primary" onclick="quickInstall()">
+                            <i data-lucide="download" class="w-3.5 h-3.5"></i> Install upgrade
+                        </button>
+                    </div>
+                    <div id="lk-error" class="text-[var(--accent-red)] text-xs hidden"></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="tab-history" class="panel-card hidden">
+            <div class="p-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
+                <h2 class="text-sm font-semibold flex items-center gap-2">
+                    <i data-lucide="clock" class="w-4 h-4 text-[var(--accent-purple)]"></i>
+                    Install history
+                </h2>
+                <button class="btn" onclick="loadJobs()">
+                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Refresh
+                </button>
+            </div>
+            <div class="table-wrap">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 22%">Job ID</th>
+                            <th style="width: 28%">Packages</th>
+                            <th style="width: 14%">Manager</th>
+                            <th style="width: 14%">Started</th>
+                            <th style="width: 10%">Result</th>
+                            <th style="width: 4rem" class="text-right">Log</th>
+                        </tr>
+                    </thead>
+                    <tbody id="jobs-tbody">
+                        <tr><td colspan="6" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:30%"></span><span class="sk" style="width:25%;margin-left:1rem"></span></div></td></tr>
+                        <tr><td colspan="6" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:20%"></span><span class="sk" style="width:30%;margin-left:1rem"></span></div></td></tr>
+                        <tr><td colspan="6" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:35%"></span><span class="sk" style="width:20%;margin-left:1rem"></span></div></td></tr>
                     </tbody>
                 </table>
             </div>
@@ -464,6 +556,114 @@
                 return;
             }
             if (!jobPollTimer) jobPollTimer = setInterval(pollJob, 1000);
+        });
+    }
+
+    function switchTab(tab) {
+        document.querySelectorAll('.tab-button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        document.getElementById('tab-updates').classList.toggle('hidden', tab !== 'updates');
+        document.getElementById('tab-lookup-inner').classList.toggle('hidden', tab !== 'lookup');
+        document.getElementById('tab-history').classList.toggle('hidden', tab !== 'history');
+        if (tab === 'lookup') document.getElementById('lookup-query').focus();
+        if (tab === 'history') loadJobs();
+    }
+
+    // Package lookup
+    let _lookupPackage = null;
+    function doLookup() {
+        const q = document.getElementById('lookup-query').value.trim();
+        if (!q) { toast('Enter a package name', 'info'); return; }
+        api('/api/packages/lookup?q=' + encodeURIComponent(q)).then(({ data }) => {
+            const result = document.getElementById('lookup-result');
+            result.classList.remove('hidden');
+            if (data.error) {
+                document.getElementById('lk-error').textContent = data.error;
+                document.getElementById('lk-error').classList.remove('hidden');
+                document.getElementById('lk-name').textContent = q;
+                document.getElementById('lk-installed').textContent = '—';
+                document.getElementById('lk-candidate').textContent = '—';
+                document.getElementById('lk-action').classList.add('hidden');
+                document.getElementById('lk-status').className = 'badge badge-red';
+                document.getElementById('lk-status').textContent = 'not found';
+                _lookupPackage = null;
+                return;
+            }
+            document.getElementById('lk-error').classList.add('hidden');
+            document.getElementById('lk-name').textContent = data.name;
+            document.getElementById('lk-installed').textContent = data.installed || 'not installed';
+            document.getElementById('lk-candidate').textContent = data.candidate || '—';
+            _lookupPackage = data;
+            if (data.available_upgrade) {
+                document.getElementById('lk-action').classList.remove('hidden');
+                document.getElementById('lk-status').className = 'badge badge-yellow';
+                document.getElementById('lk-status').textContent = 'upgrade available';
+            } else {
+                document.getElementById('lk-action').classList.add('hidden');
+                document.getElementById('lk-status').className = 'badge badge-green';
+                document.getElementById('lk-status').textContent = data.installed ? 'up to date' : 'available';
+            }
+            lucide.createIcons();
+        });
+    }
+    function quickInstall() {
+        if (!_lookupPackage || !_lookupPackage.available_upgrade) return;
+        api('/api/packages/install', { method: 'POST', body: JSON.stringify({ packages: [_lookupPackage.name] }) })
+            .then(({ ok, data }) => {
+                if (!ok) { toast(data.error || 'install failed', 'error'); return; }
+                toast('install started for ' + _lookupPackage.name, 'success');
+                activeJobId = data.job_id;
+                document.getElementById('jobs-section').classList.remove('hidden');
+                document.getElementById('job-id').textContent = data.job_id;
+                document.getElementById('job-packages').textContent = data.packages.join(', ');
+                document.getElementById('job-log').textContent = '';
+                document.getElementById('job-spinner').classList.remove('hidden');
+                document.getElementById('job-status').textContent = '';
+                pollJob();
+            });
+    }
+
+    // Install job history
+    function loadJobs() {
+        api('/api/packages/jobs').then(({ data }) => {
+            const tbody = document.getElementById('jobs-tbody');
+            const jobs = data.jobs || [];
+            if (!jobs.length) {
+                tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No install jobs yet.</div></td></tr>';
+                return;
+            }
+            tbody.innerHTML = jobs.map(j => {
+                const status = j.running
+                    ? '<span class="badge badge-yellow">running</span>'
+                    : j.success
+                    ? '<span class="badge badge-green">ok</span>'
+                    : '<span class="badge badge-red">failed</span>';
+                return `<tr>
+                    <td class="font-mono text-xs">${escAttr(j.id)}</td>
+                    <td class="text-xs">${escAttr((j.packages || []).join(', '))}</td>
+                    <td class="text-xs">${escAttr(j.manager || '—')}</td>
+                    <td class="text-xs text-[var(--text-muted)]">${j.started_at ? fmtAgo(j.started_at) : '—'}</td>
+                    <td>${status}</td>
+                    <td class="text-right">
+                        <button class="row-action-btn" onclick="event.stopPropagation(); viewJobLog('${escAttr(j.id)}')" title="View log">
+                            <i data-lucide="file-text" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </td>
+                </tr>`;
+            }).join('');
+            lucide.createIcons();
+        });
+    }
+    function viewJobLog(jobId) {
+        api('/api/packages/jobs/' + jobId).then(({ data }) => {
+            if (!data) { toast('job not found', 'error'); return; }
+            document.getElementById('jobs-section').classList.remove('hidden');
+            document.getElementById('job-id').textContent = data.id;
+            document.getElementById('job-packages').textContent = (data.packages || []).join(', ');
+            document.getElementById('job-log').textContent = data.tail || '(empty log)';
+            document.getElementById('job-spinner').classList.add('hidden');
+            const status = data.success ? 'success' : 'failed';
+            document.getElementById('job-status').innerHTML = `<span class="badge badge-${data.success ? 'green' : 'red'}">${status}</span>`;
+            lucide.createIcons();
         });
     }
 

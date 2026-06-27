@@ -437,6 +437,68 @@ def _run_install(job: dict, on_done: Optional[Callable]) -> None:
                 pass
 
 
+def lookup_package(name: str) -> dict:
+    """Return version info for a single package.
+
+    Returns a dict with keys: name, installed, candidate, available_upgrade.
+    Returns an error dict when the package isn't found.
+    """
+    result = {"name": name, "installed": None, "candidate": None, "available_upgrade": None}
+    mngr = detect_manager()
+
+    if mngr == "apt":
+        try:
+            proc = subprocess.run(
+                ["apt-cache", "policy", name],
+                capture_output=True, text=True, timeout=10,
+            )
+            if proc.returncode == 0 and proc.stdout:
+                for line in proc.stdout.splitlines():
+                    line = line.strip()
+                    if line.startswith("  Installed:"):
+                        val = line.split(":", 1)[1].strip()
+                        result["installed"] = val if val != "(none)" else None
+                    elif line.startswith("  Candidate:"):
+                        val = line.split(":", 1)[1].strip()
+                        result["candidate"] = val if val != "(none)" else None
+        except subprocess.TimeoutExpired:
+            return {"name": name, "error": "lookup timed out"}
+        except FileNotFoundError:
+            return {"name": name, "error": "package manager not found"}
+
+        if result["installed"] and result["candidate"] and result["installed"] != result["candidate"]:
+            result["available_upgrade"] = result["candidate"]
+    elif mngr in ("dnf", "yum"):
+        try:
+            proc = subprocess.run(
+                ["rpm", "-q", "--queryformat", "%{VERSION}", name],
+                capture_output=True, text=True, timeout=10,
+            )
+            if proc.returncode == 0:
+                result["installed"] = proc.stdout.strip()
+            proc2 = subprocess.run(
+                ["dnf", "-q", "list", "available", name] if mngr == "dnf" else ["yum", "-q", "list", "available", name],
+                capture_output=True, text=True, timeout=10,
+            )
+            for line in (proc2.stdout or "").splitlines():
+                line = line.strip()
+                if name in line and len(line.split()) >= 3:
+                    result["candidate"] = line.split()[1]
+                    break
+            if result["installed"] and result["candidate"] and result["installed"] != result["candidate"]:
+                result["available_upgrade"] = result["candidate"]
+        except subprocess.TimeoutExpired:
+            return {"name": name, "error": "lookup timed out"}
+        except FileNotFoundError:
+            return {"name": name, "error": "package manager not found"}
+    else:
+        return {"name": name, "error": f"unsupported manager: {mngr}"}
+
+    if not result["installed"] and not result["candidate"]:
+        result["error"] = "package not found"
+    return result
+
+
 def _append_log(path: str, line: str) -> None:
     try:
         with open(path, "a") as f:
