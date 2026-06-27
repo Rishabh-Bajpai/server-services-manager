@@ -489,6 +489,17 @@
                         </button>
                     </div>
                 </div>
+                <div class="panel-section">
+                    <div class="panel-label">Mask <span class="text-[10px] text-[var(--text-muted)] font-normal">(prevent any start)</span></div>
+                    <div class="flex items-center gap-2">
+                        <button id="btn-mask" onclick="handleAction('mask')" class="row-action-btn" style="height:auto;padding:0.5rem 0.75rem;width:auto;display:inline-flex;gap:0.375rem;color:var(--accent-red)" title="Mask this unit (link to /dev/null)">
+                            <i data-lucide="eye-off" class="w-3.5 h-3.5"></i><span>Mask</span>
+                        </button>
+                        <button id="btn-unmask" onclick="handleAction('unmask')" class="row-action-btn" style="height:auto;padding:0.5rem 0.75rem;width:auto;display:inline-flex;gap:0.375rem" title="Remove the mask link">
+                            <i data-lucide="eye" class="w-3.5 h-3.5"></i><span>Unmask</span>
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <!-- Unit File tab -->
@@ -719,6 +730,7 @@
                         <button class="row-action-btn start" onclick="rowAction(event, '${escapeHtml(u.name)}', 'start')" title="Start"><i data-lucide="play" class="w-3.5 h-3.5"></i></button>
                         <button class="row-action-btn stop" onclick="rowAction(event, '${escapeHtml(u.name)}', 'stop')" title="Stop"><i data-lucide="square" class="w-3.5 h-3.5"></i></button>
                         <button class="row-action-btn restart" onclick="rowAction(event, '${escapeHtml(u.name)}', 'restart')" title="Restart"><i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i></button>
+                        <button class="row-action-btn" onclick="rowAction(event, '${escapeHtml(u.name)}', u.is_enabled ? 'disable' : 'enable')" title="${u.is_enabled ? 'Disable at boot' : 'Enable at boot'}"><i data-lucide="${u.is_enabled ? 'check-circle' : 'circle'}" class="w-3.5 h-3.5"></i></button>
                     </td>
                 `;
                 frag.appendChild(tr);
@@ -1290,7 +1302,16 @@
             const labels = {
                 start: 'Start unit', stop: 'Stop unit', restart: 'Restart unit',
                 reload: 'Reload unit', enable: 'Enable at boot', disable: 'Disable at boot',
+                mask: 'Mask unit', unmask: 'Unmask unit',
             };
+            // Mask is destructive (it links the unit to /dev/null,
+            // preventing any start until unmasked). Show an extra
+            // confirmation so the user can back out.
+            if (action === 'mask') {
+                if (!confirm(`Mask "${pendingAction.name}"?\n\nThis will link the unit to /dev/null and prevent it from being started. You can reverse it later with "Unmask".`)) {
+                    return;
+                }
+            }
             $('auth-title').textContent = labels[action] || 'Confirm action';
             $('auth-message').textContent = `Enter your password to ${action} "${pendingAction.name}".`;
             $('auth-password').value = '';

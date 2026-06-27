@@ -127,13 +127,36 @@ Files: `templates/backups.html`, `app/backup_manager.py`
     `test_enable_job_failure` / `test_disable_job` tests were
     updated to the new tuple contract.
 
-### 1.5 — System-services: `mask` / `unmask` actions  `[ ]`
+### 1.5 — System-services: `mask` / `unmask` actions  `[x]`
 AGENTS.md lists `mask` and `unmask` as available actions. The UI
 doesn't have buttons for them. Add row actions behind a "..."
 overflow menu with confirmation (mask is destructive — user can
 unbreak a service by mistake).
 
 Files: `templates/system-services.html`, `app/system_services.py`
+
+**Status:** Done.
+  * `templates/system-services.html`:
+      - Detail panel: new "Mask" section under the existing
+        "Toggle at boot" section, with two labelled buttons
+        (Mask in red, Unmask in default style) and a small
+        helper text "(prevent any start)".
+      - Row actions: added a 4th button next to the existing
+        Start/Stop/Restart trio. It toggles between "enable"
+        and "disable" depending on the unit's `is_enabled` state
+        (icon: check-circle vs circle).
+      - `openAuth()`: special-cases the `mask` action with a
+        native `confirm()` dialog that explains the consequence
+        ("This will link the unit to /dev/null and prevent it
+        from being started. You can reverse it later with
+        'Unmask'.") before showing the password prompt.
+      - The `mask`/`unmask` labels are added to the action
+        labels map so the password modal reads "Mask unit" /
+        "Unmask unit" instead of the generic "Confirm action".
+  * The backend `app/system_services.py` already accepted these
+    actions (they're in the `ACTIONS` set), so no backend
+    changes were needed. The `api_system_services_action`
+    route already handles them via the generic action dispatch.
 
 ### 1.6 — Swagger UI link in nav  `[x]`
 `/docs/` is reachable but not linked anywhere. Add a "API Docs"
