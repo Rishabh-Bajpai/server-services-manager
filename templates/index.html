@@ -598,8 +598,20 @@
             removeTerminal(msg.id);
         });
 
+        // State-change toasts: server pushes a service_event for
+        // every program transition (running -> failed, etc.). The
+        // toast() helper is defined in the <script> block that
+        // renders toasts (below the modal).
+        socket.on('service_event', (msg) => {
+            const sev = msg.severity || 'info';
+            const map = { info: 'success', warning: 'error', critical: 'error' };
+            const cls = map[sev] || 'success';
+            toast(`${msg.service}: ${msg.message}`, cls);
+        });
+
         function renderPrograms(programs) {
             if (programs.length === 0) {
+                if (grid.querySelector('.col-span-full')) return;
                 grid.innerHTML = `
                     <div class="col-span-full flex flex-col items-center pt-20 animate-fade-in">
                         <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center mb-3 border border-[var(--border-subtle)]">
@@ -1217,7 +1229,6 @@
             e.preventDefault();
 
             const envDict = {};
-            const envDict = {};
             document.getElementById('environment').value.split('\n').forEach(line => {
                 const [key, ...val] = line.split('=');
                 if (key && val) envDict[key.trim()] = val.join('=').trim();
@@ -1703,6 +1714,55 @@
                 }
             }
         })();
+    </script>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <script>
+        // Toast helper used by SocketIO service_event listener and
+        // other long-lived code paths. The container lives in the
+        // DOM above; we just append a styled chip and animate it in.
+        (function() {
+            const style = document.createElement('style');
+            style.textContent = `
+                #toast-container .toast {
+                    padding: 0.65rem 1.1rem;
+                    border-radius: 0.75rem;
+                    font-size: 0.8125rem;
+                    font-weight: 500;
+                    color: #fff;
+                    pointer-events: auto;
+                    backdrop-filter: blur(12px);
+                    -webkit-backdrop-filter: blur(12px);
+                    border: 1px solid rgba(255,255,255,0.08);
+                    box-shadow: 0 8px 24px -8px rgba(0,0,0,0.4);
+                    animation: toastIn 0.25s ease-out;
+                    max-width: 24rem;
+                    word-break: break-word;
+                }
+                #toast-container .toast.success { background: rgba(16,185,129,0.92); }
+                #toast-container .toast.error   { background: rgba(239,68,68,0.92); }
+                #toast-container .toast.info    { background: rgba(59,130,246,0.92); }
+                #toast-container .toast.out     { animation: toastOut 0.2s ease-in forwards; }
+                @keyframes toastIn  { from { opacity: 0; transform: translateY(-10px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+                @keyframes toastOut { from { opacity: 1; transform: translateY(0) scale(1); }       to { opacity: 0; transform: translateY(-10px) scale(0.95); } }
+            `;
+            document.head.appendChild(style);
+        })();
+
+        function toast(message, type) {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            const el = document.createElement('div');
+            el.className = 'toast ' + (type || 'info');
+            el.textContent = message;
+            container.appendChild(el);
+            setTimeout(() => {
+                el.classList.add('out');
+                setTimeout(() => el.remove(), 200);
+            }, 3000);
+        }
     </script>
 </body>
 
