@@ -191,6 +191,8 @@
         .toast.success { border-left: 3px solid var(--accent-green); }
         .toast.error { border-left: 3px solid var(--accent-red); }
         .toast.info { border-left: 3px solid var(--accent-blue); }
+        @keyframes sk { 0%,100%{opacity:.4} 50%{opacity:.8} }
+        .sk { display:inline-block; height:14px; border-radius:4px; background:var(--border-subtle); animation:sk 1.5s ease-in-out infinite; }
     </style>
 </head>
 <body class="text-[var(--text-primary)] min-h-screen">
@@ -245,7 +247,12 @@
                             <th style="width: 20%">Repo</th>
                         </tr>
                     </thead>
-                    <tbody id="rows"></tbody>
+                    <tbody id="rows">
+                        <tr><td colspan="5" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:30%"></span><span class="sk" style="width:15%;margin-left:1rem"></span><span class="sk" style="width:15%;margin-left:1rem"></span></div></td></tr>
+                        <tr><td colspan="5" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:25%"></span><span class="sk" style="width:20%;margin-left:1rem"></span><span class="sk" style="width:10%;margin-left:1rem"></span></div></td></tr>
+                        <tr><td colspan="5" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:40%"></span><span class="sk" style="width:12%;margin-left:1rem"></span><span class="sk" style="width:18%;margin-left:1rem"></span></div></td></tr>
+                        <tr><td colspan="5" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:20%"></span><span class="sk" style="width:25%;margin-left:1rem"></span><span class="sk" style="width:15%;margin-left:1rem"></span></div></td></tr>
+                    </tbody>
                 </table>
             </div>
         </section>

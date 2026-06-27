@@ -135,6 +135,8 @@
         .toast.error { border-left: 3px solid var(--accent-red); }
         .toast.info { border-left: 3px solid var(--accent-blue); }
         .row-flash { animation: fadeIn 0.4s ease-out; }
+        @keyframes sk { 0%,100%{opacity:.4} 50%{opacity:.8} }
+        .sk { display:inline-block; height:14px; border-radius:4px; background:var(--border-subtle); animation:sk 1.5s ease-in-out infinite; }
     </style>
 </head>
 <body class="text-[var(--text-primary)] min-h-screen">
@@ -156,10 +158,19 @@
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
         <section class="panel-card">
-            <div class="p-3 border-b border-[var(--border-subtle)] text-xs text-[var(--text-secondary)]">
-                Local-disk backups via systemd timers. Each job runs as a oneshot
+            <div class="p-3 border-b border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] space-y-2">
+                <div>Local-disk backups via systemd timers. Each job runs as a oneshot
                 service (tar / mysqldump / pg_dump) on its schedule and prunes
-                old archives beyond the retention count.
+                old archives beyond the retention count.</div>
+                <details class="text-xs">
+                    <summary class="cursor-pointer text-[var(--accent-blue)] hover:underline font-medium">How to restore from an archive</summary>
+                    <div class="mt-2 space-y-1 text-[var(--text-muted)] leading-relaxed">
+                        <p>Archives are stored in <code class="font-mono">~/.server-services-manager/backups/&lt;job-name&gt;/</code>.</p>
+                        <p><strong>Directory (tar):</strong> <code class="font-mono">tar -xzf &lt;archive&gt;.tar.gz -C /target/restore/path</code></p>
+                        <p><strong>MySQL:</strong> <code class="font-mono">zcat &lt;archive&gt;.sql.gz | mysql -u root -p &lt;database&gt;</code></p>
+                        <p><strong>PostgreSQL:</strong> <code class="font-mono">zcat &lt;archive&gt;.sql.gz | psql -U postgres &lt;database&gt;</code></p>
+                    </div>
+                </details>
             </div>
             <div class="overflow-x-auto">
                 <table class="data-table">
@@ -175,7 +186,12 @@
                             <th style="width: 4rem" class="text-right">—</th>
                         </tr>
                     </thead>
-                    <tbody id="jobs-tbody"></tbody>
+                    <tbody id="jobs-tbody">
+                        <tr><td colspan="8" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:20%"></span><span class="sk" style="width:10%;margin-left:1rem"></span><span class="sk" style="width:25%;margin-left:1rem"></span><span class="sk" style="width:15%;margin-left:1rem"></span></div></td></tr>
+                        <tr><td colspan="8" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:15%"></span><span class="sk" style="width:12%;margin-left:1rem"></span><span class="sk" style="width:20%;margin-left:1rem"></span><span class="sk" style="width:18%;margin-left:1rem"></span></div></td></tr>
+                        <tr><td colspan="8" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:25%"></span><span class="sk" style="width:8%;margin-left:1rem"></span><span class="sk" style="width:15%;margin-left:1rem"></span></div></td></tr>
+                        <tr><td colspan="8" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:10%"></span><span class="sk" style="width:15%;margin-left:1rem"></span><span class="sk" style="width:22%;margin-left:1rem"></span></div></td></tr>
+                    </tbody>
                 </table>
             </div>
         </section>
