@@ -134,6 +134,13 @@
             align-items: center; justify-content: center;
         }
         .modal-backdrop.open { display: flex; }
+        .mdns-chip {
+            display: inline-flex; align-items: center; gap: 0.25rem;
+            padding: 0.125rem 0.5rem; border-radius: 0.375rem;
+            font-size: 0.6875rem; font-weight: 600;
+            background: rgba(59,130,246,0.12); color: var(--accent-blue);
+            border: 1px solid rgba(59,130,246,0.25);
+        }
         .modal {
             background: var(--bg-card);
             border: 1px solid var(--border-subtle);
@@ -261,6 +268,19 @@
             </p>
         </section>
     </main>
+
+    <div class="modal-backdrop" id="modal-mdns" onclick="if(event.target===this) closeMdns()">
+        <div class="modal" style="max-width:36rem">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-semibold flex items-center gap-2">
+                    <i data-lucide="network" class="w-4 h-4 text-[var(--accent-blue)]"></i>
+                    mDNS results
+                </h3>
+                <button class="btn" onclick="closeMdns()"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            <div id="mdns-list" class="space-y-2 max-h-[50vh] overflow-y-auto"></div>
+        </div>
+    </div>
 
     <div class="modal-backdrop" id="modal-add" onclick="if(event.target===this) closeAdd()">
         <div class="modal">
@@ -497,13 +517,44 @@
                         return;
                     }
                     const list = data.peers || [];
+                    const container = document.getElementById('mdns-list');
+                    container.innerHTML = '';
                     if (!list.length) {
-                        toast('mDNS returned no peers (zeroconf not installed or none found)', 'info');
+                        container.innerHTML = '<div class="empty-state">mDNS returned no peers (zeroconf not installed or none found)</div>';
+                        document.getElementById('modal-mdns').classList.add('open');
                         return;
                     }
-                    toast(`mDNS found ${list.length} service(s) — not auto-added`, 'info');
-                    console.log('mDNS results', list);
+                    container.innerHTML = list.map(p => {
+                        const host = p.host || '?';
+                        const port = p.port || '?';
+                        const type = p.type || 'ssm';
+                        return `<div class="panel-card p-3 flex items-center gap-3">
+                            <i data-lucide="server" class="w-5 h-5 text-[var(--accent-cyan)] flex-shrink-0"></i>
+                            <div class="min-w-0 flex-1">
+                                <div class="font-semibold text-sm truncate">${escapeHtml(host)}</div>
+                                <div class="text-xs text-[var(--text-muted)] flex flex-wrap gap-2 mt-0.5">
+                                    <span class="mdns-chip"><i data-lucide="wifi" class="w-3 h-3"></i> ${escapeHtml(type)}</span>
+                                    <span class="mdns-chip"><i data-lucide="plug" class="w-3 h-3"></i> port ${escapeHtml(String(port))}</span>
+                                </div>
+                            </div>
+                            <button class="btn" onclick="closeMdns(); fillPeerForm('${escapeHtml(host)}', ${port})" title="Add this peer">
+                                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                                <span class="hidden sm:inline">Add</span>
+                            </button>
+                        </div>`;
+                    }).join('');
+                    document.getElementById('modal-mdns').classList.add('open');
+                    lucide.createIcons();
                 });
+        }
+        function closeMdns() {
+            document.getElementById('modal-mdns').classList.remove('open');
+        }
+        function fillPeerForm(host, port) {
+            document.getElementById('peer-host').value = host;
+            document.getElementById('peer-name').value = host.split('.')[0];
+            document.getElementById('peer-port').value = port;
+            openAdd();
         }
 
         document.addEventListener('keydown', e => {

@@ -1023,6 +1023,31 @@
             svg.setAttribute('height', h);
             svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
             svg.style.display = 'block';
+            svg.style.cursor = 'zoom-in';
+            let zoomLevel = 1;
+            const baseVB = [0, 0, w, h];
+            svg.addEventListener('dblclick', function(e) {
+                const rect = this.getBoundingClientRect();
+                const mx = e.clientX - rect.left;
+                const my = e.clientY - rect.top;
+                const vw = rect.width;
+                const vh = rect.height;
+                const bx = (mx / vw) * baseVB[2] + baseVB[0];
+                const by = (my / vh) * baseVB[3] + baseVB[1];
+                if (zoomLevel < 4) {
+                    zoomLevel *= 1.5;
+                    const nw = baseVB[2] / zoomLevel;
+                    const nh = baseVB[3] / zoomLevel;
+                    const cx = bx - nw / 2;
+                    const cy = by - nh / 2;
+                    this.setAttribute('viewBox', `${cx} ${cy} ${nw} ${nh}`);
+                    this.style.cursor = 'zoom-out';
+                } else {
+                    zoomLevel = 1;
+                    this.setAttribute('viewBox', baseVB.join(' '));
+                    this.style.cursor = 'zoom-in';
+                }
+            });
 
             // Arrow marker
             const defs = document.createElementNS(svgNS, 'defs');
