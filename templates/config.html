@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Config - Server Services Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --border-subtle: #1e1e2a;
+            --border-active: #2d2d3a;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+        * { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        code, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+        body {
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(ellipse at top left, rgba(59, 130, 246, 0.04) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(16, 185, 129, 0.03) 0%, transparent 50%);
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 0.375rem; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        .panel-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+        }
+        .badge {
+            display: inline-flex; align-items: center; gap: 0.25rem;
+            padding: 0.125rem 0.5rem; border-radius: 0.375rem;
+            font-size: 0.6875rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .badge-green { background: rgba(16,185,129,0.12); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.25); }
+        .badge-red { background: rgba(239,68,68,0.12); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.25); }
+        .badge-yellow { background: rgba(245,158,11,0.12); color: var(--accent-yellow); border: 1px solid rgba(245,158,11,0.25); }
+        .badge-blue { background: rgba(59,130,246,0.12); color: var(--accent-blue); border: 1px solid rgba(59,130,246,0.25); }
+        .badge-gray { background: rgba(100,116,139,0.12); color: var(--text-secondary); border: 1px solid rgba(100,116,139,0.25); }
+        .status-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            padding: 1rem 1.25rem;
+        }
+        .status-card .label {
+            font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-muted);
+        }
+        .status-card .value {
+            font-size: 1.25rem; font-weight: 700; font-family: 'JetBrains Mono', monospace;
+        }
+        .error-row {
+            display: flex; align-items: flex-start; gap: 0.5rem;
+            padding: 0.625rem 0.75rem;
+            background: rgba(239,68,68,0.08);
+            border: 1px solid rgba(239,68,68,0.2);
+            border-radius: 0.5rem;
+            font-size: 0.8125rem;
+        }
+        .error-row .loc {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent-red);
+            flex-shrink: 0;
+        }
+        .error-row .msg {
+            color: var(--text-secondary);
+        }
+        pre.yaml {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            line-height: 1.6;
+            color: var(--text-primary);
+            overflow-x: auto;
+            white-space: pre;
+        }
+    </style>
+</head>
+<body class="bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-screen">
+    <div class="max-w-5xl mx-auto p-4 sm:p-6">
+        {% import "_macros.html" as ui %}
+        {% set actions %}
+            <a href="/monitor" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
+                <i data-lucide="activity" class="w-4 h-4"></i>
+                <span class="hidden sm:inline">Monitor</span>
+            </a>
+            <a href="/logout" class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20 rounded-lg hover:bg-[var(--accent-red)]/20 transition-all text-sm font-medium">
+                <i data-lucide="log-out" class="w-4 h-4"></i>
+                <span class="hidden sm:inline">Logout</span>
+            </a>
+        {% endset %}
+        {{ ui.header(
+            title="Configuration",
+            icon="file-cog",
+            icon_color="var(--accent-blue)",
+            actions=actions,
+        ) }}
+
+        <main class="mt-6 space-y-4">
+            <section class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="status-card">
+                    <div class="label">Status</div>
+                    <div class="value" id="status-text">—</div>
+                </div>
+                <div class="status-card">
+                    <div class="label">Errors</div>
+                    <div class="value text-[var(--accent-red)]" id="status-errors">—</div>
+                </div>
+                <div class="status-card">
+                    <div class="label">Warnings</div>
+                    <div class="value text-[var(--accent-yellow)]" id="status-warnings">—</div>
+                </div>
+            </section>
+
+            <section class="panel-card p-4">
+                <div class="flex items-center justify-between mb-3">
+                    <div>
+                        <div class="text-sm font-semibold">Validation</div>
+                        <div class="text-xs text-[var(--text-muted)] font-mono mt-1 break-all" id="path-text">Loading…</div>
+                    </div>
+                    <button onclick="load()" class="px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
+                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5 inline"></i> Re-validate
+                    </button>
+                </div>
+                <div id="status-message" class="mb-3"></div>
+                <div id="error-list" class="space-y-2"></div>
+            </section>
+
+            <section class="panel-card p-4">
+                <div class="text-sm font-semibold mb-3">Effective config (read-only)</div>
+                <div class="text-xs text-[var(--text-muted)] mb-3">
+                    Sensitive values (passwords, keys, tokens) are replaced with <code class="font-mono">***</code> before display.
+                </div>
+                <pre class="yaml" id="yaml-view">Loading…</pre>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        function esc(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        async function load() {
+            const statusText = document.getElementById('status-text');
+            const statusErrors = document.getElementById('status-errors');
+            const statusWarnings = document.getElementById('status-warnings');
+            const pathText = document.getElementById('path-text');
+            const statusMessage = document.getElementById('status-message');
+            const errorList = document.getElementById('error-list');
+            const yamlView = document.getElementById('yaml-view');
+
+            try {
+                const r = await fetch('/api/config', { cache: 'no-store' });
+                const data = await r.json();
+                pathText.textContent = data.path;
+
+                if (!data.exists) {
+                    statusText.innerHTML = '<span class="badge badge-gray">no file</span>';
+                    statusErrors.textContent = '0';
+                    statusWarnings.textContent = '0';
+                    statusMessage.innerHTML = '<div class="text-xs text-[var(--text-muted)]">No config.yaml found — the manager will run with defaults. Create the file at the path above to enable programs / commands / notifications.</div>';
+                    errorList.innerHTML = '';
+                    yamlView.textContent = '(file not present)';
+                    return;
+                }
+
+                statusErrors.textContent = (data.errors || []).length;
+                statusWarnings.textContent = (data.warnings || []).length;
+                if (data.valid) {
+                    statusText.innerHTML = '<span class="badge badge-green">valid</span>';
+                } else {
+                    statusText.innerHTML = '<span class="badge badge-red">invalid</span>';
+                }
+
+                if (data.warnings && data.warnings.length) {
+                    let html = '';
+                    for (const w of data.warnings) {
+                        html += `<div class="error-row" style="background:rgba(245,158,11,0.08);border-color:rgba(245,158,11,0.2)">
+                            <i data-lucide="alert-triangle" class="w-3.5 h-3.5 text-[var(--accent-yellow)] flex-shrink-0 mt-0.5"></i>
+                            <span class="loc">${esc(w.loc)}</span>
+                            <span class="msg">${esc(w.msg)}</span>
+                        </div>`;
+                    }
+                    statusMessage.innerHTML = html;
+                } else {
+                    statusMessage.innerHTML = '';
+                }
+
+                if (data.errors && data.errors.length) {
+                    let html = '';
+                    for (const e of data.errors) {
+                        html += `<div class="error-row">
+                            <i data-lucide="x-circle" class="w-3.5 h-3.5 text-[var(--accent-red)] flex-shrink-0 mt-0.5"></i>
+                            <span class="loc">${esc(e.loc || '(root)')}</span>
+                            <span class="msg">${esc(e.msg)}${e.type ? ' <span style="color:var(--text-muted)">['+esc(e.type)+']</span>' : ''}</span>
+                        </div>`;
+                    }
+                    errorList.innerHTML = html;
+                } else {
+                    errorList.innerHTML = '<div class="text-xs text-[var(--text-muted)]">No errors. The schema accepted every field.</div>';
+                }
+
+                yamlView.textContent = data.raw
+                    ? JSON.stringify(data.raw, null, 2)
+                    : '(empty config)';
+            } catch (e) {
+                statusText.innerHTML = '<span class="badge badge-red">error</span>';
+                statusMessage.innerHTML = `<div class="text-xs text-[var(--accent-red)]">Failed to load: ${esc(e.message)}</div>`;
+            }
+            lucide.createIcons();
+        }
+
+        lucide.createIcons();
+        load();
+    </script>
+</body>
+</html>

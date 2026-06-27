@@ -1558,6 +1558,104 @@ def plugins_page():
     return render_template('plugins.html')
 
 
+@app.route('/config')
+def config_page():
+    """View and validate config.yaml without editing it."""
+    return render_template('config.html')
+
+
+@app.route('/api/config', methods=['GET'])
+def api_config_view():
+    """Return the parsed config.yaml + validation result.
+
+    The file is read directly (not via pm.load_config) so the
+    UI always sees what's on disk, even if the in-memory
+    representation has been edited. Sensitive fields (passwords,
+    keys) are redacted before returning.
+    """
+    from app import config_schema
+    config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')
+    if not os.path.exists(config_path):
+        return jsonify({
+            "path": config_path,
+            "exists": False,
+            "raw": None,
+            "valid": True,
+            "errors": [],
+            "warnings": [],
+        })
+    try:
+        with open(config_path) as f:
+            raw = yaml.safe_load(f) or {}
+    except yaml.YAMLError as e:
+        return jsonify({
+            "path": config_path,
+            "exists": True,
+            "raw": None,
+            "valid": False,
+            "errors": [{"loc": "(file)", "msg": f"YAML parse error: {e}"}],
+            "warnings": [],
+        })
+    # Redact obvious secrets so the UI doesn't display them.
+    redacted = _redact_secrets(raw)
+    errors = []
+    warnings = []
+    valid = True
+    try:
+        config_schema.validate_config(redacted)
+    except Exception as e:  # pydantic.ValidationError
+        valid = False
+        # pydantic's ValidationError exposes .errors() as a method.
+        # Older versions exposed it as a property; handle both so
+        # the page keeps working across pydantic releases.
+        err_iter = e.errors() if callable(getattr(e, "errors", None)) else (getattr(e, "errors", []) or [])
+        for err in err_iter:
+            errors.append({
+                "loc": ".".join(str(x) for x in err.get("loc", [])),
+                "msg": err.get("msg", "invalid"),
+                "type": err.get("type", "value_error"),
+            })
+    # A small set of soft warnings we surface even when the
+    # schema validates (the schema is lenient, so it doesn't
+    # catch everything).
+    if raw.get("commands"):
+        ids = [c.get("id") for c in raw.get("commands", []) if c.get("id")]
+        if len(ids) != len(set(ids)):
+            warnings.append({
+                "loc": "commands",
+                "msg": "duplicate command id detected",
+            })
+    return jsonify({
+        "path": config_path,
+        "exists": True,
+        "raw": redacted,
+        "valid": valid,
+        "errors": errors,
+        "warnings": warnings,
+    })
+
+
+def _redact_secrets(data):
+    """Walk the parsed config and replace any 'password' or 'key'
+    field values with '***' so they don't get sent to the
+    browser. The on-disk file is not modified.
+    """
+    if not isinstance(data, dict):
+        return data
+    out = {}
+    for k, v in data.items():
+        kl = str(k).lower()
+        if isinstance(v, dict):
+            out[k] = _redact_secrets(v)
+        elif isinstance(v, list):
+            out[k] = [_redact_secrets(x) if isinstance(x, dict) else x for x in v]
+        elif any(t in kl for t in ("password", "secret", "token", "key")) and isinstance(v, str):
+            out[k] = "***"
+        else:
+            out[k] = v
+    return out
+
+
 def _control_commands_for_palette():
     """Return the list of custom control commands from config.yaml."""
     config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')

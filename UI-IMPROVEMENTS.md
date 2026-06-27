@@ -212,7 +212,7 @@ Files: new `templates/plugins.html`, `app/plugins.py`, `server.py`
   * `app/palette.py`: added a "Plugins" entry so it's
     discoverable via Ctrl+K.
 
-### 2.2 — Config validation page  `[ ]`
+### 2.2 — Config validation page  `[x]`
 `app/config_schema.py` has `validate_config()`. No UI exposes it.
 Add a "Config" page that calls the validator and renders the
 result (validation errors with field paths, or "OK"). Also show
@@ -221,6 +221,37 @@ read-only viewer.
 
 Files: new `templates/config.html`, `app/config_schema.py`,
 `server.py`
+
+**Status:** Done.
+  * `server.py`:
+      - New `/config` route that renders the page.
+      - New `/api/config` GET endpoint that reads config.yaml
+        directly, redacts obvious secrets (any field whose name
+        contains password/secret/token/key is replaced with
+        '***'), and runs `app.config_schema.validate_config`
+        to produce an errors list. Pydantic v1 returns
+        `errors` as a property, v2 as a method; the handler
+        handles both.
+      - Soft warning for duplicate command ids (the schema is
+        lenient so it doesn't catch this).
+  * `templates/config.html` (new file):
+      - Status cards: Status (valid/invalid badge), Errors count,
+        Warnings count.
+      - Validation section: shows the config path, error rows
+        with field path and message, soft warnings in yellow.
+      - "Effective config (read-only)" section: pretty-printed
+        JSON of the redacted config. A note explains the
+        redaction policy.
+      - "Re-validate" button re-fetches the API (useful after
+        the user edits the file on disk and wants to see
+        the new state without a hard refresh).
+  * `templates/index.html`: added a "Config" link in the top
+    nav (blue styling).
+  * `app/palette.py`: added a "Configuration" entry so it's
+    discoverable via Ctrl+K.
+  * Tests: 6 new tests in `tests/test_config.py` covering
+    valid / invalid / YAML-parse-error / missing-file /
+    secret-redaction / login-required paths.
 
 ### 2.3 — Activity log: `user` and `since` filters  `[ ]`
 Backend supports `?user=...&since=...` but the activity page
