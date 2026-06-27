@@ -311,6 +311,16 @@
             const statusBadge = j.enabled
                 ? '<span class="badge badge-green">enabled</span>'
                 : '<span class="badge badge-gray">disabled</span>';
+            const t = j.timer || {};
+            const nextRun = t.next_run ? formatNextRun(t.next_run) : '';
+            const lastRun = t.last_run ? formatLastRun(t.last_run) : '';
+            const timerInfo = j.enabled && (nextRun || lastRun)
+                ? `<div class="text-[10px] text-[var(--text-muted)] mt-0.5 leading-tight">
+                    ${nextRun ? `<span title="Next scheduled run">${escAttr(nextRun)}</span>` : ''}
+                    ${nextRun && lastRun ? '<br>' : ''}
+                    ${lastRun ? `<span title="Last run">last: ${escAttr(lastRun)}</span>` : ''}
+                </div>`
+                : '';
             return `<tr>
                 <td>
                     <div class="font-semibold">${escAttr(j.name)}</div>
@@ -320,7 +330,7 @@
                 <td class="font-mono text-xs break-all" title="${escAttr(j.destination)}">${escAttr(j.destination)}</td>
                 <td class="font-mono text-xs">${escAttr(j.schedule)}</td>
                 <td class="font-mono text-xs">${escAttr(j.retention)}</td>
-                <td>${statusBadge}</td>
+                <td>${statusBadge}${timerInfo}</td>
                 <td class="text-right whitespace-nowrap">
                     <button class="btn" style="padding:0.25rem 0.5rem" onclick="runJob('${escAttr(j.name)}')" title="Run now">
                         <i data-lucide="play" class="w-3 h-3"></i>
@@ -337,9 +347,59 @@
         lucide.createIcons();
     }
 
+    function formatNextRun(nextRun) {
+        // ``next_run`` is an ISO 8601 string from systemd, not a Unix
+        // timestamp. Parse and return a friendly relative label.
+        if (!nextRun) return '';
+        const t = new Date(nextRun);
+        if (isNaN(t.getTime())) return '';
+        const now = Date.now();
+        const diffMs = t.getTime() - now;
+        if (diffMs < 0) return 'overdue';
+        const sec = Math.floor(diffMs / 1000);
+        if (sec < 60) return `in ${sec}s`;
+        const min = Math.floor(sec / 60);
+        if (min < 60) return `in ${min}m`;
+        const hr = Math.floor(min / 60);
+        if (hr < 24) return `in ${hr}h ${min % 60}m`;
+        const day = Math.floor(hr / 24);
+        return `in ${day}d ${hr % 24}h`;
+    }
+
+    function formatLastRun(lastRun) {
+        // ``last_run`` is an ISO 8601 string from the journal. Show the
+        // relative time so users can quickly see "ran 4h ago".
+        if (!lastRun) return '';
+        const t = new Date(lastRun);
+        if (isNaN(t.getTime())) return '';
+        const now = Date.now();
+        const diffMs = now - t.getTime();
+        if (diffMs < 0) return 'just now';
+        const sec = Math.floor(diffMs / 1000);
+        if (sec < 60) return `${sec}s ago`;
+        const min = Math.floor(sec / 60);
+        if (min < 60) return `${min}m ago`;
+        const hr = Math.floor(min / 60);
+        if (hr < 24) return `${hr}h ago`;
+        const day = Math.floor(hr / 24);
+        if (day < 30) return `${day}d ago`;
+        const month = Math.floor(day / 30);
+        return `${month}mo ago`;
+    }
+
     function load() {
-        api('/api/backups').then(({ data }) => {
+        api('/api/backups').then(async ({ data }) => {
             jobs = data.jobs || [];
+            // Fetch timer state for each job in parallel so the
+            // table can show "Next run: in 4h 23m" / "last: 2h ago".
+            // A single network blip on one timer shouldn't block the
+            // whole table, so we swallow per-job errors.
+            await Promise.all(jobs.map(async (j) => {
+                try {
+                    const res = await api('/api/backups/' + encodeURIComponent(j.name) + '/status');
+                    if (res.ok) j.timer = res.data.timer || {};
+                } catch (e) { /* leave j.timer undefined */ }
+            }));
             render();
         });
     }

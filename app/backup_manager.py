@@ -202,21 +202,21 @@ def delete_job(name: str) -> bool:
     return True
 
 
-def enable_job(name: str, password: Optional[str] = None) -> bool:
+def enable_job(name: str, password: Optional[str] = None) -> Tuple[bool, str]:
     job = get_job(name)
     if not job:
-        return False
+        return False, "no such job"
     ok, err = _systemctl_enable(name, password)
     if ok:
         update_job(name, enabled=True)
-    return ok
+    return ok, err
 
 
-def disable_job(name: str, password: Optional[str] = None) -> bool:
+def disable_job(name: str, password: Optional[str] = None) -> Tuple[bool, str]:
     ok, err = _systemctl_disable(name, password)
     if ok:
         update_job(name, enabled=False)
-    return ok
+    return ok, err
 
 
 def trigger_now(name: str, password: Optional[str] = None) -> Tuple[bool, str]:
@@ -378,7 +378,9 @@ def _run_systemctl_user(args: List[str], password: Optional[str] = None) -> Tupl
     stdin_data = None
     if password:
         cmd = ["sudo", "-S", "-k"] + cmd
-        stdin_data = (password + "\n").encode()
+        # text=True below requires a str, not bytes. The trailing
+        # newline is what sudo reads before it execs the real command.
+        stdin_data = password + "\n"
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15, input=stdin_data)
         return proc.returncode, proc.stdout or "", proc.stderr or ""

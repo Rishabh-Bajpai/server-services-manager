@@ -224,8 +224,9 @@ def test_enable_job(monkeypatch, isolated_backups):
     with patch.object(bm, "_run_systemctl_user", return_value=(0, "", "")):
         create_job("e1", "directory", "/a", "/b", "daily")
     with patch.object(bm, "_run_systemctl_user", return_value=(0, "", "")):
-        ok = enable_job("e1", password="x")
+        ok, err = enable_job("e1", password="x")
     assert ok is True
+    assert err == ""
     assert get_job("e1").enabled is True
 
 
@@ -236,8 +237,9 @@ def test_enable_job_failure(isolated_backups):
     # failure leaves the metadata as-is because the underlying timer
     # state is the source of truth.
     with patch.object(bm, "_run_systemctl_user", return_value=(1, "", "permission denied")):
-        ok = enable_job("e2", password="x")
+        ok, err = enable_job("e2", password="x")
     assert ok is False
+    assert "permission" in err
     # update_job is not called on failure
     assert get_job("e2").enabled is True
 
@@ -246,8 +248,9 @@ def test_disable_job(isolated_backups):
     with patch.object(bm, "_run_systemctl_user", return_value=(0, "", "")):
         create_job("d2", "directory", "/a", "/b", "daily")
     with patch.object(bm, "_run_systemctl_user", return_value=(0, "", "")):
-        ok = disable_job("d2", password="x")
+        ok, err = disable_job("d2", password="x")
     assert ok is True
+    assert err == ""
     assert get_job("d2").enabled is False
 
 
@@ -401,6 +404,23 @@ def test_run_now_blocking_timeout():
         rc, out = run_now_blocking(job)
     assert rc == 124
     assert "timeout" in out
+
+
+def test_run_systemctl_user_with_password_passes_str_stdin():
+    """text=True requires a str input — passing bytes raises
+    AttributeError on Python 3.x."""
+    fake = MagicMock()
+    fake.returncode = 0
+    fake.stdout = "ok"
+    fake.stderr = ""
+    with patch.object(bm.subprocess, "run", return_value=fake) as mock_run:
+        rc, out, err = bm._run_systemctl_user(["enable", "x.timer"], password="secret")
+    assert rc == 0
+    cmd = mock_run.call_args[0][0]
+    assert cmd[0] == "sudo"
+    stdin = mock_run.call_args.kwargs.get("input")
+    assert stdin == "secret\n"
+    assert isinstance(stdin, str)
 
 
 # ---------------------------------------------------------------------------

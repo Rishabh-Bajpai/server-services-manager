@@ -95,13 +95,37 @@ Files: `templates/docker.html`, `app/docker_manager.py`
     RFC 3339 parsing path, the unparseable fallback, and three
     remove_image scenarios (direct, resolved via list, not-found).
 
-### 1.4 — Backup timer status (next_run / last_run)  `[ ]`
+### 1.4 — Backup timer status (next_run / last_run)  `[x]`
 `GET /api/backups/<name>/status` returns `timer: {enabled, active,
 next_run, last_run}`. The backups table only shows a static
 "enabled/disabled" badge. Show the next run and last run on the
 row, and add a "Run now" action button.
 
 Files: `templates/backups.html`, `app/backup_manager.py`
+
+**Status:** Done.
+  * `templates/backups.html`:
+      - `load()` now fetches `/api/backups/<name>/status` for each
+        job in parallel and stores the `timer` object on the row.
+      - `render()` adds a small "Next run: in 4h 23m" / "last: 2h ago"
+        sub-line under the existing ENABLED badge (only shown when
+        the timer is enabled and the fields are populated).
+      - `formatNextRun()` and `formatLastRun()` helpers convert
+        the ISO 8601 timestamps from systemd to friendly relative
+        labels. They handle the overdue / just-now edge cases.
+  * `app/backup_manager.py`:
+      - Fixed `_run_systemctl_user` — same bytes-vs-str bug as
+        `schedules._run_systemctl` (passing `(password + "\n").encode()`
+        into a `text=True` subprocess call). Changed to a plain str.
+      - Fixed `enable_job()` and `disable_job()` to return
+        `(ok, err)` tuples instead of bare bools. The
+        `api_backups_create` and `api_backups_enable` routes were
+        unpacking the return value as a 2-tuple and crashing
+        with `TypeError: cannot unpack non-iterable bool object`.
+  * Tests: +1 in `tests/test_backup_manager.py` covering the new
+    str-stdin contract; the existing `test_enable_job` /
+    `test_enable_job_failure` / `test_disable_job` tests were
+    updated to the new tuple contract.
 
 ### 1.5 — System-services: `mask` / `unmask` actions  `[ ]`
 AGENTS.md lists `mask` and `unmask` as available actions. The UI
