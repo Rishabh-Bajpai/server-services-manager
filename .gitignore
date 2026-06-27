@@ -43,3 +43,6 @@ start_process_manager.sh
 # user's home dir, conda env name, and program names).
 tools/secrets.txt
 ~/.config/ssm/secrets.txt
+
+# Playwright MCP debug files (browser screenshots / session snapshots)
+.playwright-mcp/

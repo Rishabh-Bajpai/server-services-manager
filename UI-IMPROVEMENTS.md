@@ -27,7 +27,7 @@ and calls a new `toast()` helper. The helper appends a chip to a
 `#toast-container` div at top-right (z-50) with the existing
 `toastIn`/`toastOut` keyframe animations. Auto-removes after 3s.
 
-### 1.2 — Schedule "Run Now" button + timer status  `[ ]`
+### 1.2 — Schedule "Run Now" button + timer status  `[x]`
 The backend already exposes `POST /api/programs/<name>/schedule/trigger`
 and the schedule GET returns `timer: {enabled, active, next_run, last_run}`.
 The dashboard cards show the schedule text but never show the next run
@@ -41,6 +41,25 @@ Plan:
   * Add a small "X times triggered" counter to the schedule editor.
 
 Files: `templates/index.html`, `app/process_manager.py` (verify the API)
+
+**Status:** Done.
+  * Background thread in `server.py` now also emits `schedule` and
+    `timer` (the systemd timer state dict) for every program on every
+    `update` event, so the dashboard card has the data to render.
+  * Card header shows a small "Run now" button (play icon, blue) next
+    to the schedule badge — only when the program has a schedule.
+  * Resource bar shows a "Next run" chip (zap icon, purple) with a
+    friendly relative label like "in 4h 23m" / "in 2d 5h" / "overdue"
+    / "schedule inactive". Format is computed in `formatNextRun()`.
+  * `triggerScheduled(name)` posts to
+    `/api/programs/<name>/schedule/trigger` with the app password
+    and toasts the result (uses the new toast system from 1.1).
+  * Bonus fix: `app/schedules.py:_run_systemctl` was passing
+    `(password + "\n").encode()` (bytes) into a `text=True` subprocess
+    call, which raised `AttributeError: 'bytes' object has no
+    attribute 'encode'`. Fixed by passing a str. Updated the existing
+    test in `tests/test_schedules.py:TestRunSystemctl` to assert the
+    new contract (str input).
 
 ### 1.3 — Docker Images tab  `[ ]`
 The backend has `GET /api/docker/images` returning image data, but

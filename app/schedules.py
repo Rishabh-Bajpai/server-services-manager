@@ -79,7 +79,9 @@ def _run_systemctl(args: list, password: Optional[str] = None) -> Tuple[int, str
     stdin_data = None
     if password:
         cmd = ["sudo", "-S", "-k"] + cmd
-        stdin_data = (password + "\n").encode()
+        # text=True below requires a str, not bytes. The trailing newline
+        # is what sudo reads before it execs the real command.
+        stdin_data = password + "\n"
     try:
         result = subprocess.run(
             cmd, capture_output=True, text=True, timeout=10,

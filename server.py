@@ -2706,6 +2706,8 @@ _process_cache = {}
 def background_thread():
     global _process_cache
     num_cores = psutil.cpu_count() or 1
+    # Lazy import — schedules is only used when programs are scheduled.
+    from app import schedules
     while True:
         programs_data = []
         for p in pm.get_all_programs():
@@ -2724,13 +2726,26 @@ def background_thread():
                     memory = proc.memory_percent()
                 except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                     _process_cache.pop(pid, None)
+            # Include schedule and timer status so the dashboard card
+            # can show "Next run: 4h 23m" and a "Run now" button. Cached
+            # briefly to avoid hammering systemctl on every tick — the
+            # timer state changes only when units are reloaded.
+            schedule = p.config.schedule or ""
+            timer_state = None
+            if schedule:
+                try:
+                    timer_state = schedules.timer_status(p.config.name)
+                except Exception:
+                    timer_state = None
             programs_data.append({
                 "name": p.config.name,
                 "status": p.status.value,
                 "logs": list(p.logs)[-100:],
                 "restart_count": p.restart_count,
                 "cpu": cpu,
-                "memory": memory
+                "memory": memory,
+                "schedule": schedule,
+                "timer": timer_state,
             })
         # Clean stale cache entries (PIDs no longer tracked)
         tracked_pids = {p._get_pid() for p in pm.get_all_programs() if p._get_pid()}

@@ -119,8 +119,11 @@ class TestRunSystemctl:
             cmd = mock_run.call_args[0][0]
             assert cmd[0] == "sudo"
             assert "-S" in cmd
+            # text=True means input must be a str, not bytes — passing
+            # bytes here raises AttributeError on Python 3.x.
             stdin = mock_run.call_args.kwargs.get("input")
-            assert stdin == b"secret\n"
+            assert stdin == "secret\n"
+            assert isinstance(stdin, str)
 
 
 class TestTimerStatus:
