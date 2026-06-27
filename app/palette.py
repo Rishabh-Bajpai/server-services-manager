@@ -111,6 +111,7 @@ def build_palette_index(get_programs, get_control_commands, get_system_units) ->
         PaletteItem("page", "cron", "Cron Jobs", "Inspect and toggle cron entries", {"type": "navigate", "url": "/cron"}),
         PaletteItem("page", "notifications", "Health & Notifications", "Monitored services and events", {"type": "navigate", "url": "/notifications"}),
         PaletteItem("page", "activity", "Activity Log", "Audit trail of all actions", {"type": "navigate", "url": "/activity"}),
+        PaletteItem("page", "plugins", "Plugins", "User plugins loaded at startup", {"type": "navigate", "url": "/plugins"}),
     ]
 
     # Managed programs

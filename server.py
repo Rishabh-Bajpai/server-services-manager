@@ -1552,6 +1552,12 @@ def api_plugins_list():
     })
 
 
+@app.route('/plugins')
+def plugins_page():
+    """User plugin manager — list what was discovered at startup."""
+    return render_template('plugins.html')
+
+
 def _control_commands_for_palette():
     """Return the list of custom control commands from config.yaml."""
     config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')

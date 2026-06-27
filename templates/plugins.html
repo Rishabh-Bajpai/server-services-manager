@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plugins - Server Services Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --border-subtle: #1e1e2a;
+            --border-active: #2d2d3a;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+        * { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        code, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+        body {
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(ellipse at top left, rgba(139, 92, 246, 0.04) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(59, 130, 246, 0.03) 0%, transparent 50%);
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 0.375rem; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        .panel-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+        }
+        .badge {
+            display: inline-flex; align-items: center; gap: 0.25rem;
+            padding: 0.125rem 0.5rem; border-radius: 0.375rem;
+            font-size: 0.6875rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .badge-green { background: rgba(16,185,129,0.12); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.25); }
+        .badge-blue { background: rgba(59,130,246,0.12); color: var(--accent-blue); border: 1px solid rgba(59,130,246,0.25); }
+        .badge-purple { background: rgba(139,92,246,0.12); color: var(--accent-purple); border: 1px solid rgba(139,92,246,0.25); }
+        .badge-gray { background: rgba(100,116,139,0.12); color: var(--text-secondary); border: 1px solid rgba(100,116,139,0.25); }
+        .badge-red { background: rgba(239,68,68,0.12); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.25); }
+        .status-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            padding: 1rem 1.25rem;
+        }
+        .status-card .label {
+            font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-muted);
+        }
+        .status-card .value {
+            font-size: 1.5rem; font-weight: 700; font-family: 'JetBrains Mono', monospace;
+        }
+        .empty-state {
+            padding: 3rem 1.5rem; text-align: center;
+            color: var(--text-muted); font-size: 0.875rem;
+        }
+        .empty-state .icon-wrap {
+            width: 3rem; height: 3rem; border-radius: 0.75rem;
+            background: var(--bg-secondary);
+            display: inline-flex; align-items: center; justify-content: center;
+            margin-bottom: 0.75rem;
+        }
+        .plugin-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            padding: 1rem 1.25rem;
+            transition: border-color 0.15s ease;
+        }
+        .plugin-card:hover { border-color: var(--border-active); }
+        .plugin-card.error { border-color: rgba(239, 68, 68, 0.4); }
+    </style>
+</head>
+<body class="bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-screen">
+    <div class="max-w-5xl mx-auto p-4 sm:p-6">
+        {% import "_macros.html" as ui %}
+        {% set actions %}
+            <a href="/monitor" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
+                <i data-lucide="activity" class="w-4 h-4"></i>
+                <span class="hidden sm:inline">Monitor</span>
+            </a>
+            <a href="/logout" class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20 rounded-lg hover:bg-[var(--accent-red)]/20 transition-all text-sm font-medium">
+                <i data-lucide="log-out" class="w-4 h-4"></i>
+                <span class="hidden sm:inline">Logout</span>
+            </a>
+        {% endset %}
+        {{ ui.header(
+            title="Plugins",
+            icon="plug",
+            icon_color="var(--accent-purple)",
+            actions=actions,
+        ) }}
+
+        <main class="mt-6 space-y-4">
+            <section class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="status-card">
+                    <div class="label">Discovered</div>
+                    <div class="value text-[var(--accent-blue)]" id="stat-total">—</div>
+                </div>
+                <div class="status-card">
+                    <div class="label">Loaded at startup</div>
+                    <div class="value text-[var(--accent-green)]" id="stat-loaded">—</div>
+                </div>
+                <div class="status-card">
+                    <div class="label">Plugin directory</div>
+                    <div class="value text-xs text-[var(--text-secondary)] mt-1 font-mono break-all" id="stat-dir">—</div>
+                </div>
+            </section>
+
+            <section class="panel-card p-4">
+                <div class="flex items-center justify-between mb-3">
+                    <div>
+                        <div class="text-sm font-semibold">Discovered plugins</div>
+                        <div class="text-xs text-[var(--text-muted)]">
+                            One <code class="font-mono text-[var(--text-secondary)]">.py</code> file per plugin in the directory above.
+                            The server picks them up at startup — restart after adding.
+                        </div>
+                    </div>
+                    <button onclick="load()" class="px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium" title="Re-discover from disk (read-only)">
+                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5 inline"></i> Refresh
+                    </button>
+                </div>
+                <div id="plugin-list" class="space-y-2">
+                    <div class="empty-state">Loading…</div>
+                </div>
+            </section>
+
+            <section class="panel-card p-4 text-xs text-[var(--text-secondary)] space-y-2">
+                <div class="font-semibold text-sm text-[var(--text-primary)] mb-1">Writing a plugin</div>
+                <p>
+                    Plugins are Python files that subclass <code class="font-mono">PluginBase</code> and
+                    override <code class="font-mono">register()</code>. The loader passes your plugin
+                    the Flask app, the ProcessManager, the activity logger, and the notifier
+                    module so it can mount routes, schedule jobs, or hook events.
+                </p>
+                <pre class="font-mono text-[11px] bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded p-3 overflow-x-auto leading-relaxed"><span class="text-[var(--accent-purple)]">from</span> app.plugins <span class="text-[var(--accent-purple)]">import</span> PluginBase
+
+<span class="text-[var(--accent-purple)]">class</span> <span class="text-[var(--accent-yellow)]">Hello</span>(PluginBase):
+    name = <span class="text-[var(--accent-green)]">"hello"</span>
+    version = <span class="text-[var(--accent-green)]">"1.0"</span>
+
+    <span class="text-[var(--accent-purple)]">def</span> <span class="text-[var(--accent-blue)]">register</span>(self, app, pm, activity, notifier_module=<span class="text-[var(--accent-cyan)]">None</span>):
+        <span class="text-[var(--accent-purple)]">@app.route</span>(<span class="text-[var(--accent-green)]">"/_hello"</span>)
+        <span class="text-[var(--accent-purple)]">def</span> <span class="text-[var(--accent-blue)]">hello</span>():
+            <span class="text-[var(--accent-purple)]">return</span> <span class="text-[var(--accent-green)]">"world"</span></pre>
+                <p class="text-[var(--text-muted)]">
+                    <i data-lucide="info" class="w-3 h-3 inline"></i>
+                    Plugins are NOT auto-reloaded on file change (intentional, for safety).
+                    Edit the file, then restart the service (<code class="font-mono">systemctl --user restart server-services-manager</code>)
+                    to load it.
+                </p>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        function esc(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        async function load() {
+            const list = document.getElementById('plugin-list');
+            const totalEl = document.getElementById('stat-total');
+            const loadedEl = document.getElementById('stat-loaded');
+            const dirEl = document.getElementById('stat-dir');
+            try {
+                const r = await fetch('/api/plugins', { cache: 'no-store' });
+                const data = await r.json();
+                dirEl.textContent = data.directory || '—';
+                totalEl.textContent = (data.plugins || []).length;
+
+                // "Loaded at startup" is the count of plugins that
+                // successfully called register() — we don't have a
+                // direct endpoint for that, but the same discover()
+                // call is what load_all() used at startup, so any
+                // plugin that imports cleanly is fair game. Plugins
+                // that error at import time are listed with an "error"
+                // field, so subtract those.
+                const plugins = data.plugins || [];
+                const loaded = plugins.filter(p => !p.error).length;
+                const failed = plugins.length - loaded;
+                loadedEl.textContent = failed > 0
+                    ? `${loaded} (+ ${failed} failed)`
+                    : loaded;
+
+                if (plugins.length === 0) {
+                    list.innerHTML = `
+                        <div class="empty-state">
+                            <div class="icon-wrap"><i data-lucide="plug-zap" class="w-5 h-5 text-[var(--text-muted)]"></i></div>
+                            No plugins in this directory yet.<br>
+                            Drop a <code class="font-mono">.py</code> file with a <code class="font-mono">PluginBase</code> subclass in
+                            <code class="font-mono">${esc(data.directory)}</code> and restart the service.
+                        </div>`;
+                    lucide.createIcons();
+                    return;
+                }
+                list.innerHTML = plugins.map(p => {
+                    if (p.error) {
+                        return `<div class="plugin-card error">
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <i data-lucide="alert-triangle" class="w-4 h-4 text-[var(--accent-red)]"></i>
+                                        <span class="font-mono text-sm font-semibold text-[var(--accent-red)]">${esc(p.file)}</span>
+                                        <span class="badge badge-red">import failed</span>
+                                    </div>
+                                    <div class="text-xs text-[var(--text-muted)] mt-1">
+                                        Check <code class="font-mono">journalctl --user -u server-services-manager -n 50</code> for the traceback.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>`;
+                    }
+                    return `<div class="plugin-card">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <i data-lucide="plug" class="w-4 h-4 text-[var(--accent-purple)]"></i>
+                                    <span class="font-semibold">${esc(p.name)}</span>
+                                    <span class="badge badge-purple">v${esc(p.version || '0.0.0')}</span>
+                                </div>
+                                <div class="text-xs text-[var(--text-muted)] mt-1">
+                                    <code class="font-mono">${esc(p.class)}</code> in <code class="font-mono">${esc(p.file)}</code>
+                                </div>
+                                ${p.description ? `<div class="text-sm text-[var(--text-secondary)] mt-2">${esc(p.description)}</div>` : ''}
+                            </div>
+                            <span class="badge badge-green whitespace-nowrap">loaded</span>
+                        </div>
+                    </div>`;
+                }).join('');
+                lucide.createIcons();
+            } catch (e) {
+                list.innerHTML = `<div class="empty-state text-[var(--accent-red)]">Failed to load: ${esc(e.message)}</div>`;
+            }
+        }
+
+        lucide.createIcons();
+        load();
+    </script>
+</body>
+</html>

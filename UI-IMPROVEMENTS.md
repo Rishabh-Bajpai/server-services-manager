@@ -179,7 +179,7 @@ during development.
 
 ## Tier 2 — Backend Gaps (Feature pages that don't exist)
 
-### 2.1 — Plugins page  `[ ]`
+### 2.1 — Plugins page  `[x]`
 `GET /api/plugins` returns discovery metadata for loaded plugins.
 There's no page that shows them. Add `/plugins` route + template
 that lists each plugin's `name`, `version`, and any registered
@@ -187,6 +187,30 @@ routes / hooks. Useful even when zero plugins are loaded (shows
 the directory and how to add one).
 
 Files: new `templates/plugins.html`, `app/plugins.py`, `server.py`
+
+**Status:** Done.
+  * `server.py`: new `/plugins` route that renders
+    `templates/plugins.html`. The `/api/plugins` route was
+    already there from the existing loader.
+  * `templates/plugins.html` (new file):
+      - Status cards: Discovered count, Loaded-at-startup count
+        (with "(+N failed)" suffix when any plugin errored at
+        import), Plugin directory path.
+      - Plugin list: each plugin as a card with its name, version
+        badge, source file/class, description, and a green
+        "loaded" badge. Plugins that failed to import get a red
+        "import failed" badge and a hint to check journalctl.
+      - Empty state with an icon and the path to drop new
+        plugins into.
+      - "Writing a plugin" section with a complete example
+        showing the PluginBase subclass + register() pattern.
+      - "Plugins are NOT auto-reloaded" note (matching the
+        docstring in `app/plugins.py`).
+  * `templates/index.html`: added a "Plugins" link in the top
+    nav, between Files and Import. Purple styling to match
+    the page's icon.
+  * `app/palette.py`: added a "Plugins" entry so it's
+    discoverable via Ctrl+K.
 
 ### 2.2 — Config validation page  `[ ]`
 `app/config_schema.py` has `validate_config()`. No UI exposes it.
