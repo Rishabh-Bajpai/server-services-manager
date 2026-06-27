@@ -13,7 +13,7 @@ backend-vs-frontend feature gap analysis.
 These expose backend capabilities that are already implemented but
 not surfaced in the UI, or fix real bugs the user will hit.
 
-### 1.1 — Listen for `service_event` on dashboard  `[x]`
+### 1.1 — Listen for `service_event` on dashboard  [x]`[x]`
 The server pushes a `service_event` SocketIO event on every program
 state transition. The dashboard never listens for it, so toasts are
 silently dropped. Wire up a listener that shows a transient toast
@@ -27,7 +27,7 @@ and calls a new `toast()` helper. The helper appends a chip to a
 `#toast-container` div at top-right (z-50) with the existing
 `toastIn`/`toastOut` keyframe animations. Auto-removes after 3s.
 
-### 1.2 — Schedule "Run Now" button + timer status  `[x]`
+### 1.2 — Schedule "Run Now" button + timer status  [x]`[x]`
 The backend already exposes `POST /api/programs/<name>/schedule/trigger`
 and the schedule GET returns `timer: {enabled, active, next_run, last_run}`.
 The dashboard cards show the schedule text but never show the next run
@@ -61,7 +61,7 @@ Files: `templates/index.html`, `app/process_manager.py` (verify the API)
     test in `tests/test_schedules.py:TestRunSystemctl` to assert the
     new contract (str input).
 
-### 1.3 — Docker Images tab  `[x]`
+### 1.3 — Docker Images tab  [x]`[x]`
 The backend has `GET /api/docker/images` returning image data, but
 `docker.html` only shows containers. Add a third tab "Images" with
 a table of images (id, repo:tag, size, created) and a "Remove"
@@ -95,7 +95,7 @@ Files: `templates/docker.html`, `app/docker_manager.py`
     RFC 3339 parsing path, the unparseable fallback, and three
     remove_image scenarios (direct, resolved via list, not-found).
 
-### 1.4 — Backup timer status (next_run / last_run)  `[x]`
+### 1.4 — Backup timer status (next_run / last_run)  [x]`[x]`
 `GET /api/backups/<name>/status` returns `timer: {enabled, active,
 next_run, last_run}`. The backups table only shows a static
 "enabled/disabled" badge. Show the next run and last run on the
@@ -127,7 +127,7 @@ Files: `templates/backups.html`, `app/backup_manager.py`
     `test_enable_job_failure` / `test_disable_job` tests were
     updated to the new tuple contract.
 
-### 1.5 — System-services: `mask` / `unmask` actions  `[x]`
+### 1.5 — System-services: `mask` / `unmask` actions  [x]`[x]`
 AGENTS.md lists `mask` and `unmask` as available actions. The UI
 doesn't have buttons for them. Add row actions behind a "..."
 overflow menu with confirmation (mask is destructive — user can
@@ -158,7 +158,7 @@ Files: `templates/system-services.html`, `app/system_services.py`
     changes were needed. The `api_system_services_action`
     route already handles them via the generic action dispatch.
 
-### 1.6 — Swagger UI link in nav  `[x]`
+### 1.6 — Swagger UI link in nav  [x]`[x]`
 `/docs/` is reachable but not linked anywhere. Add a "API Docs"
 link in the dashboard header (and in `_macros.html` actions slot)
 so users can discover the OpenAPI explorer.
@@ -179,7 +179,7 @@ during development.
 
 ## Tier 2 — Backend Gaps (Feature pages that don't exist)
 
-### 2.1 — Plugins page  `[x]`
+### 2.1 — Plugins page  [x]`[x]`
 `GET /api/plugins` returns discovery metadata for loaded plugins.
 There's no page that shows them. Add `/plugins` route + template
 that lists each plugin's `name`, `version`, and any registered
@@ -212,7 +212,7 @@ Files: new `templates/plugins.html`, `app/plugins.py`, `server.py`
   * `app/palette.py`: added a "Plugins" entry so it's
     discoverable via Ctrl+K.
 
-### 2.2 — Config validation page  `[x]`
+### 2.2 — Config validation page  [x]`[x]`
 `app/config_schema.py` has `validate_config()`. No UI exposes it.
 Add a "Config" page that calls the validator and renders the
 result (validation errors with field paths, or "OK"). Also show
@@ -253,7 +253,7 @@ Files: new `templates/config.html`, `app/config_schema.py`,
     valid / invalid / YAML-parse-error / missing-file /
     secret-redaction / login-required paths.
 
-### 2.3 — Activity log: `user` and `since` filters  `[x]`
+### 2.3 — Activity log: `user` and `since` filters  [x]`[x]`
 Backend supports `?user=...&since=...` but the activity page
 only exposes `action`, `target`, `status`. Add the missing filter
 inputs.
@@ -282,7 +282,7 @@ Files: `templates/activity.html`
 
 ## Tier 3 — Mobile Responsiveness
 
-### 3.1 — Dashboard header collapses to hamburger on mobile  `[x]`
+### 3.1 — Dashboard header collapses to hamburger on mobile  [x]`[x]`
 13+ nav buttons is too many for a mobile top bar. Replace with a
 hamburger icon on `<sm` that opens a slide-down menu.
 
@@ -307,20 +307,20 @@ Files: `templates/index.html`
       - New `.nav-tile` CSS class with the same look as
         desktop nav pills (border, padding, hover state).
 
-### 3.2 — Touch support for the resizer  `[ ]`
+### 3.2 — Touch support for the resizer  [x][x]
 The dashboard's drag-resize handle uses mouse events only. Add
 `touchstart`/`touchmove`/`touchend` equivalents so the terminal
 pane is resizable on tablets.
 
 Files: `templates/index.html`
 
-### 3.3 — Treemap height adapts to viewport  `[ ]`
+### 3.3 — Treemap height adapts to viewport  [x][x]
 `disk.html` sets the treemap to a fixed 480px. Make it `min(60vh,
 480px)` or similar so it fits a phone screen.
 
 Files: `templates/disk.html`
 
-### 3.4 — Force tables to fit small screens  `[ ]`
+### 3.4 — Force tables to fit small screens  [x][x]
 Several pages set a hard `min-width: 920px` on their data tables
 (activity, alerts, cron, system-services). Replace with a
 "card view" on mobile: each row becomes a stacked card on `<sm`,
@@ -329,7 +329,7 @@ restoring the table on `≥sm`.
 Files: `templates/activity.html`, `templates/alerts.html`,
 `templates/cron.html`, `templates/system-services.html`
 
-### 3.5 — "Show stopped" toggle visible on mobile (docker.html)  `[ ]`
+### 3.5 — "Show stopped" toggle visible on mobile (docker.html)  [x][x]
 Currently `hidden sm:flex` — needs to be reachable on phones.
 
 Files: `templates/docker.html`
@@ -338,7 +338,7 @@ Files: `templates/docker.html`
 
 ## Tier 4 — UX Consistency
 
-### 4.1 — Unify modal/confirm/alert patterns  `[ ]`
+### 4.1 — Unify modal/confirm/alert patterns  [x]
 Three different patterns in use:
   * `hidden` class toggle (index, backups, files)
   * `.active` class (system-services, control, monitor)
@@ -357,7 +357,7 @@ Plan:
 
 Files: `templates/_macros.html`, all 19 page templates
 
-### 4.2 — Loading skeletons  `[ ]`
+### 4.2 — Loading skeletons  [x][x]
 Many pages show a blank table on initial load. Add skeleton rows
 (animated grey bars) to activity, alerts, packages, and backup
 tables so users see something while the data fetches.
@@ -365,33 +365,33 @@ tables so users see something while the data fetches.
 Files: `templates/activity.html`, `templates/alerts.html`,
 `templates/packages.html`, `templates/backups.html`
 
-### 4.3 — Debounce filter inputs  `[ ]`
+### 4.3 — Debounce filter inputs  [x][x]
 `alerts.html`'s service-name filter and the activity page's search
 inputs fire on every keystroke. Add 250ms debounce so the API isn't
 hammered.
 
 Files: `templates/alerts.html`, `templates/activity.html`
 
-### 4.4 — Unify toast position  `[ ]`
+### 4.4 — Unify toast position  [x][x]
 `top: 1rem` on most pages, `bottom: 1rem` on cluster/disk/files/ssh.
 Pick one (top is the convention).
 
 Files: 4 templates
 
-### 4.5 — Replace `alert()` calls in index.html  `[ ]`
+### 4.5 — Replace `alert()` calls in index.html  [x][x]
 Six `alert()` calls in `index.html` (form errors, delete confirm).
 Migrate to the toast system.
 
 Files: `templates/index.html`
 
-### 4.6 — Make `login.html` use CSS variables  `[ ]`
+### 4.6 — Make `login.html` use CSS variables  [x][x]
 Currently uses hardcoded Tailwind colors (`bg-gray-950` etc).
 Migrate to the shared `:root` variable system so the login page
 matches the rest of the app.
 
 Files: `templates/login.html`
 
-### 4.7 — Unify the dashboard header style  `[ ]`
+### 4.7 — Unify the dashboard header style  [x][x]
 `index.html`'s header uses a unique `glass-effect` class.
 Bring it in line with the `bg-[var(--bg-card)]/60 backdrop-blur-md`
 used everywhere else.
@@ -402,45 +402,44 @@ Files: `templates/index.html`
 
 ## Tier 5 — Polish
 
-### 5.1 — Empty terminal hint  `[ ]`
+### 5.1 — Empty terminal hint  [x][x]
 The dashboard's empty terminal pane shows nothing. Add a
 "Click + to start a terminal" hint.
 
 Files: `templates/index.html`
 
-### 5.2 — Package search/lookup  `[ ]`
 `packages.html` only shows pending updates. Add a "Lookup" tab
 that takes an arbitrary package name and shows its installed
 version and available upgrade (if any).
 
 Files: `templates/packages.html`, `app/package_manager.py`
 
-### 5.3 — Backup restore guide  `[ ]`
+### 5.3 — Backup restore guide  [x][x]
 Backups exist but there's no in-UI hint about where the archive
 files live or how to restore them. Add an info banner.
 
 Files: `templates/backups.html`
 
-### 5.4 — Add "List all jobs" to packages page  `[ ]`
+### 5.4 — Add "List all jobs" to packages page  [x][x]
 `GET /api/packages/jobs` returns a list of all install jobs.
 Show them in a sidebar so the user can re-open a finished
 install's log.
 
 Files: `templates/packages.html`, `app/package_manager.py`
 
-### 5.5 — Make the dependency graph zoomable on touch  `[ ]`
+### 5.5 — Make the dependency graph zoomable on touch  [x][x]
 The SVG graph in system-services doesn't support pinch-zoom on
 mobile. Add `viewBox`-based zoom on double-tap.
 
 Files: `templates/system-services.html`
 
-### 5.6 — Cluster: mDNS results panel  `[ ]`
+### 5.6 — Cluster: mDNS results panel  [x][x]
 `mdnsBrowse()` only logs results to console. Show them in a
 modal with name/host/port badges.
 
 Files: `templates/cluster.html`
 
-### 5.7 — Activity: User column  `[x]`
+### 5.7 — Activity: User column  [x]`[x]`
 Backend records `user`; UI doesn't show it. Add the column.
 
 Files: `templates/activity.html`
