@@ -145,7 +145,7 @@
         .treemap-wrap {
             position: relative;
             width: 100%;
-            height: 480px;
+            height: min(60vh, 480px);
             background: var(--bg-secondary);
             border-radius: 0.75rem;
             overflow: hidden;
@@ -190,7 +190,7 @@
             height: 100%; color: var(--text-muted); font-size: 0.875rem;
         }
         .toast-container {
-            position: fixed; bottom: 1rem; right: 1rem; z-index: 50;
+            position: fixed; top: 1rem; right: 1rem; z-index: 100;
             display: flex; flex-direction: column; gap: 0.5rem;
         }
         .toast {

@@ -147,12 +147,6 @@
         }
         .nav-tile:hover { background: rgba(255,255,255,0.08); }
 
-        .glass-effect {
-            background: rgba(18, 18, 26, 0.8);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-        }
-
         .gradient-border {
             position: relative;
         }
@@ -267,7 +261,9 @@
                         </button>
                     </div>
                     <div id="terminal-container" class="flex-1 bg-[#0a0a0f] relative">
-                        <!-- Terminals injected here -->
+                        <div id="terminal-hint" class="absolute inset-0 flex items-center justify-center text-[var(--text-muted)] text-sm select-none pointer-events-none">
+                            Click <span class="inline-flex items-center justify-center w-5 h-5 rounded bg-white/10 text-xs font-bold mx-1">+</span> to start a terminal
+                        </div>
                     </div>
                 </section>
             </div>
@@ -1362,6 +1358,7 @@
 
             // Store session
             terminals[id] = { term, fitAddon, container, tab };
+            document.getElementById('terminal-hint').classList.add('hidden');
 
             // Handle Input
             term.onData(data => {
@@ -1433,6 +1430,9 @@
                 if (keys.length > 0) {
                     switchTab(keys[keys.length - 1]);
                 }
+            }
+            if (Object.keys(terminals).length === 0) {
+                document.getElementById('terminal-hint').classList.remove('hidden');
             }
         }
 
@@ -1747,7 +1747,7 @@
     </script>
 
     <!-- Toast Container -->
-    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+    <div id="toast-container" class="fixed top-4 right-4 z-100 flex flex-col gap-2 pointer-events-none"></div>
 
     <script>
         // Toast helper used by SocketIO service_event listener and
