@@ -173,10 +173,18 @@
             <div class="flex flex-wrap items-center gap-2">
                 <input id="action-input" type="text" placeholder="Filter by action…" class="search-input flex-1 min-w-0" style="max-width:200px">
                 <input id="target-input" type="text" placeholder="Filter by target…" class="search-input flex-1 min-w-0" style="max-width:200px">
+                <input id="user-input" type="text" placeholder="Filter by user…" class="search-input flex-1 min-w-0" style="max-width:160px">
                 <select id="status-select" class="search-input" style="max-width:140px">
                     <option value="">All statuses</option>
                     <option value="ok">ok</option>
                     <option value="error">error</option>
+                </select>
+                <select id="since-select" class="search-input" style="max-width:160px" title="Only show events since…">
+                    <option value="">Any time</option>
+                    <option value="3600">Last hour</option>
+                    <option value="86400">Last 24h</option>
+                    <option value="604800">Last 7d</option>
+                    <option value="2592000">Last 30d</option>
                 </select>
                 <a href="/api/activity/export.csv" class="refresh-btn">
                     <i data-lucide="download" class="w-3.5 h-3.5"></i>
@@ -195,11 +203,12 @@
                 <table class="events-table">
                     <thead>
                         <tr>
-                            <th style="width:160px">Time</th>
-                            <th style="width:160px">Action</th>
-                            <th style="width:200px">Target</th>
-                            <th style="width:90px">Status</th>
-                            <th style="width:120px">IP</th>
+                            <th style="width:150px">Time</th>
+                            <th style="width:140px">Action</th>
+                            <th style="width:160px">Target</th>
+                            <th style="width:120px" class="hidden md:table-cell">User</th>
+                            <th style="width:80px">Status</th>
+                            <th style="width:110px" class="hidden sm:table-cell">IP</th>
                             <th>Detail</th>
                         </tr>
                     </thead>
@@ -216,7 +225,7 @@
     <script>
         lucide.createIcons();
 
-        const filters = { action: '', target: '', status: '' };
+        const filters = { action: '', target: '', status: '', user: '', since: '' };
         let debounceTimer = null;
 
         function $(id) { return document.getElementById(id); }
@@ -254,8 +263,9 @@
                     <td class="text-[var(--text-muted)] text-xs whitespace-nowrap">${formatTime(e.timestamp)}</td>
                     <td><span class="badge ${actionColor(e.action)}">${escapeHtml(e.action)}</span></td>
                     <td><code class="font-mono text-xs">${escapeHtml(e.target || '')}</code></td>
+                    <td class="hidden md:table-cell text-[var(--text-secondary)] text-xs">${escapeHtml(e.user || '—')}</td>
                     <td><span class="badge ${badge}">${escapeHtml(e.status)}</span></td>
-                    <td class="text-[var(--text-muted)] text-xs">${escapeHtml(e.ip || '—')}</td>
+                    <td class="hidden sm:table-cell text-[var(--text-muted)] text-xs">${escapeHtml(e.ip || '—')}</td>
                     <td class="text-[var(--text-secondary)] text-xs">${escapeHtml(e.detail || '')}</td>
                 </tr>`;
             }).join('');
@@ -285,7 +295,14 @@
                 const params = new URLSearchParams();
                 if (filters.action) params.set('action', filters.action);
                 if (filters.target) params.set('target', filters.target);
+                if (filters.user) params.set('user', filters.user);
                 if (filters.status) params.set('status', filters.status);
+                if (filters.since) {
+                    // The dropdown value is seconds-ago; convert to
+                    // a Unix timestamp that the API understands.
+                    const sinceTs = (Date.now() / 1000) - Number(filters.since);
+                    params.set('since', String(sinceTs));
+                }
                 const r = await fetch('/api/activity?' + params.toString());
                 const data = await r.json();
                 renderEntries(data.entries || []);
@@ -308,8 +325,17 @@
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(loadEntries, 200);
         });
+        $('user-input').addEventListener('input', (e) => {
+            filters.user = e.target.value;
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(loadEntries, 200);
+        });
         $('status-select').addEventListener('change', (e) => {
             filters.status = e.target.value;
+            loadEntries();
+        });
+        $('since-select').addEventListener('change', (e) => {
+            filters.since = e.target.value;
             loadEntries();
         });
         $('refresh-btn').onclick = loadEntries;

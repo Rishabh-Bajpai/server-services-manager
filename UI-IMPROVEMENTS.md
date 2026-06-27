@@ -253,12 +253,30 @@ Files: new `templates/config.html`, `app/config_schema.py`,
     valid / invalid / YAML-parse-error / missing-file /
     secret-redaction / login-required paths.
 
-### 2.3 — Activity log: `user` and `since` filters  `[ ]`
+### 2.3 — Activity log: `user` and `since` filters  `[x]`
 Backend supports `?user=...&since=...` but the activity page
 only exposes `action`, `target`, `status`. Add the missing filter
 inputs.
 
 Files: `templates/activity.html`
+
+**Status:** Done (combined with 5.7 below; same file change).
+
+  * `templates/activity.html`:
+      - Filter bar: added a `user` text input and a `since`
+        dropdown (Any time / Last hour / Last 24h / Last 7d /
+        Last 30d). The dropdown value is converted to a Unix
+        timestamp in `loadEntries()` before sending.
+      - Table: added a new `User` column (hidden on `md` and
+        below to keep mobile usable). The cell shows the
+        recorded user, or `—` for anonymous events.
+      - Existing `IP` column hidden on `sm` and below (moved
+        next to User so the row still fits on narrow screens).
+      - All filter inputs share the existing 200ms debounce
+        so we don't hammer the API while the user types.
+
+  * The backend (`/api/activity` + `app/activity.list_entries`)
+    already accepted these params; no backend changes needed.
 
 ---
 
@@ -403,10 +421,15 @@ modal with name/host/port badges.
 
 Files: `templates/cluster.html`
 
-### 5.7 — Activity: User column  `[ ]`
+### 5.7 — Activity: User column  `[x]`
 Backend records `user`; UI doesn't show it. Add the column.
 
 Files: `templates/activity.html`
+
+**Status:** Done (combined with 2.3; same change set). See 2.3
+above for the full description. The new column is hidden on
+mobile (`hidden md:table-cell`) and the existing `IP` column
+was similarly hidden on small screens so the row still fits.
 
 ---
 
