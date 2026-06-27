@@ -180,189 +180,62 @@
 
 <body class="bg-[var(--bg-primary)] text-[var(--text-primary)] h-screen overflow-hidden">
     <div id="app" class="flex flex-col h-screen overflow-hidden">
-        <!-- Header -->
-        <header class="flex-none px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border-subtle)] glass-effect z-10">
-            <div class="flex items-center gap-3">
-                <button id="mobile-menu-btn" onclick="toggleMobileMenu()" class="md:hidden p-1.5 -ml-1 rounded-lg hover:bg-white/5 text-[var(--text-secondary)]" title="Menu" aria-label="Toggle menu">
-                    <i data-lucide="menu" class="w-5 h-5"></i>
-                </button>
-                <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
-                    <i data-lucide="layout-dashboard" class="w-5 h-5 text-white"></i>
-                </div>
-                <div>
-                    <h1 class="text-lg sm:text-xl font-bold tracking-tight bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">Server Services Manager</h1>
-                    <p class="text-[var(--text-muted)] text-xs font-medium hidden sm:block">Control Center</p>
-                </div>
+        <!-- Header — uses the shared header macro so the nav is
+             identical to every other page in the app. The dashboard
+             also passes through the home-grown "Add Service" /
+             "Import" / "Export" / "Search" / "Connection status"
+             actions because those are dashboard-only. -->
+        {% import "_macros.html" as ui %}
+        {% set actions %}
+            <button onclick="openImportModal()"
+                class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium"
+                title="Import services from JSON export">
+                <i data-lucide="upload" class="w-4 h-4"></i>
+                <span class="hidden 2xl:inline">Import</span>
+            </button>
+            <a href="/api/programs/export"
+                class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium"
+                title="Export services as JSON">
+                <i data-lucide="download" class="w-4 h-4"></i>
+                <span class="hidden 2xl:inline">Export</span>
+            </a>
+            <button onclick="openModal()"
+                class="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all text-sm font-medium shadow-lg shadow-blue-500/25">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span class="hidden sm:inline">Add Service</span>
+            </button>
+            <a href="/docs/" target="_blank" rel="noopener"
+                class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium"
+                title="OpenAPI / Swagger UI">
+                <i data-lucide="book-open" class="w-4 h-4"></i>
+                <span class="hidden 2xl:inline">API</span>
+            </a>
+            <a href="/logout"
+                class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20 rounded-lg hover:bg-[var(--accent-red)]/20 transition-all text-sm font-medium">
+                <i data-lucide="log-out" class="w-4 h-4"></i>
+                <span class="hidden sm:inline">Logout</span>
+            </a>
+            <button onclick="openPalette()" class="flex items-center gap-2 px-3 py-1.5 bg-white/5 text-[var(--text-muted)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 hover:text-[var(--text-primary)] transition-all text-sm font-medium" title="Command palette (Ctrl+K)">
+                <i data-lucide="search" class="w-3.5 h-3.5"></i>
+                <kbd class="hidden md:inline text-[10px] font-mono opacity-60">⌘K</kbd>
+            </button>
+            <div id="connection-status"
+                class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20">
+                <span class="w-2 h-2 rounded-full bg-current status-running"></span>
             </div>
-            <div id="nav-bar" class="hidden md:flex items-center gap-2 flex-wrap justify-end">
-                <a href="/monitor"
-                    class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-green)]/10 text-[var(--accent-green)] border border-[var(--accent-green)]/20 rounded-lg hover:bg-[var(--accent-green)]/20 transition-all text-sm font-medium">
-                    <i data-lucide="activity" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Monitor</span>
-                </a>
-                <a href="/control"
-                    class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-orange)]/10 text-[var(--accent-orange)] border border-[var(--accent-orange)]/20 rounded-lg hover:bg-[var(--accent-orange)]/20 transition-all text-sm font-medium">
-                    <i data-lucide="gamepad-2" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Control</span>
-                </a>
-                <a href="/system-services"
-                    class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-purple)]/10 text-[var(--accent-purple)] border border-[var(--accent-purple)]/20 rounded-lg hover:bg-[var(--accent-purple)]/20 transition-all text-sm font-medium">
-                    <i data-lucide="server-cog" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">System</span>
-                </a>
-                <a href="/cron"
-                    class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-yellow)]/10 text-[var(--accent-yellow)] border border-[var(--accent-yellow)]/20 rounded-lg hover:bg-[var(--accent-yellow)]/20 transition-all text-sm font-medium">
-                    <i data-lucide="calendar-clock" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Cron</span>
-                </a>
-                <a href="/notifications"
-                    class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-green)]/10 text-[var(--accent-green)] border border-[var(--accent-green)]/20 rounded-lg hover:bg-[var(--accent-green)]/20 transition-all text-sm font-medium">
-                    <i data-lucide="bell-ring" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Health</span>
-                </a>
-                <a href="/activity"
-                    class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-purple)]/10 text-[var(--accent-purple)] border border-[var(--accent-purple)]/20 rounded-lg hover:bg-[var(--accent-purple)]/20 transition-all text-sm font-medium">
-                    <i data-lucide="history" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Activity</span>
-                </a>
-                <a href="/disk"
-                    class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-cyan)]/10 text-[var(--accent-cyan)] border border-[var(--accent-cyan)]/20 rounded-lg hover:bg-[var(--accent-cyan)]/20 transition-all text-sm font-medium"
-                    title="Disk usage analyzer">
-                    <i data-lucide="pie-chart" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Disk</span>
-                </a>
-                <a href="/ssh"
-                    class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-purple)]/10 text-[var(--accent-purple)] border border-[var(--accent-purple)]/20 rounded-lg hover:bg-[var(--accent-purple)]/20 transition-all text-sm font-medium"
-                    title="SSH authorized keys">
-                    <i data-lucide="key-round" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">SSH</span>
-                </a>
-                <a href="/cluster"
-                    class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-cyan)]/10 text-[var(--accent-cyan)] border border-[var(--accent-cyan)]/20 rounded-lg hover:bg-[var(--accent-cyan)]/20 transition-all text-sm font-medium"
-                    title="Multi-host cluster">
-                    <i data-lucide="network" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Cluster</span>
-                </a>
-                <a href="/files"
-                    class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-yellow)]/10 text-[var(--accent-yellow)] border border-[var(--accent-yellow)]/20 rounded-lg hover:bg-[var(--accent-yellow)]/20 transition-all text-sm font-medium"
-                    title="Full file explorer">
-                    <i data-lucide="folder-open" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Files</span>
-                </a>
-                <a href="/plugins"
-                    class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-purple)]/10 text-[var(--accent-purple)] border border-[var(--accent-purple)]/20 rounded-lg hover:bg-[var(--accent-purple)]/20 transition-all text-sm font-medium"
-                    title="User plugins">
-                    <i data-lucide="plug" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Plugins</span>
-                </a>
-                <a href="/config"
-                    class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-blue)]/10 text-[var(--accent-blue)] border border-[var(--accent-blue)]/20 rounded-lg hover:bg-[var(--accent-blue)]/20 transition-all text-sm font-medium"
-                    title="View and validate config.yaml">
-                    <i data-lucide="file-cog" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Config</span>
-                </a>
-                <button onclick="openImportModal()"
-                    class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium"
-                    title="Import services from JSON export">
-                    <i data-lucide="upload" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Import</span>
-                </button>
-                <a href="/api/programs/export"
-                    class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium"
-                    title="Export services as JSON">
-                    <i data-lucide="download" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Export</span>
-                </a>
-                <button onclick="openModal()"
-                    class="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all text-sm font-medium shadow-lg shadow-blue-500/25">
-                    <i data-lucide="plus" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Add Service</span>
-                </button>
-                <a href="/docs/"
-                    target="_blank"
-                    rel="noopener"
-                    class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium"
-                    title="OpenAPI / Swagger UI">
-                    <i data-lucide="book-open" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">API</span>
-                </a>
-                <a href="/logout"
-                    class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20 rounded-lg hover:bg-[var(--accent-red)]/20 transition-all text-sm font-medium">
-                    <i data-lucide="log-out" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Logout</span>
-                </a>
-                <button onclick="openPalette()" class="flex items-center gap-2 px-3 py-1.5 bg-white/5 text-[var(--text-muted)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 hover:text-[var(--text-primary)] transition-all text-sm font-medium" title="Command palette (Ctrl+K)">
-                    <i data-lucide="search" class="w-3.5 h-3.5"></i>
-                    <span class="hidden md:inline text-xs">Search</span>
-                    <kbd class="hidden md:inline text-[10px] font-mono opacity-60">⌘K</kbd>
-                </button>
-                <div id="connection-status"
-                    class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20">
-                    <span class="w-2 h-2 rounded-full bg-current status-running"></span>
-                </div>
-            </div>
-        </header>
+        {% endset %}
+        {{ ui.header(
+            title="Dashboard",
+            icon="layout-dashboard",
+            icon_color="var(--accent-blue)",
+            actions=actions,
+            current='/',
+        ) }}
 
         <!-- Mobile slide-down menu. Mirrors the desktop nav-bar items
-             so phones don't lose access to any of them. -->
-        <div id="mobile-menu" class="md:hidden hidden border-b border-[var(--border-subtle)] bg-[var(--bg-card)]/95 backdrop-blur-md px-4 py-3 animate-fade-in">
-            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                <a href="/monitor" class="nav-tile" data-key="monitor">
-                    <i data-lucide="activity" class="w-4 h-4"></i>Monitor
-                </a>
-                <a href="/control" class="nav-tile" data-key="control">
-                    <i data-lucide="gamepad-2" class="w-4 h-4"></i>Control
-                </a>
-                <a href="/system-services" class="nav-tile" data-key="system-services">
-                    <i data-lucide="server-cog" class="w-4 h-4"></i>System
-                </a>
-                <a href="/cron" class="nav-tile" data-key="cron">
-                    <i data-lucide="calendar-clock" class="w-4 h-4"></i>Cron
-                </a>
-                <a href="/notifications" class="nav-tile" data-key="notifications">
-                    <i data-lucide="bell-ring" class="w-4 h-4"></i>Health
-                </a>
-                <a href="/activity" class="nav-tile" data-key="activity">
-                    <i data-lucide="history" class="w-4 h-4"></i>Activity
-                </a>
-                <a href="/disk" class="nav-tile" data-key="disk">
-                    <i data-lucide="pie-chart" class="w-4 h-4"></i>Disk
-                </a>
-                <a href="/ssh" class="nav-tile" data-key="ssh">
-                    <i data-lucide="key-round" class="w-4 h-4"></i>SSH
-                </a>
-                <a href="/cluster" class="nav-tile" data-key="cluster">
-                    <i data-lucide="network" class="w-4 h-4"></i>Cluster
-                </a>
-                <a href="/files" class="nav-tile" data-key="files">
-                    <i data-lucide="folder-open" class="w-4 h-4"></i>Files
-                </a>
-                <a href="/plugins" class="nav-tile" data-key="plugins">
-                    <i data-lucide="plug" class="w-4 h-4"></i>Plugins
-                </a>
-                <a href="/config" class="nav-tile" data-key="config">
-                    <i data-lucide="file-cog" class="w-4 h-4"></i>Config
-                </a>
-                <button onclick="openImportModal()" class="nav-tile text-left w-full">
-                    <i data-lucide="upload" class="w-4 h-4"></i>Import
-                </button>
-                <a href="/api/programs/export" class="nav-tile">
-                    <i data-lucide="download" class="w-4 h-4"></i>Export
-                </a>
-                <button onclick="openModal()" class="nav-tile text-left w-full bg-gradient-to-r from-blue-500/20 to-blue-600/20 text-[var(--accent-blue)] border-[var(--accent-blue)]/30">
-                    <i data-lucide="plus" class="w-4 h-4"></i>Add Service
-                </button>
-                <a href="/docs/" target="_blank" rel="noopener" class="nav-tile">
-                    <i data-lucide="book-open" class="w-4 h-4"></i>API Docs
-                </a>
-                <button onclick="openPalette()" class="nav-tile text-left w-full">
-                    <i data-lucide="search" class="w-4 h-4"></i>Search <span class="text-[10px] opacity-60 ml-auto">⌘K</span>
-                </button>
-                <a href="/logout" class="nav-tile text-[var(--accent-red)] border-[var(--accent-red)]/30">
-                    <i data-lucide="log-out" class="w-4 h-4"></i>Logout
-                </a>
-            </div>
-        </div>
+              so phones don't lose access to any of them.
+              The shared header macro (ui-macros.html) provides
+              the same grid, so we don't repeat it here. #}
 
         <!-- Main Content (Split View) -->
         <div class="flex-1 flex flex-col min-h-0 relative">
@@ -434,19 +307,19 @@
                         class="w-full bg-[var(--bg-secondary)] rounded-xl border border-[var(--border-subtle)] px-4 py-2.5 text-sm font-mono h-24 focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 focus:outline-none transition-all placeholder:text-[var(--text-muted)]"></textarea>
                 </div>
                 <div class="flex items-center gap-3 py-2">
-                    <div class="relative">
+                    <div class="relative inline-block w-10 h-5 flex-shrink-0">
                         <input type="checkbox" id="autostart" checked
                             class="sr-only peer">
-                        <label for="autostart" class="w-10 h-5 bg-[var(--bg-secondary)] rounded-full cursor-pointer peer-checked:bg-[var(--accent-blue)] transition-colors border border-[var(--border-subtle)] peer-checked:border-[var(--accent-blue)]">
+                        <label for="autostart" class="absolute inset-0 w-10 h-5 bg-[var(--bg-secondary)] rounded-full cursor-pointer peer-checked:bg-[var(--accent-blue)] transition-colors border border-[var(--border-subtle)] peer-checked:border-[var(--accent-blue)]">
                             <span class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></span>
                         </label>
                     </div>
                     <label for="autostart" class="text-sm text-[var(--text-secondary)]">Auto-start on launch</label>
                 </div>
                 <div class="flex items-center gap-3 py-2" id="boot-toggle-row" style="display:none">
-                    <div class="relative">
+                    <div class="relative inline-block w-10 h-5 flex-shrink-0">
                         <input type="checkbox" id="boot-toggle" class="sr-only peer">
-                        <label for="boot-toggle" class="w-10 h-5 bg-[var(--bg-secondary)] rounded-full cursor-pointer peer-checked:bg-[var(--accent-green)] transition-colors border border-[var(--border-subtle)] peer-checked:border-[var(--accent-green)]">
+                        <label for="boot-toggle" class="absolute inset-0 w-10 h-5 bg-[var(--bg-secondary)] rounded-full cursor-pointer peer-checked:bg-[var(--accent-green)] transition-colors border border-[var(--border-subtle)] peer-checked:border-[var(--accent-green)]">
                             <span class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></span>
                         </label>
                     </div>
@@ -663,40 +536,9 @@
         const connectionStatus = document.getElementById('connection-status');
         let programsState = {}; // Store local state like auto-scroll per program
 
-        // Mobile menu toggle. Closes on backdrop click and on any
-        // nav tile click. The CSS class is just 'hidden' so we
-        // don't need a separate "open" state.
-        function toggleMobileMenu(force) {
-            const menu = document.getElementById('mobile-menu');
-            if (!menu) return;
-            const willShow = force === true || (force === undefined && menu.classList.contains('hidden'));
-            menu.classList.toggle('hidden', !willShow);
-            // Swap the hamburger icon to an X when the menu is open.
-            const btn = document.getElementById('mobile-menu-btn');
-            if (btn) {
-                const icon = btn.querySelector('[data-lucide]');
-                if (icon) {
-                    icon.setAttribute('data-lucide', willShow ? 'x' : 'menu');
-                    lucide.createIcons();
-                }
-            }
-            // Refresh icons after the menu becomes visible (lucide
-            // only renders icons in visible DOM).
-            if (willShow) lucide.createIcons();
-        }
-        // Auto-close the mobile menu when a nav tile is clicked so
-        // the user immediately sees the new page (not a half-open menu).
-        document.addEventListener('click', (e) => {
-            const menu = document.getElementById('mobile-menu');
-            if (!menu || menu.classList.contains('hidden')) return;
-            if (e.target.closest('.nav-tile')) {
-                toggleMobileMenu(false);
-            } else if (!e.target.closest('#mobile-menu') && !e.target.closest('button[onclick*="toggleMobileMenu"]')) {
-                // Click outside the menu (and not on the hamburger
-                // button) closes it.
-                toggleMobileMenu(false);
-            }
-        });
+        // Mobile menu toggle is provided by the shared _macros.html
+        // header (window.uiToggleMobileMenu). The dashboard uses the
+        // same shared header now, so the menu logic is in one place.
 
         // Terminal State
         let terminals = {}; // { id: { term: Terminal, fitAddon: FitAddon, container: HTMLElement } }

@@ -1,15 +1,20 @@
 {# -----------------------------------------------------------------
    Shared UI macros. Every page in the app imports this file and
    uses the `header` macro to render its top navigation bar so
-   the look is identical across pages (back arrow, page icon,
-   title, optional badge, action buttons).
+   the look is identical across pages (logo, page icon, title,
+   global nav, optional badge, action buttons).
+
+   The header now embeds a global navigation bar with all the
+   primary app pages, so from any route the user can go to
+   any other route with a single click. The current page is
+   marked active. The bar collapses to a hamburger menu on
+   mobile, just like the dashboard.
 
    Usage in a page template:
 
      {% import "_macros.html" as ui %}
      {% set actions %}
        <button class="btn" onclick="loadList()">Refresh</button>
-       <button class="btn btn-primary" onclick="openAdd()">Add</button>
      {% endset %}
      {{ ui.header(
          title="SSH Keys",
@@ -17,6 +22,7 @@
          icon_color="var(--accent-purple)",
          badge_id="count-badge",
          actions=actions,
+         current='/ssh',
      ) }}
 
    Parameters:
@@ -27,29 +33,174 @@
                    the title and the action buttons (the page sets
                    its content via setBadge())
      actions      - HTML for the right-side buttons
+     current      - the path of the current page; used to mark
+                   the active nav pill. e.g. '/ssh'
    ----------------------------------------------------------------- #}
-{% macro header(title, icon, icon_color, badge_id=None, badge_html='', actions='') %}
-<header class="border-b border-[var(--border-subtle)] bg-[var(--bg-card)]/60 backdrop-blur-md sticky top-0 z-30">
+
+{# Single header macro. The shared style + script blocks live
+   INSIDE the macro so they're emitted at the call site (Jinja's
+   macro-scope rules mean a template-level {% set %} isn't visible
+   inside a {% macro %} body). Browsers handle duplicate
+   <style>/<script> tags fine; the styles are scoped to
+   .ui-nav-pill / .ui-nav-tile so they can't collide with
+   anything else. The {% raw %} wrapper is required so Jinja's
+   lexer doesn't choke on the {{ }} inside the JS. #}
+{% macro header(title, icon, icon_color, badge_id=None, badge_html='', actions='', current='') %}{% raw %}<style>
+    .ui-nav-pill {
+        display: inline-flex; align-items: center; gap: 0.375rem;
+        padding: 0.375rem 0.75rem;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid var(--border-subtle);
+        border-radius: 0.5rem;
+        color: var(--text-secondary);
+        font-size: 0.8125rem; font-weight: 500;
+        transition: all 0.15s ease;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+    .ui-nav-pill:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+    .ui-nav-pill.active {
+        background: rgba(59,130,246,0.12);
+        border-color: rgba(59,130,246,0.35);
+        color: var(--accent-blue);
+    }
+    .ui-nav-tile {
+        display: flex; align-items: center; gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid var(--border-subtle);
+        border-radius: 0.5rem;
+        color: var(--text-primary);
+        font-size: 0.8125rem; font-weight: 500;
+        transition: background 0.15s ease;
+        cursor: pointer;
+        text-decoration: none;
+    }
+    .ui-nav-tile:hover { background: rgba(255,255,255,0.08); }
+    .ui-nav-tile.active {
+        background: rgba(59,130,246,0.15);
+        border-color: rgba(59,130,246,0.4);
+        color: var(--accent-blue);
+    }
+</style>
+<script>
+    // Shared nav mobile-menu toggle. Bound to the hamburger
+    // button in the header macro. Closes on any tile click or
+    // outside click.
+    window.uiToggleMobileMenu = function(force) {
+        var menu = document.getElementById('ui-mobile-menu');
+        if (!menu) return;
+        var willShow = force === true || (force === undefined && menu.classList.contains('hidden'));
+        menu.classList.toggle('hidden', !willShow);
+        var btn = document.getElementById('ui-menu-btn');
+        if (btn) {
+            var icon = btn.querySelector('[data-lucide]');
+            if (icon) {
+                icon.setAttribute('data-lucide', willShow ? 'x' : 'menu');
+                if (window.lucide) lucide.createIcons();
+            }
+        }
+        if (willShow && window.lucide) lucide.createIcons();
+    };
+    document.addEventListener('click', function(e) {
+        var menu = document.getElementById('ui-mobile-menu');
+        if (!menu || menu.classList.contains('hidden')) return;
+        if (e.target.closest('.ui-nav-tile')) {
+            window.uiToggleMobileMenu(false);
+        } else if (!e.target.closest('#ui-mobile-menu') && !e.target.closest('#ui-menu-btn')) {
+            window.uiToggleMobileMenu(false);
+        }
+    });
+</script>{% endraw %}<header class="border-b border-[var(--border-subtle)] bg-[var(--bg-card)]/60 backdrop-blur-md sticky top-0 z-30">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
-        <div class="flex items-center gap-3 min-w-0">
-            <a href="/" class="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
-               title="Back to dashboard">
-                <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <div class="flex items-center gap-3 min-w-0 flex-1">
+            <button onclick="uiToggleMobileMenu()" class="lg:hidden p-1.5 -ml-1 rounded-lg hover:bg-white/5 text-[var(--text-secondary)]" title="Menu" aria-label="Toggle menu" id="ui-menu-btn">
+                <i data-lucide="menu" class="w-5 h-5"></i>
+            </button>
+            <a href="/" class="flex items-center gap-2.5 min-w-0" title="Server Services Manager">
+                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20 flex-shrink-0">
+                    <i data-lucide="layout-dashboard" class="w-4 h-4 text-white"></i>
+                </div>
+                <span class="hidden sm:inline text-base font-semibold tracking-tight bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent whitespace-nowrap">SSM</span>
             </a>
-            <i data-lucide="{{ icon }}" class="w-5 h-5 flex-shrink-0"
-               style="color: {{ icon_color }}"></i>
-            <h1 class="text-base sm:text-lg font-semibold truncate">{{ title }}</h1>
-            {% if badge_id %}
-            <span id="{{ badge_id }}" class="hidden sm:inline-flex badge badge-gray">…</span>
-            {% elif badge_html %}
-            <span class="hidden sm:inline-flex">{{ badge_html|safe }}</span>
-            {% endif %}
+            <span class="text-[var(--border-active)] hidden sm:inline">/</span>
+            <div class="flex items-center gap-2 min-w-0">
+                <i data-lucide="{{ icon }}" class="w-5 h-5 flex-shrink-0"
+                   style="color: {{ icon_color }}"></i>
+                <h1 class="text-base sm:text-lg font-semibold truncate">{{ title }}</h1>
+                {% if badge_id %}
+                <span id="{{ badge_id }}" class="hidden sm:inline-flex badge badge-gray">…</span>
+                {% elif badge_html %}
+                <span class="hidden sm:inline-flex">{{ badge_html|safe }}</span>
+                {% endif %}
+            </div>
         </div>
         <div class="flex items-center gap-2 flex-wrap justify-end">
-            {{ actions|safe }}
+            <div id="ui-nav-bar" class="hidden xl:flex items-center gap-1.5 flex-wrap justify-end">
+                {{ _ui_nav_items(current) }}
+            </div>
+            <div class="flex items-center gap-2 flex-wrap justify-end">
+                {{ actions|safe }}
+            </div>
+        </div>
+    </div>
+    {# Mobile slide-down menu (mirrors the desktop nav) #}
+    <div id="ui-mobile-menu" class="xl:hidden hidden border-t border-[var(--border-subtle)] bg-[var(--bg-card)]/95 backdrop-blur-md px-4 py-3 animate-fade-in">
+        <div class="grid grid-cols-3 sm:grid-cols-4 gap-2">
+            {{ _ui_nav_items(current, mobile=True) }}
+            <a href="/logout" class="ui-nav-tile text-[var(--accent-red)] border-[var(--accent-red)]/30">
+                <i data-lucide="log-out" class="w-4 h-4"></i>Logout
+            </a>
         </div>
     </div>
 </header>
+{% endmacro %}
+
+
+{# Renders a single nav item as a pill. Same DOM for both the
+   desktop bar and the mobile menu — styling is controlled by
+   .ui-nav-pill / .ui-nav-tile (defined in the page that imports
+   this macro). #}
+{% macro _ui_nav_item(href, icon, label, current, mobile=False) -%}
+{%- if href == current -%}
+<a href="{{ href }}" class="ui-nav-{{ 'tile' if mobile else 'pill' }} active" data-key="{{ label|lower }}">
+{%- else -%}
+<a href="{{ href }}" class="ui-nav-{{ 'tile' if mobile else 'pill' }}" data-key="{{ label|lower }}">
+{%- endif -%}
+    <i data-lucide="{{ icon }}" class="w-4 h-4 flex-shrink-0"></i>
+    <span class="{{ '' if mobile else 'hidden xl:inline' }}">{{ label }}</span>
+</a>
+{%- endmacro %}
+
+
+{# Renders the full set of nav items. Pages opt into a different
+   "current" value (passed to header()) so the right pill is
+   marked active. #}
+{% macro _ui_nav_items(current, mobile=False) %}
+    {{ _ui_nav_item('/',                 'layout-dashboard', 'Dashboard',  current, mobile) }}
+    {{ _ui_nav_item('/monitor',          'activity',         'Monitor',    current, mobile) }}
+    {{ _ui_nav_item('/control',          'gamepad-2',        'Control',    current, mobile) }}
+    {{ _ui_nav_item('/system-services',  'server-cog',       'System',     current, mobile) }}
+    {{ _ui_nav_item('/cron',             'calendar-clock',   'Cron',       current, mobile) }}
+    {{ _ui_nav_item('/notifications',    'bell-ring',        'Health',     current, mobile) }}
+    {{ _ui_nav_item('/activity',         'history',          'Activity',   current, mobile) }}
+    {{ _ui_nav_item('/disk',             'pie-chart',        'Disk',       current, mobile) }}
+    {{ _ui_nav_item('/ssh',              'key-round',        'SSH',        current, mobile) }}
+    {{ _ui_nav_item('/cluster',          'network',          'Cluster',    current, mobile) }}
+    {{ _ui_nav_item('/files',            'folder-open',      'Files',      current, mobile) }}
+    {{ _ui_nav_item('/docker',           'container',        'Docker',     current, mobile) }}
+    {{ _ui_nav_item('/plugins',          'plug',             'Plugins',    current, mobile) }}
+    {{ _ui_nav_item('/config',           'file-cog',         'Config',     current, mobile) }}
+    {{ _ui_nav_item('/alerts',           'megaphone',        'Alerts',     current, mobile) }}
+    {{ _ui_nav_item('/packages',         'package',          'Packages',   current, mobile) }}
+    {{ _ui_nav_item('/backups',          'archive',          'Backups',    current, mobile) }}
+    {{ _ui_nav_item('/firewall',         'shield',           'Firewall',   current, mobile) }}
+    {{ _ui_nav_item('/logs',             'file-text',        'Logs',       current, mobile) }}
+    {% if mobile %}
+    <a href="/docs/" target="_blank" rel="noopener" class="ui-nav-tile">
+        <i data-lucide="book-open" class="w-4 h-4"></i>API Docs
+    </a>
+    {% endif %}
 {% endmacro %}
 
 
