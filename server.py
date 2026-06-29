@@ -130,7 +130,7 @@ _password_hash = generate_password_hash(os.getenv('PASSWORD', 'admin'))
 
 @app.before_request
 def require_login():
-    allowed_routes = ['login', 'static', 'health']
+    allowed_routes = ['login', 'static', 'health', 'favicon']
     if request.endpoint not in allowed_routes and 'logged_in' not in session:
         return redirect(url_for('login'))
 
