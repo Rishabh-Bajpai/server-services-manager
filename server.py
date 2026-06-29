@@ -12,7 +12,7 @@ import time
 import threading
 import yaml
 
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash, Response
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash, Response, send_from_directory
 from flask_socketio import SocketIO
 from app.process_manager import ProcessManager, ProgramConfig
 from app.terminal_manager import TerminalManager
@@ -162,6 +162,10 @@ def login():
 def logout():
     session.pop('logged_in', None)
     return redirect(url_for('login'))
+
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory('static', 'logo.svg', mimetype='image/svg+xml')
 
 @app.route('/')
 def index():

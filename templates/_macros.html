@@ -45,7 +45,7 @@
    .ui-nav-pill / .ui-nav-tile so they can't collide with
    anything else. The {% raw %} wrapper is required so Jinja's
    lexer doesn't choke on the {{ }} inside the JS. #}
-{% macro header(title, icon, icon_color, badge_id=None, badge_html='', actions='', current='') %}{% raw %}<style>
+{% macro header(title, icon, icon_color, badge_id=None, badge_html='', actions='', current='') %}<link rel="icon" type="image/svg+xml" href="/favicon.ico">{% raw %}<style>
     .ui-nav-pill {
         display: inline-flex; align-items: center; gap: 0.375rem;
         padding: 0.375rem 0.75rem;
@@ -228,8 +228,8 @@
                 <i data-lucide="menu" class="w-5 h-5"></i>
             </button>
             <a href="/" class="flex items-center gap-2.5 min-w-0" title="Server Services Manager">
-                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20 flex-shrink-0">
-                    <i data-lucide="layout-dashboard" class="w-4 h-4 text-white"></i>
+                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20 flex-shrink-0 overflow-hidden">
+                    <img src="/favicon.ico" alt="SSM" class="w-8 h-8">
                 </div>
                 <span class="hidden sm:inline text-base font-semibold tracking-tight bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent whitespace-nowrap">SSM</span>
             </a>
