@@ -21,6 +21,7 @@
             --accent-red: #ef4444;
             --accent-yellow: #f59e0b;
             --accent-purple: #8b5cf6;
+            --accent-orange: #f97316;
             --accent-cyan: #06b6d4;
             --text-primary: #f1f5f9;
             --text-secondary: #94a3b8;
@@ -94,8 +95,7 @@
 
     {% import "_macros.html" as ui %}
 {% set actions %}
-            
-            {% endset %}
+{% endset %}
 {{ ui.header(
             title="Plugins",
             icon="plug",
@@ -103,12 +103,7 @@
             actions=actions,
             current='/plugins',
         ) }}
-<div class="max-w-7xl mx-auto p-4 sm:p-6">
-        
-        
-        
-
-        <main class="mt-6 space-y-4">
+<main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
             <section class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div class="status-card">
                     <div class="label">Discovered</div>
@@ -133,8 +128,8 @@
                             The server picks them up at startup — restart after adding.
                         </div>
                     </div>
-                    <button onclick="load()" class="px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium" title="Re-discover from disk (read-only)">
-                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5 inline"></i> Refresh
+                    <button onclick="load()" class="btn" title="Re-discover from disk (read-only)">
+                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Refresh
                     </button>
                 </div>
                 <div id="plugin-list" class="space-y-2">
@@ -168,7 +163,6 @@
                 </p>
             </section>
         </main>
-    </div>
 
     <script>
         function esc(s) {

@@ -229,8 +229,7 @@
 
     {% import "_macros.html" as ui %}
 {% set actions %}
-            
-            {% endset %}
+{% endset %}
 {{ ui.header(
             title="Control Panel",
             icon="gamepad-2",
@@ -238,12 +237,7 @@
             actions=actions,
             current='/control',
         ) }}
-<div class="max-w-7xl mx-auto p-4 sm:p-6">
-        <!-- Header -->
-        
-        
-        
-
+<main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <!-- Power Section -->
         <div class="flex items-center gap-3 mb-4 section-label animate-fade-in" style="animation-delay:0.05s">
             <span class="line"></span>
@@ -275,7 +269,7 @@
             <span class="line"></span>
         </div>
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-8" id="custom-group"></div>
-    </div>
+    </main>
 
     <!-- Output Drawer -->
     <div id="output-drawer">

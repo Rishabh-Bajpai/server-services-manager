@@ -13,7 +13,7 @@
     <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
             --bg-primary: #0a0a0f;
@@ -26,6 +26,8 @@
             --accent-red: #ef4444;
             --accent-yellow: #f59e0b;
             --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --accent-orange: #f97316;
             --text-primary: #f1f5f9;
             --text-secondary: #94a3b8;
             --text-muted: #64748b;
@@ -169,29 +171,29 @@
         {% import "_macros.html" as ui %}
         {% set actions %}
             <button onclick="openImportModal()"
-                class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium"
+                class="btn"
                 title="Import services from JSON export">
-                <i data-lucide="upload" class="w-4 h-4"></i>
+                <i data-lucide="upload" class="w-3.5 h-3.5"></i>
                 <span class="hidden 2xl:inline">Import</span>
             </button>
             <a href="/api/programs/export"
-                class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium"
+                class="btn"
                 title="Export services as JSON">
-                <i data-lucide="download" class="w-4 h-4"></i>
+                <i data-lucide="download" class="w-3.5 h-3.5"></i>
                 <span class="hidden 2xl:inline">Export</span>
             </a>
             <button onclick="openModal()"
-                class="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all text-sm font-medium shadow-lg shadow-blue-500/25">
-                <i data-lucide="plus" class="w-4 h-4"></i>
+                class="btn btn-primary">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
                 <span class="hidden sm:inline">Add Service</span>
             </button>
             <a href="/docs/" target="_blank" rel="noopener"
-                class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium"
+                class="btn"
                 title="OpenAPI / Swagger UI">
-                <i data-lucide="book-open" class="w-4 h-4"></i>
+                <i data-lucide="book-open" class="w-3.5 h-3.5"></i>
                 <span class="hidden 2xl:inline">API</span>
             </a>
-            <button onclick="openPalette()" class="flex items-center gap-2 px-3 py-1.5 bg-white/5 text-[var(--text-muted)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 hover:text-[var(--text-primary)] transition-all text-sm font-medium" title="Command palette (Ctrl+K)">
+            <button onclick="openPalette()" class="btn" title="Command palette (Ctrl+K)">
                 <i data-lucide="search" class="w-3.5 h-3.5"></i>
                 <kbd class="hidden md:inline text-[10px] font-mono opacity-60">⌘K</kbd>
             </button>
@@ -899,8 +901,8 @@
         // systemd timer). Backend: POST /api/programs/<name>/schedule/trigger
         // requires the app password because systemdctl runs as root.
         async function triggerScheduled(name) {
-            const pw = prompt(`Enter your app password to run "${name}" now:`);
-            if (pw === null) return;
+            const pw = await uiPromptPassword('Trigger scheduled program', `Enter your app password to run "${name}" now.`, 'Run');
+            if (!pw) return;
             try {
                 const res = await fetch(`/api/programs/${encodeURIComponent(name)}/schedule/trigger`, {
                     method: 'POST',
@@ -1144,12 +1146,12 @@
             const enabled = checkbox.checked;
             // Revert visual until the user provides a password
             checkbox.checked = !enabled;
-            const password = prompt(
-                enabled
-                    ? `Enter your password to enable "${originalName}" at boot:`
-                    : `Enter your password to disable "${originalName}" at boot:`
+            const password = await uiPromptPassword(
+                enabled ? 'Enable at boot' : 'Disable at boot',
+                `Enter your password to ${enabled ? 'enable' : 'disable'} "${originalName}" at boot.`,
+                enabled ? 'Enable' : 'Disable'
             );
-            if (password === null) {
+            if (!password) {
                 return;  // user cancelled
             }
             try {
@@ -1719,8 +1721,8 @@
                         }
                     } catch (e) { toast('Network error: ' + e.message, 'error'); }
                 } else if (run.type === 'action_with_auth') {
-                    const pw = prompt(`Enter your password for "${item.label}":`);
-                    if (pw === null) return;
+                    const pw = await uiPromptPassword('Authentication required', `Enter your password for "${item.label}".`, 'Confirm');
+                    if (!pw) return;
                     try {
                         const body = run.body ? JSON.stringify(run.body) : null;
                         const r = await fetch(run.url, {
@@ -1752,26 +1754,24 @@
             const style = document.createElement('style');
             style.textContent = `
                 #toast-container .toast {
-                    padding: 0.65rem 1.1rem;
-                    border-radius: 0.75rem;
+                    background: var(--bg-card);
+                    border: 1px solid var(--border-subtle);
+                    border-left: 3px solid var(--accent-blue);
+                    border-radius: 0.5rem;
+                    padding: 0.75rem 1rem;
                     font-size: 0.8125rem;
                     font-weight: 500;
-                    color: #fff;
+                    color: var(--text-primary);
                     pointer-events: auto;
-                    backdrop-filter: blur(12px);
-                    -webkit-backdrop-filter: blur(12px);
-                    border: 1px solid rgba(255,255,255,0.08);
-                    box-shadow: 0 8px 24px -8px rgba(0,0,0,0.4);
-                    animation: toastIn 0.25s ease-out;
+                    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+                    animation: fadeIn 0.2s ease-out;
                     max-width: 24rem;
                     word-break: break-word;
                 }
-                #toast-container .toast.success { background: rgba(16,185,129,0.92); }
-                #toast-container .toast.error   { background: rgba(239,68,68,0.92); }
-                #toast-container .toast.info    { background: rgba(59,130,246,0.92); }
-                #toast-container .toast.out     { animation: toastOut 0.2s ease-in forwards; }
-                @keyframes toastIn  { from { opacity: 0; transform: translateY(-10px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
-                @keyframes toastOut { from { opacity: 1; transform: translateY(0) scale(1); }       to { opacity: 0; transform: translateY(-10px) scale(0.95); } }
+                #toast-container .toast.success { border-left-color: var(--accent-green); }
+                #toast-container .toast.error   { border-left-color: var(--accent-red); }
+                #toast-container .toast.info    { border-left-color: var(--accent-blue); }
+                #toast-container .toast.out     { opacity: 0; transition: opacity 0.2s ease; }
             `;
             document.head.appendChild(style);
         })();

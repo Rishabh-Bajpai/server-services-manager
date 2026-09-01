@@ -8,7 +8,7 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
             --bg-primary: #0a0a0f;
@@ -21,6 +21,7 @@
             --accent-red: #ef4444;
             --accent-yellow: #f59e0b;
             --accent-purple: #8b5cf6;
+            --accent-orange: #f97316;
             --accent-cyan: #06b6d4;
             --text-primary: #f1f5f9;
             --text-secondary: #94a3b8;
@@ -103,8 +104,7 @@
 
     {% import "_macros.html" as ui %}
 {% set actions %}
-            
-            {% endset %}
+{% endset %}
 {{ ui.header(
             title="Configuration",
             icon="file-cog",
@@ -112,12 +112,7 @@
             actions=actions,
             current='/config',
         ) }}
-<div class="max-w-7xl mx-auto p-4 sm:p-6">
-        
-        
-        
-
-        <main class="mt-6 space-y-4">
+<main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
             <section class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div class="status-card">
                     <div class="label">Status</div>
@@ -139,8 +134,8 @@
                         <div class="text-sm font-semibold">Validation</div>
                         <div class="text-xs text-[var(--text-muted)] font-mono mt-1 break-all" id="path-text">Loading…</div>
                     </div>
-                    <button onclick="load()" class="px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
-                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5 inline"></i> Re-validate
+                    <button onclick="load()" class="btn">
+                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Re-validate
                     </button>
                 </div>
                 <div id="status-message" class="mb-3"></div>
@@ -155,7 +150,6 @@
                 <pre class="yaml" id="yaml-view">Loading…</pre>
             </section>
         </main>
-    </div>
 
     <script>
         function esc(s) {

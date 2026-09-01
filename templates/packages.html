@@ -21,6 +21,8 @@
             --accent-red: #ef4444;
             --accent-yellow: #f59e0b;
             --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --accent-orange: #f97316;
             --text-primary: #f1f5f9;
             --text-secondary: #94a3b8;
             --text-muted: #64748b;
@@ -248,7 +250,7 @@
         <div id="tab-updates">
             <section id="summary-cards" class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4"></section>
             <section class="panel-card">
-            <div class="p-3 border-b border-[var(--border-subtle)] flex flex-wrap items-center gap-2">
+            <div class="p-4 border-b border-[var(--border-subtle)] flex flex-wrap items-center gap-2">
                 <div class="flex gap-1">
                     <button class="filter-tab active" data-filter="all" onclick="setFilter('all', this)">All</button>
                     <button class="filter-tab" data-filter="security" onclick="setFilter('security', this)">Security only</button>
@@ -319,7 +321,7 @@
         </section>
 
         <section id="tab-history" class="panel-card hidden">
-            <div class="p-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
+            <div class="p-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
                 <h2 class="text-sm font-semibold flex items-center gap-2">
                     <i data-lucide="clock" class="w-4 h-4 text-[var(--accent-purple)]"></i>
                     Install history

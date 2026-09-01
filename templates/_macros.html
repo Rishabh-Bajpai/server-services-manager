@@ -130,6 +130,202 @@
     .ui-btn-primary:hover { background: #2563eb; }
     .ui-btn-danger { background: rgba(239,68,68,0.15); color: var(--accent-red); border-color: rgba(239,68,68,0.3); }
     .ui-btn-danger:hover { background: rgba(239,68,68,0.25); }
+    .ui-modal-input {
+        width: 100%; background: var(--bg-secondary);
+        border: 1px solid var(--border-subtle); border-radius: 0.5rem;
+        padding: 0.5rem 0.875rem; margin-bottom: 1rem;
+        font-size: 0.875rem; color: var(--text-primary);
+        outline: none; transition: border-color 0.15s;
+        box-sizing: border-box;
+    }
+    .ui-modal-input:focus { border-color: var(--accent-blue); }
+
+    /* ============================================================
+       Shared design system. Every page imports this macro, so these
+       component classes are identical on every route. Pages may
+       define page-specific classes (charts, treemap, key rows, etc)
+       alongside them, but these names are canonical and emitted LAST
+       so they win the cascade and keep the whole app consistent.
+       ============================================================ */
+    @keyframes ui-fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes ui-spin { to { transform: rotate(360deg); } }
+
+    .badge {
+        display: inline-flex; align-items: center; gap: 0.25rem;
+        padding: 0.125rem 0.5rem; border-radius: 0.375rem;
+        font-size: 0.6875rem; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.04em;
+        white-space: nowrap;
+    }
+    .badge-green { background: rgba(16,185,129,0.12); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.25); }
+    .badge-red { background: rgba(239,68,68,0.12); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.25); }
+    .badge-blue { background: rgba(59,130,246,0.12); color: var(--accent-blue); border: 1px solid rgba(59,130,246,0.25); }
+    .badge-yellow { background: rgba(245,158,11,0.12); color: var(--accent-yellow); border: 1px solid rgba(245,158,11,0.25); }
+    .badge-purple { background: rgba(139,92,246,0.12); color: var(--accent-purple); border: 1px solid rgba(139,92,246,0.25); }
+    .badge-cyan { background: rgba(6,182,212,0.12); color: var(--accent-cyan); border: 1px solid rgba(6,182,212,0.25); }
+    .badge-orange { background: rgba(249,115,22,0.12); color: var(--accent-orange); border: 1px solid rgba(249,115,22,0.25); }
+    .badge-gray { background: rgba(100,116,139,0.12); color: var(--text-secondary); border: 1px solid rgba(100,116,139,0.25); }
+
+    .btn, .refresh-btn {
+        display: inline-flex; align-items: center; gap: 0.375rem;
+        padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+        font-size: 0.8125rem; font-weight: 600;
+        background: var(--bg-secondary); border: 1px solid var(--border-subtle);
+        color: var(--text-primary); cursor: pointer;
+        transition: all 0.15s ease; text-decoration: none;
+        white-space: nowrap; line-height: 1.25rem;
+    }
+    .btn:hover, .refresh-btn:hover { background: var(--border-subtle); color: var(--text-primary); }
+    .btn:disabled, .refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: var(--accent-blue); color: #fff; border-color: var(--accent-blue); }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-success { background: rgba(16,185,129,0.15); color: var(--accent-green); border-color: rgba(16,185,129,0.3); }
+    .btn-success:hover { background: rgba(16,185,129,0.25); }
+    .btn-danger { background: rgba(239,68,68,0.15); color: var(--accent-red); border-color: rgba(239,68,68,0.3); }
+    .btn-danger:hover { background: rgba(239,68,68,0.25); }
+    .modal-actions .btn-primary { background: var(--accent-blue); color: #fff; }
+    .modal-actions .btn-primary:hover { background: #2563eb; }
+
+    .panel-card {
+        background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 0.75rem;
+    }
+
+    .status-card {
+        background: var(--bg-card); border: 1px solid var(--border-subtle);
+        border-radius: 0.75rem; padding: 1rem 1.25rem;
+        display: flex; flex-direction: column; gap: 0.25rem;
+    }
+    .status-card .label { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+    .status-card .value { font-size: 1.5rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+
+    .summary-card {
+        background: var(--bg-card); border: 1px solid var(--border-subtle);
+        border-radius: 0.75rem; padding: 1rem 1.25rem;
+        display: flex; flex-direction: column; gap: 0.25rem;
+    }
+    .summary-value { font-size: 1.5rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+    .summary-label { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+
+    .filter-tab {
+        padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+        font-size: 0.8125rem; font-weight: 600;
+        color: var(--text-secondary); background: transparent;
+        border: 1px solid var(--border-subtle);
+        cursor: pointer; transition: all 0.15s ease;
+        display: inline-flex; align-items: center; gap: 0.375rem;
+        white-space: nowrap;
+    }
+    .filter-tab:hover { background: rgba(255,255,255,0.04); color: var(--text-primary); }
+    .filter-tab.active { background: rgba(59,130,246,0.12); color: var(--accent-blue); border-color: rgba(59,130,246,0.35); }
+
+    .search-input {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-subtle);
+        border-radius: 0.5rem;
+        padding: 0.5rem 0.875rem 0.5rem 2.25rem;
+        color: var(--text-primary);
+        font-size: 0.8125rem; outline: none;
+        transition: border-color 0.15s, background 0.15s;
+        width: 100%; min-width: 0;
+    }
+    .search-input::placeholder { color: var(--text-muted); }
+    .search-input:focus { border-color: var(--accent-blue); background: var(--bg-card); }
+    .select-input, .text-input, .textarea-input {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-subtle);
+        border-radius: 0.5rem;
+        padding: 0.5rem 0.875rem;
+        color: var(--text-primary);
+        font-size: 0.8125rem; outline: none;
+        transition: border-color 0.15s; width: 100%;
+    }
+    .select-input:focus, .text-input:focus, .textarea-input:focus { border-color: var(--accent-blue); }
+    .textarea-input { resize: vertical; min-height: 100px; line-height: 1.5; }
+
+    .data-table, .events-table, .jobs-table, .units-table {
+        width: 100%; table-layout: fixed; border-collapse: collapse; min-width: 0;
+    }
+    .data-table th, .events-table th, .jobs-table th, .units-table th {
+        text-align: left; font-size: 0.6875rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.05em;
+        color: var(--text-muted); padding: 0.625rem 0.875rem;
+        background: var(--bg-secondary);
+        border-bottom: 1px solid var(--border-subtle);
+    }
+    .data-table td, .events-table td, .jobs-table td, .units-table td {
+        padding: 0.625rem 0.875rem;
+        border-bottom: 1px solid var(--border-subtle);
+        font-size: 0.8125rem; color: var(--text-primary);
+        vertical-align: middle;
+    }
+    .data-table tbody tr:last-child td, .events-table tbody tr:last-child td,
+    .jobs-table tbody tr:last-child td, .units-table tbody tr:last-child td { border-bottom: none; }
+    .data-table tbody tr:hover td, .events-table tbody tr:hover td,
+    .jobs-table tbody tr:hover td, .units-table tbody tr:hover td { background: rgba(255,255,255,0.02); }
+
+    .tab-button, .tab-btn {
+        padding: 0.5rem 0.875rem; font-size: 0.8125rem; font-weight: 600;
+        color: var(--text-secondary); background: transparent; border: none;
+        border-bottom: 2px solid transparent; cursor: pointer;
+        transition: all 0.15s ease;
+        display: inline-flex; align-items: center; gap: 0.375rem;
+    }
+    .tab-button:hover, .tab-btn:hover { color: var(--text-primary); }
+    .tab-button.active, .tab-btn.active { color: var(--accent-blue); border-bottom-color: var(--accent-blue); }
+
+    .empty-state {
+        text-align: center; padding: 3rem 1.5rem;
+        color: var(--text-muted);
+    }
+
+    .toast-container {
+        position: fixed; top: 1rem; right: 1rem;
+        z-index: 100; display: flex; flex-direction: column; gap: 0.5rem;
+        pointer-events: none;
+    }
+    .toast {
+        background: var(--bg-card); border: 1px solid var(--border-subtle);
+        border-radius: 0.5rem; padding: 0.75rem 1rem; font-size: 0.8125rem;
+        color: var(--text-primary); pointer-events: auto;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        animation: ui-fade-in 0.2s ease-out;
+    }
+    .toast.success { border-left: 3px solid var(--accent-green); }
+    .toast.error { border-left: 3px solid var(--accent-red); }
+    .toast.info { border-left: 3px solid var(--accent-blue); }
+
+    .modal-backdrop {
+        position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+        backdrop-filter: blur(4px); z-index: 100;
+        display: none; align-items: center; justify-content: center;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal-card, .modal {
+        background: var(--bg-card); border: 1px solid var(--border-subtle);
+        border-radius: 0.75rem; padding: 1.5rem;
+        max-width: 28rem; width: 90%;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    }
+
+    .row-action-btn {
+        width: 28px; height: 28px;
+        display: inline-flex; align-items: center; justify-content: center;
+        border-radius: 0.375rem;
+        background: rgba(255,255,255,0.04);
+        color: var(--text-secondary);
+        border: 1px solid transparent;
+        cursor: pointer; transition: all 0.15s ease;
+        flex-shrink: 0;
+    }
+    .row-action-btn:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+    .row-action-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .spinner {
+        display: inline-block; width: 14px; height: 14px;
+        border: 2px solid rgba(255,255,255,0.15);
+        border-top-color: currentColor; border-radius: 50%;
+        animation: ui-spin 0.6s linear infinite;
+    }
 </style>
 <script>
     // Shared nav mobile-menu toggle. Bound to the hamburger
@@ -195,6 +391,8 @@
             if (!overlay) { resolve(false); return; }
             overlay.querySelector('.ui-modal-title').textContent = title;
             overlay.querySelector('.ui-modal-desc').textContent = desc || '';
+            var pwd = overlay.querySelector('#ui-modal-password');
+            if (pwd) pwd.style.display = 'none';
             var actions = overlay.querySelector('.ui-modal-actions');
             actions.innerHTML = '';
             var cancelBtn = document.createElement('button');
@@ -207,6 +405,8 @@
             okBtn.textContent = danger ? 'Confirm' : 'OK';
             okBtn.onclick = function() { overlay.classList.remove('open'); resolve(true); };
             actions.appendChild(okBtn);
+            overlay._resolve = resolve;
+            overlay._cancelValue = false;
             overlay.classList.add('open');
             cancelBtn.focus();
         });
@@ -214,6 +414,48 @@
      window.uiAlert = function(title, desc) {
         return window.uiConfirm(title, desc, false).then(function() {});
     };
+    // Shared password prompt modal (replaces native window.prompt()
+    // for sudo/app-password entry so the UX matches every page).
+    // Resolves with the typed password, or null if cancelled/closed.
+    window.uiPromptPassword = function(title, desc, confirmLabel) {
+        return new Promise(function(resolve) {
+            var overlay = document.getElementById('ui-modal');
+            if (!overlay) { resolve(null); return; }
+            overlay.querySelector('.ui-modal-title').textContent = title;
+            overlay.querySelector('.ui-modal-desc').textContent = desc || '';
+            var pwd = overlay.querySelector('#ui-modal-password');
+            if (pwd) { pwd.style.display = 'block'; pwd.value = ''; }
+            var actions = overlay.querySelector('.ui-modal-actions');
+            actions.innerHTML = '';
+            var cancelBtn = document.createElement('button');
+            cancelBtn.className = 'ui-btn';
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.onclick = function() { overlay.classList.remove('open'); resolve(null); };
+            actions.appendChild(cancelBtn);
+            var okBtn = document.createElement('button');
+            okBtn.className = 'ui-btn ui-btn-primary';
+            okBtn.textContent = confirmLabel || 'Confirm';
+            okBtn.onclick = function() {
+                var val = pwd ? pwd.value : '';
+                overlay.classList.remove('open');
+                resolve(val);
+            };
+            actions.appendChild(okBtn);
+            overlay._resolve = resolve;
+            overlay._cancelValue = null;
+            overlay.classList.add('open');
+            setTimeout(function() { if (pwd) pwd.focus(); }, 50);
+        });
+    };
+    document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Enter') return;
+        var overlay = document.getElementById('ui-modal');
+        if (!overlay || !overlay.classList.contains('open')) return;
+        if (e.target && e.target.id === 'ui-modal-password') {
+            var ok = overlay.querySelector('.ui-modal-actions .ui-btn-primary');
+            if (ok) ok.click();
+        }
+    });
     // Close shared confirm/modal on Escape
     document.addEventListener('keydown', function(e) {
         if (e.key !== 'Escape') return;
@@ -226,10 +468,11 @@
             if (cancelBtn) cancelBtn.click();
         }
     });
-</script>{% endraw %}<div id="ui-modal" class="ui-modal-overlay" onclick="if(event.target===this)this.classList.remove('open')">
+</script>{% endraw %}<div id="ui-modal" class="ui-modal-overlay" onclick="if(event.target===this){var b=this.querySelector('.ui-btn');if(b)b.click();this.classList.remove('open');}">
     <div class="ui-modal-box">
         <div class="ui-modal-title"></div>
         <div class="ui-modal-desc"></div>
+        <input type="password" id="ui-modal-password" class="ui-modal-input" autocomplete="off" style="display:none">
         <div class="ui-modal-actions"></div>
     </div>
 </div>

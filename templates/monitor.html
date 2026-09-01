@@ -101,8 +101,7 @@
                 <span class="w-2 h-2 rounded-full bg-current pulse-dot"></span>
                 <span class="hidden sm:inline">Connected</span>
             </span>
-            
-            {% endset %}
+{% endset %}
 {{ ui.header(
             title="System Monitor",
             icon="activity",
@@ -110,16 +109,11 @@
             actions=actions,
             current='/monitor',
         ) }}
-<div class="max-w-7xl mx-auto p-4 sm:p-6">
-        <!-- Header -->
-        
-        
-        
-
+<main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <!-- Top Row: System Info + CPU -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
             <!-- System Info -->
-            <div class="card p-3 sm:p-5 animate-fade-in" style="animation-delay: 0.05s">
+            <div class="card p-5 animate-fade-in" style="animation-delay: 0.05s">
                 <div class="flex items-center gap-2 mb-4">
                     <div class="section-icon bg-[var(--accent-cyan)]/10">
                         <i data-lucide="server" class="w-4 h-4 text-[var(--accent-cyan)]"></i>
@@ -173,7 +167,7 @@
         <!-- Memory + Swap + Network Chart -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
             <!-- Memory Chart -->
-            <div class="card p-3 sm:p-5 animate-fade-in" style="animation-delay: 0.15s">
+            <div class="card p-5 animate-fade-in" style="animation-delay: 0.15s">
                 <div class="flex items-center justify-between mb-3">
                     <div class="flex items-center gap-2">
                         <div class="section-icon bg-[var(--accent-blue)]/10">
@@ -197,7 +191,7 @@
             </div>
 
             <!-- Swap -->
-            <div class="card p-3 sm:p-5 animate-fade-in" style="animation-delay: 0.2s">
+            <div class="card p-5 animate-fade-in" style="animation-delay: 0.2s">
                 <div class="flex items-center justify-between mb-3">
                     <div class="flex items-center gap-2">
                         <div class="section-icon bg-[var(--accent-purple)]/10">
@@ -234,7 +228,7 @@
             </div>
 
             <!-- Network Chart -->
-            <div class="card p-3 sm:p-5 animate-fade-in" style="animation-delay: 0.25s">
+            <div class="card p-5 animate-fade-in" style="animation-delay: 0.25s">
                 <div class="flex items-center gap-2 mb-3">
                     <div class="section-icon bg-[var(--accent-cyan)]/10">
                         <i data-lucide="wifi" class="w-4 h-4 text-[var(--accent-cyan)]"></i>
@@ -268,7 +262,7 @@
         </div>
 
         <!-- Disk IO -->
-        <div class="card p-3 sm:p-4 mb-4 animate-fade-in" style="animation-delay: 0.28s">
+        <div class="card p-5 mb-4 animate-fade-in" style="animation-delay: 0.28s">
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
                     <div class="section-icon bg-[var(--accent-yellow)]/10" style="width:1.5rem;height:1.5rem">
@@ -284,7 +278,7 @@
         </div>
 
         <!-- Processes -->
-        <div class="card p-3 sm:p-5 animate-fade-in" style="animation-delay: 0.3s">
+        <div class="card p-5 animate-fade-in" style="animation-delay: 0.3s">
             <div class="flex items-center gap-2 mb-4">
                 <div class="section-icon bg-[var(--accent-yellow)]/10">
                     <i data-lucide="list" class="w-4 h-4 text-[var(--accent-yellow)]"></i>
@@ -306,7 +300,7 @@
                 </table>
             </div>
         </div>
-    </div>
+    </main>
 
     <script>
         lucide.createIcons();
