@@ -407,8 +407,7 @@ def test_run_now_blocking_timeout():
 
 
 def test_run_systemctl_user_with_password_passes_str_stdin():
-    """text=True requires a str input — passing bytes raises
-    AttributeError on Python 3.x."""
+    """User units never need sudo — password is ignored for --user (avoids DBUS loss)."""
     fake = MagicMock()
     fake.returncode = 0
     fake.stdout = "ok"
@@ -417,10 +416,10 @@ def test_run_systemctl_user_with_password_passes_str_stdin():
         rc, out, err = bm._run_systemctl_user(["enable", "x.timer"], password="secret")
     assert rc == 0
     cmd = mock_run.call_args[0][0]
-    assert cmd[0] == "sudo"
+    # --user units are user-writable, no sudo needed even with password
+    assert cmd[0] == "systemctl"
     stdin = mock_run.call_args.kwargs.get("input")
-    assert stdin == "secret\n"
-    assert isinstance(stdin, str)
+    assert stdin is None
 
 
 # ---------------------------------------------------------------------------

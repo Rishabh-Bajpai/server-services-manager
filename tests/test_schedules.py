@@ -113,17 +113,15 @@ class TestRunSystemctl:
             assert cmd[1] == "--user"
 
     def test_with_password_uses_sudo(self, fake_user_dir):
+        """User units never need sudo — password ignored for --user."""
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
             rc, out, err = schedules._run_systemctl(["enable", "x.timer"], password="secret")
             cmd = mock_run.call_args[0][0]
-            assert cmd[0] == "sudo"
-            assert "-S" in cmd
-            # text=True means input must be a str, not bytes — passing
-            # bytes here raises AttributeError on Python 3.x.
+            assert cmd[0] == "systemctl"
+            assert "-S" not in cmd
             stdin = mock_run.call_args.kwargs.get("input")
-            assert stdin == "secret\n"
-            assert isinstance(stdin, str)
+            assert stdin is None
 
 
 class TestTimerStatus:
