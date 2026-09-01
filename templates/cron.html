@@ -245,6 +245,23 @@
             actions=actions,
             current='/cron',
         ) }}
+{% set subheader %}
+        <div id="source-tabs" class="flex flex-wrap items-center gap-1.5">
+            <button class="filter-tab active" data-source="all"><i data-lucide="layers" class="w-3.5 h-3.5"></i><span>All</span></button>
+            <button class="filter-tab" data-source="system"><i data-lucide="file-cog" class="w-3.5 h-3.5"></i><span>System</span></button>
+            <button class="filter-tab" data-source="user"><i data-lucide="user" class="w-3.5 h-3.5"></i><span>User</span></button>
+        </div>
+        <div class="relative flex-1 min-w-[12rem]">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"></i>
+            <input id="search-input" type="text" placeholder="Search by command…" class="search-input" autocomplete="off">
+        </div>
+        <span id="count-display" class="text-xs text-[var(--text-muted)] font-medium whitespace-nowrap px-2"></span>
+        <button id="refresh-btn" class="refresh-btn" title="Refresh">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5 icon"></i>
+            <span class="hidden sm:inline">Refresh</span>
+        </button>
+    {% endset %}
+    {{ ui.subheader(subheader) }}
 <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <!-- Schedule validator -->
         <div class="mb-4 p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] animate-fade-in">
@@ -259,30 +276,8 @@
             </div>
         </div>
 
-        <!-- Filters -->
-        <div class="flex flex-col gap-3 mb-4 animate-fade-in" style="animation-delay:0.05s">
-            <div class="flex flex-wrap items-center gap-2">
-                <div id="source-tabs" class="flex flex-wrap items-center gap-1.5">
-                    <button class="filter-tab active" data-source="all"><i data-lucide="layers" class="w-3.5 h-3.5"></i><span>All</span></button>
-                    <button class="filter-tab" data-source="system"><i data-lucide="file-cog" class="w-3.5 h-3.5"></i><span>System</span></button>
-                    <button class="filter-tab" data-source="user"><i data-lucide="user" class="w-3.5 h-3.5"></i><span>User</span></button>
-                </div>
-            </div>
-            <div class="flex items-center gap-2">
-                <div class="relative flex-1 min-w-0">
-                    <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"></i>
-                    <input id="search-input" type="text" placeholder="Search by command…" class="search-input" autocomplete="off">
-                </div>
-                <span id="count-display" class="text-xs text-[var(--text-muted)] font-medium whitespace-nowrap px-2"></span>
-                <button id="refresh-btn" class="refresh-btn" title="Refresh">
-                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5 icon"></i>
-                    <span class="hidden sm:inline">Refresh</span>
-                </button>
-            </div>
-        </div>
-
         <!-- Table -->
-        <div class="table-wrap animate-fade-in" style="animation-delay:0.1s">
+        <div class="table-wrap animate-fade-in">
             <div class="table-scroll">
                 <table class="jobs-table">
                     <thead>

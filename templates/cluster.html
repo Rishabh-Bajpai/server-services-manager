@@ -172,6 +172,16 @@
 <body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
     {% import "_macros.html" as ui %}
     {% set actions %}
+    {% endset %}
+    {{ ui.header(
+        title="Cluster",
+        icon="network",
+        icon_color="var(--accent-cyan)",
+        badge_id="enabled-badge",
+        actions=actions,
+        current='/cluster',
+    ) }}
+    {% set subheader %}
         <button class="btn" onclick="probeAll()" title="Probe reachability">
             <i data-lucide="activity" class="w-3.5 h-3.5"></i>
             <span class="hidden sm:inline">Probe</span>
@@ -185,14 +195,7 @@
             <span>Add Peer</span>
         </button>
     {% endset %}
-    {{ ui.header(
-        title="Cluster",
-        icon="network",
-        icon_color="var(--accent-cyan)",
-        badge_id="enabled-badge",
-        actions=actions,
-        current='/cluster',
-    ) }}
+    {{ ui.subheader(subheader) }}
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
         <section class="panel-card p-4">

@@ -218,10 +218,6 @@
 <body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
     {% import "_macros.html" as ui %}
     {% set actions %}
-        <button id="btn-refresh" class="btn btn-primary" onclick="doRefresh()">
-            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-            <span>Refresh</span>
-        </button>
     {% endset %}
     {{ ui.header(
         title="Package Updates",
@@ -231,43 +227,45 @@
         actions=actions,
         current='/packages',
     ) }}
+    {% set subheader %}
+        <button class="tab-button active" data-tab="updates" onclick="switchTab('updates')">
+            <i data-lucide="package" class="w-3.5 h-3.5"></i> Updates
+        </button>
+        <button class="tab-button" data-tab="lookup" onclick="switchTab('lookup')">
+            <i data-lucide="search" class="w-3.5 h-3.5"></i> Lookup
+        </button>
+        <button class="tab-button" data-tab="history" onclick="switchTab('history')">
+            <i data-lucide="clock" class="w-3.5 h-3.5"></i> History
+        </button>
+        <span id="tab-tools-updates" class="flex flex-wrap items-center gap-2">
+            <button class="filter-tab active" data-filter="all" onclick="setFilter('all', this)">All</button>
+            <button class="filter-tab" data-filter="security" onclick="setFilter('security', this)">Security only</button>
+            <div class="relative flex-1 min-w-[12rem]">
+                <i data-lucide="search" class="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+                <input id="search" type="text" class="search-input" placeholder="Filter by name..." oninput="renderRows()">
+            </div>
+            <label class="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer whitespace-nowrap">
+                <input id="select-all" type="checkbox" onchange="toggleSelectAll(this.checked)">
+                Select all
+            </label>
+            <button id="btn-install" class="btn btn-primary" onclick="doInstall()" disabled>
+                <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                Install (<span id="install-count">0</span>)
+            </button>
+        </span>
+        <button id="btn-refresh" class="btn" onclick="doRefresh()">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Refresh</span>
+        </button>
+    {% endset %}
+    {{ ui.subheader(subheader) }}
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
         <div id="banners"></div>
 
-        <div class="flex items-center gap-1 mb-2">
-            <button class="tab-button active" data-tab="updates" onclick="switchTab('updates')">
-                <i data-lucide="package" class="w-3.5 h-3.5"></i> Updates
-            </button>
-            <button class="tab-button" data-tab="lookup" onclick="switchTab('lookup')">
-                <i data-lucide="search" class="w-3.5 h-3.5"></i> Lookup
-            </button>
-            <button class="tab-button" data-tab="history" onclick="switchTab('history')">
-                <i data-lucide="clock" class="w-3.5 h-3.5"></i> History
-            </button>
-        </div>
-
         <div id="tab-updates">
             <section id="summary-cards" class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4"></section>
             <section class="panel-card">
-            <div class="p-4 border-b border-[var(--border-subtle)] flex flex-wrap items-center gap-2">
-                <div class="flex gap-1">
-                    <button class="filter-tab active" data-filter="all" onclick="setFilter('all', this)">All</button>
-                    <button class="filter-tab" data-filter="security" onclick="setFilter('security', this)">Security only</button>
-                </div>
-                <div class="relative flex-1 min-w-[12rem]">
-                    <i data-lucide="search" class="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-2.5 top-1/2 -translate-y-1/2"></i>
-                    <input id="search" type="text" class="search-input" placeholder="Filter by name..." oninput="renderRows()">
-                </div>
-                <label class="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer whitespace-nowrap">
-                    <input id="select-all" type="checkbox" onchange="toggleSelectAll(this.checked)">
-                    Select all
-                </label>
-                <button id="btn-install" class="btn btn-primary" onclick="doInstall()" disabled>
-                    <i data-lucide="download" class="w-3.5 h-3.5"></i>
-                    Install (<span id="install-count">0</span>)
-                </button>
-            </div>
             <div class="table-wrap">
                 <table class="data-table">
                     <thead>
@@ -566,6 +564,8 @@
         document.getElementById('tab-updates').classList.toggle('hidden', tab !== 'updates');
         document.getElementById('tab-lookup-inner').classList.toggle('hidden', tab !== 'lookup');
         document.getElementById('tab-history').classList.toggle('hidden', tab !== 'history');
+        const tools = document.getElementById('tab-tools-updates');
+        if (tools) tools.classList.toggle('hidden', tab !== 'updates');
         if (tab === 'lookup') document.getElementById('lookup-query').focus();
         if (tab === 'history') loadJobs();
     }

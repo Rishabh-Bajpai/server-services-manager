@@ -144,10 +144,6 @@
 <body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
     {% import "_macros.html" as ui %}
     {% set actions %}
-        <button class="btn btn-primary" onclick="openCreate()">
-            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
-            <span class="hidden sm:inline">New backup</span>
-        </button>
     {% endset %}
     {{ ui.header(
         title="Backups",
@@ -157,6 +153,13 @@
         actions=actions,
         current='/backups',
     ) }}
+    {% set subheader %}
+        <button class="btn btn-primary" onclick="openCreate()">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">New backup</span>
+        </button>
+    {% endset %}
+    {{ ui.subheader(subheader) }}
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
         <section class="panel-card">

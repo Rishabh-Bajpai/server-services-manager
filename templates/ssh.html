@@ -168,14 +168,6 @@
 <body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
     {% import "_macros.html" as ui %}
     {% set actions %}
-        <button class="btn" onclick="loadList()" title="Refresh">
-            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-            <span class="hidden sm:inline">Refresh</span>
-        </button>
-        <button class="btn btn-primary" onclick="openAdd()">
-            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
-            <span>Add Key</span>
-        </button>
     {% endset %}
     {{ ui.header(
         title="SSH Keys",
@@ -185,6 +177,19 @@
         actions=actions,
         current='/ssh',
     ) }}
+    {% set subheader %}
+        <input id="filter-input" class="text-input" style="max-width: 260px" placeholder="Filter by fingerprint or comment…" oninput="renderList()">
+        <span class="flex-1"></span>
+        <button class="btn" onclick="loadList()" title="Refresh">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Refresh</span>
+        </button>
+        <button class="btn btn-primary" onclick="openAdd()">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            <span>Add Key</span>
+        </button>
+    {% endset %}
+    {{ ui.subheader(subheader) }}
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
         <div id="warning-banner"></div>
@@ -214,7 +219,6 @@
                     <i data-lucide="list" class="w-4 h-4 text-[var(--accent-purple)]"></i>
                     Authorized keys
                 </h2>
-                <input id="filter-input" class="text-input" style="max-width: 240px" placeholder="Filter by fingerprint or comment…" oninput="renderList()">
             </div>
             <div id="keys-list" class="max-h-[640px] overflow-y-auto">
                 <div class="empty-state">Loading…</div>

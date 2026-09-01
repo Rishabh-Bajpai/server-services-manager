@@ -201,14 +201,24 @@
 <body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
     {% import "_macros.html" as ui %}
     {% set actions %}
+    {% endset %}
+    {{ ui.header(
+        title="Files",
+        icon="folder-open",
+        icon_color="var(--accent-yellow)",
+        actions=actions,
+        current='/files',
+    ) }}
+    {% set subheader %}
         <div class="inline-flex rounded-lg border border-[var(--border-subtle)] overflow-hidden flex-shrink-0" id="search-scope" title="Search scope">
             <button class="px-2.5 py-1.5 text-xs font-semibold bg-[var(--accent-blue)] text-white" data-scope="cwd" onclick="setSearchScope('cwd')" title="Search inside the current directory only">cwd</button>
             <button class="px-2.5 py-1.5 text-xs font-semibold bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]" data-scope="global" onclick="setSearchScope('global')" title="Search the entire home directory">global</button>
         </div>
         <div class="relative w-48 sm:w-64">
             <i data-lucide="search" class="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"></i>
-            <input id="search-input" class="text-input pl-9" placeholder="Search filenames…" oninput="onSearchInput(this.value)">
+            <input id="search-input" class="search-input" placeholder="Search filenames…" oninput="onSearchInput(this.value)">
         </div>
+        <span class="flex-1"></span>
         <button class="btn" onclick="uploadFile()" title="Upload to current dir">
             <i data-lucide="upload" class="w-3.5 h-3.5"></i>
             <span class="hidden sm:inline">Upload</span>
@@ -222,13 +232,7 @@
             <span class="hidden sm:inline">Delete</span>
         </button>
     {% endset %}
-    {{ ui.header(
-        title="Files",
-        icon="folder-open",
-        icon_color="var(--accent-yellow)",
-        actions=actions,
-        current='/files',
-    ) }}
+    {{ ui.subheader(subheader) }}
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <div class="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4">

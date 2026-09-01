@@ -213,13 +213,6 @@
 <body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
     {% import "_macros.html" as ui %}
     {% set actions %}
-        <button class="btn" onclick="changeDepth(1)" id="btn-depth-1"><span>1</span></button>
-        <button class="btn" onclick="changeDepth(2)" id="btn-depth-2"><span>2</span></button>
-        <button class="btn" onclick="changeDepth(3)" id="btn-depth-3"><span>3</span></button>
-        <button class="btn" onclick="loadCurrent()" title="Refresh">
-            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-            <span class="hidden sm:inline">Refresh</span>
-        </button>
     {% endset %}
     {{ ui.header(
         title="Disk Usage",
@@ -229,12 +222,22 @@
         actions=actions,
         current='/disk',
     ) }}
+    {% set subheader %}
+        <div id="breadcrumb" class="flex flex-wrap items-center gap-1.5 min-h-[2rem]">
+            <span class="text-xs text-[var(--text-muted)] py-2">Loading…</span>
+        </div>
+        <span class="flex-1"></span>
+        <button class="btn" onclick="changeDepth(1)" id="btn-depth-1"><span>1</span></button>
+        <button class="btn" onclick="changeDepth(2)" id="btn-depth-2"><span>2</span></button>
+        <button class="btn" onclick="changeDepth(3)" id="btn-depth-3"><span>3</span></button>
+        <button class="btn" onclick="loadCurrent()" title="Refresh">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Refresh</span>
+        </button>
+    {% endset %}
+    {{ ui.subheader(subheader) }}
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
-        <section class="flex flex-wrap items-center gap-1.5" id="breadcrumb">
-            <span class="empty-state py-2">Loading…</span>
-        </section>
-
         <section class="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div class="status-card">
                 <span class="label">Total size</span>

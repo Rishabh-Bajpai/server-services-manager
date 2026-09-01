@@ -357,40 +357,35 @@
             actions=actions,
             current='/system-services',
         ) }}
-<main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        <!-- Filter bar -->
-        <div class="flex flex-col gap-3 mb-4 animate-fade-in" style="animation-delay:0.05s">
-            <div class="flex flex-wrap items-center gap-2">
-                <div id="type-tabs" class="flex flex-wrap items-center gap-1.5">
-                    <button class="filter-tab active" data-type="all"><i data-lucide="layers" class="w-3.5 h-3.5"></i><span>All</span></button>
-                    <button class="filter-tab" data-type="service"><i data-lucide="cog" class="w-3.5 h-3.5"></i><span>Service</span></button>
-                    <button class="filter-tab" data-type="timer"><i data-lucide="timer" class="w-3.5 h-3.5"></i><span>Timer</span></button>
-                    <button class="filter-tab" data-type="socket"><i data-lucide="plug" class="w-3.5 h-3.5"></i><span>Socket</span></button>
-                    <button class="filter-tab" data-type="path"><i data-lucide="file-search" class="w-3.5 h-3.5"></i><span>Path</span></button>
-                    <button class="filter-tab" data-type="mount"><i data-lucide="hard-drive" class="w-3.5 h-3.5"></i><span>Mount</span></button>
-                </div>
-                <div id="state-tabs" class="flex flex-wrap items-center gap-1.5">
-                    <button class="filter-tab active" data-state="all">All</button>
-                    <button class="filter-tab" data-state="active"><span class="state-dot state-running"></span><span>Active</span></button>
-                    <button class="filter-tab" data-state="inactive"><span class="state-dot state-stopped"></span><span>Inactive</span></button>
-                    <button class="filter-tab" data-state="failed"><span class="state-dot state-failed"></span><span>Failed</span></button>
-                </div>
-            </div>
-            <div class="flex items-center gap-2">
-                <div class="relative flex-1 min-w-0">
-                    <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"></i>
-                    <input id="search-input" type="text" placeholder="Search units by name…" class="search-input" autocomplete="off">
-                </div>
-                <span id="count-display" class="text-xs text-[var(--text-muted)] font-medium whitespace-nowrap px-2"></span>
-                <button id="refresh-btn" class="refresh-btn" title="Refresh list">
-                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5 icon"></i>
-                    <span class="hidden sm:inline">Refresh</span>
-                </button>
-            </div>
+{% set subheader %}
+        <div id="type-tabs" class="flex flex-wrap items-center gap-1.5">
+            <button class="filter-tab active" data-type="all"><i data-lucide="layers" class="w-3.5 h-3.5"></i><span>All</span></button>
+            <button class="filter-tab" data-type="service"><i data-lucide="cog" class="w-3.5 h-3.5"></i><span>Service</span></button>
+            <button class="filter-tab" data-type="timer"><i data-lucide="timer" class="w-3.5 h-3.5"></i><span>Timer</span></button>
+            <button class="filter-tab" data-type="socket"><i data-lucide="plug" class="w-3.5 h-3.5"></i><span>Socket</span></button>
+            <button class="filter-tab" data-type="path"><i data-lucide="file-search" class="w-3.5 h-3.5"></i><span>Path</span></button>
+            <button class="filter-tab" data-type="mount"><i data-lucide="hard-drive" class="w-3.5 h-3.5"></i><span>Mount</span></button>
         </div>
-
+        <div id="state-tabs" class="flex flex-wrap items-center gap-1.5">
+            <button class="filter-tab active" data-state="all">All</button>
+            <button class="filter-tab" data-state="active"><span class="state-dot state-running"></span><span>Active</span></button>
+            <button class="filter-tab" data-state="inactive"><span class="state-dot state-stopped"></span><span>Inactive</span></button>
+            <button class="filter-tab" data-state="failed"><span class="state-dot state-failed"></span><span>Failed</span></button>
+        </div>
+        <div class="relative flex-1 min-w-[12rem]">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"></i>
+            <input id="search-input" type="text" placeholder="Search units by name…" class="search-input" autocomplete="off">
+        </div>
+        <span id="count-display" class="text-xs text-[var(--text-muted)] font-medium whitespace-nowrap px-2"></span>
+        <button id="refresh-btn" class="refresh-btn" title="Refresh list">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5 icon"></i>
+            <span class="hidden sm:inline">Refresh</span>
+        </button>
+    {% endset %}
+    {{ ui.subheader(subheader) }}
+<main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <!-- Table -->
-        <div class="table-wrap animate-fade-in" style="animation-delay:0.1s">
+        <div class="table-wrap animate-fade-in">
             <div class="table-scroll">
                 <table class="units-table">
                     <thead>

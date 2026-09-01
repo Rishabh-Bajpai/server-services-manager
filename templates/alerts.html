@@ -178,14 +178,6 @@
 <body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
     {% import "_macros.html" as ui %}
     {% set actions %}
-        <a href="/api/alerts/export.csv" class="btn" target="_blank">
-            <i data-lucide="download" class="w-3.5 h-3.5"></i>
-            <span class="hidden sm:inline">Export CSV</span>
-        </a>
-        <button class="btn btn-primary" onclick="loadAll()">
-            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-            <span class="hidden sm:inline">Refresh</span>
-        </button>
     {% endset %}
     {{ ui.header(
         title="Alert History",
@@ -195,6 +187,39 @@
         actions=actions,
         current='/alerts',
     ) }}
+    {% set subheader %}
+        <div class="flex gap-1">
+            <button class="filter-tab active" data-range="all" onclick="setRange('all', this)">All</button>
+            <button class="filter-tab" data-range="1h" onclick="setRange('1h', this)">1h</button>
+            <button class="filter-tab" data-range="24h" onclick="setRange('24h', this)">24h</button>
+            <button class="filter-tab" data-range="7d" onclick="setRange('7d', this)">7d</button>
+            <button class="filter-tab" data-range="30d" onclick="setRange('30d', this)">30d</button>
+        </div>
+        <select id="filter-channel" class="select-input" style="max-width:160px" onchange="loadEvents()">
+            <option value="">All channels</option>
+            <option value="ntfy">ntfy</option>
+            <option value="webhook">webhook</option>
+            <option value="telegram">telegram</option>
+            <option value="email">email</option>
+        </select>
+        <select id="filter-success" class="select-input" style="max-width:140px" onchange="loadEvents()">
+            <option value="">All results</option>
+            <option value="1">Success only</option>
+            <option value="0">Failures only</option>
+        </select>
+        <input id="filter-service" type="text" class="text-input" placeholder="Filter by service…" style="max-width:220px" oninput="debouncedLoad()">
+        <span class="flex-1"></span>
+        <span id="event-count" class="text-xs text-[var(--text-muted)] font-mono whitespace-nowrap"></span>
+        <a href="/api/alerts/export.csv" class="btn" target="_blank">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Export CSV</span>
+        </a>
+        <button class="btn" onclick="loadAll()">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Refresh</span>
+        </button>
+    {% endset %}
+    {{ ui.subheader(subheader) }}
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
         <section id="summary-cards" class="grid grid-cols-2 sm:grid-cols-5 gap-3"></section>
@@ -210,31 +235,6 @@
         </section>
 
         <section class="panel-card">
-            <div class="p-4 border-b border-[var(--border-subtle)]">
-                <div class="flex flex-wrap items-center gap-2">
-                    <div class="flex gap-1">
-                        <button class="filter-tab active" data-range="all" onclick="setRange('all', this)">All</button>
-                        <button class="filter-tab" data-range="1h" onclick="setRange('1h', this)">1h</button>
-                        <button class="filter-tab" data-range="24h" onclick="setRange('24h', this)">24h</button>
-                        <button class="filter-tab" data-range="7d" onclick="setRange('7d', this)">7d</button>
-                        <button class="filter-tab" data-range="30d" onclick="setRange('30d', this)">30d</button>
-                    </div>
-                    <select id="filter-channel" class="select-input" style="max-width: 160px" onchange="loadEvents()">
-                        <option value="">All channels</option>
-                        <option value="ntfy">ntfy</option>
-                        <option value="webhook">webhook</option>
-                        <option value="telegram">telegram</option>
-                        <option value="email">email</option>
-                    </select>
-                    <select id="filter-success" class="select-input" style="max-width: 140px" onchange="loadEvents()">
-                        <option value="">All results</option>
-                        <option value="1">Success only</option>
-                        <option value="0">Failures only</option>
-                    </select>
-                    <input id="filter-service" type="text" class="search-input" placeholder="Filter by service…" style="max-width: 240px" oninput="debouncedLoad()">
-                    <span id="event-count" class="text-xs text-[var(--text-muted)] font-mono whitespace-nowrap ml-auto"></span>
-                </div>
-            </div>
             <div class="table-scroll">
                 <table class="events-table">
                     <thead>

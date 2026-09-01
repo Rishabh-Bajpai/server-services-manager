@@ -148,10 +148,6 @@
 <body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
     {% import "_macros.html" as ui %}
     {% set actions %}
-        <button class="btn" onclick="loadStatus()">
-            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-            <span class="hidden sm:inline">Refresh</span>
-        </button>
     {% endset %}
     {{ ui.header(
         title="Firewall",
@@ -161,6 +157,16 @@
         actions=actions,
         current='/firewall',
     ) }}
+    {% set subheader %}
+        <button class="btn" onclick="loadStatus()">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Refresh</span>
+        </button>
+        <button id="btn-add-rule" class="btn btn-primary" onclick="openAddRule()">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add rule
+        </button>
+    {% endset %}
+    {{ ui.subheader(subheader) }}
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
         <div id="unavailable-banner"></div>
@@ -170,14 +176,11 @@
         </section>
 
         <section class="panel-card">
-            <div class="p-4 border-b border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-2">
+            <div class="p-4 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2">
                 <h2 class="text-sm font-semibold flex items-center gap-2">
                     <i data-lucide="list" class="w-4 h-4 text-[var(--accent-blue)]"></i>
                     Rules (<span id="rule-count">0</span>)
                 </h2>
-                <button id="btn-add-rule" class="btn btn-primary" onclick="openAddRule()">
-                    <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add rule
-                </button>
             </div>
             <div class="overflow-x-auto">
                 <table class="data-table">

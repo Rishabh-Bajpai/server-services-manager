@@ -544,6 +544,42 @@
 {% endmacro %}
 
 
+{# Second, route-specific subheader band. Sits directly under the
+   fixed header (sticky at top-14) and holds the page's tools —
+   filter tabs, search boxes, selects, refresh buttons, breadcrumbs
+   and page-level action buttons — so the main header stays clean and
+   identical on every route while each page's controls live in one
+   consistent strip.
+
+   Usage:
+
+     {% set subheader %}
+       <input id="q" class="search-input" placeholder="Filter…">
+       <button class="btn" onclick="reload()">Refresh</button>
+     {% endset %}
+     {{ ui.subheader(subheader) }}
+
+   The strip wraps on narrow screens and its inputs/buttons use the
+   shared component classes, so it looks the same everywhere. #}
+{% macro subheader(children='') %}
+<header class="ui-subheader sticky top-14 z-20 border-b border-[var(--border-subtle)] bg-[var(--bg-card)]/60 backdrop-blur-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex flex-wrap items-center gap-2">
+        {{ children|safe }}
+    </div>
+</header>
+<style>
+    .ui-subheader .search-input,
+    .ui-subheader .select-input,
+    .ui-subheader .text-input { width: auto; }
+    .ui-subheader .filter-tab,
+    .ui-subheader .btn,
+    .ui-subheader .refresh-btn,
+    .ui-subheader .tab-button,
+    .ui-subheader .tab-btn { flex-shrink: 0; }
+</style>
+{% endmacro %}
+
+
 {# Renders a single nav item as a pill. Same DOM for both the
    desktop bar and the mobile menu — styling is controlled by
    .ui-nav-pill / .ui-nav-tile (defined in the page that imports

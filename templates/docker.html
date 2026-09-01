@@ -252,15 +252,6 @@
 <body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
     {% import "_macros.html" as ui %}
     {% set actions %}
-        <button id="btn-refresh" class="btn" onclick="loadContainers()">
-            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-            <span class="hidden sm:inline">Refresh</span>
-        </button>
-        <label class="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer">
-            <input id="filter-all" type="checkbox" checked onchange="loadContainers()"
-                   class="rounded border-[var(--border-subtle)]">
-            Show stopped
-        </label>
     {% endset %}
     {{ ui.header(
         title="Docker Containers",
@@ -270,19 +261,29 @@
         actions=actions,
         current='/docker',
     ) }}
+    {% set subheader %}
+        <button class="tab-button active" data-view="containers" onclick="switchView('containers')">
+            <i data-lucide="container" class="w-3.5 h-3.5"></i> Containers
+        </button>
+        <button class="tab-button" data-view="images" onclick="switchView('images')">
+            <i data-lucide="layers" class="w-3.5 h-3.5"></i> Images
+        </button>
+        <span id="view-count" class="text-xs text-[var(--text-muted)] font-mono"></span>
+        <span class="flex-1"></span>
+        <label class="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer">
+            <input id="filter-all" type="checkbox" checked onchange="loadContainers()"
+                   class="rounded border-[var(--border-subtle)]">
+            Show stopped
+        </label>
+        <button id="btn-refresh" class="btn" onclick="loadContainers()">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Refresh</span>
+        </button>
+    {% endset %}
+    {{ ui.subheader(subheader) }}
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <div id="availability-banner"></div>
-
-        <div class="flex items-center gap-1 mb-4">
-            <button class="tab-button active" data-view="containers" onclick="switchView('containers')">
-                <i data-lucide="container" class="w-3.5 h-3.5"></i> Containers
-            </button>
-            <button class="tab-button" data-view="images" onclick="switchView('images')">
-                <i data-lucide="layers" class="w-3.5 h-3.5"></i> Images
-            </button>
-            <span id="view-count" class="ml-auto text-xs text-[var(--text-muted)] font-mono"></span>
-        </div>
 
         <div id="view-containers" class="grid grid-cols-1 lg:grid-cols-[1fr_24rem] gap-4">
             <section>

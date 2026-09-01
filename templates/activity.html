@@ -152,38 +152,36 @@
             actions=actions,
             current='/activity',
         ) }}
+{% set subheader %}
+        <input id="action-input" type="text" placeholder="Filter by action…" class="text-input" style="max-width:200px">
+        <input id="target-input" type="text" placeholder="Filter by target…" class="text-input" style="max-width:200px">
+        <input id="user-input" type="text" placeholder="Filter by user…" class="text-input" style="max-width:160px">
+        <select id="status-select" class="select-input" style="max-width:140px">
+            <option value="">All statuses</option>
+            <option value="ok">ok</option>
+            <option value="error">error</option>
+        </select>
+        <select id="since-select" class="select-input" style="max-width:160px" title="Only show events since…">
+            <option value="">Any time</option>
+            <option value="3600">Last hour</option>
+            <option value="86400">Last 24h</option>
+            <option value="604800">Last 7d</option>
+            <option value="2592000">Last 30d</option>
+        </select>
+        <span class="flex-1"></span>
+        <a href="/api/activity/export.csv" class="btn">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">CSV</span>
+        </a>
+        <button id="refresh-btn" class="refresh-btn">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5 icon"></i>
+            <span class="hidden sm:inline">Refresh</span>
+        </button>
+    {% endset %}
+    {{ ui.subheader(subheader) }}
 <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <!-- Summary cards -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6 animate-fade-in" id="summary"></div>
-
-        <!-- Filters -->
-        <div class="flex flex-col gap-3 mb-4 animate-fade-in" style="animation-delay:0.05s">
-            <div class="flex flex-wrap items-center gap-2">
-                <input id="action-input" type="text" placeholder="Filter by action…" class="search-input flex-1 min-w-0" style="max-width:200px">
-                <input id="target-input" type="text" placeholder="Filter by target…" class="search-input flex-1 min-w-0" style="max-width:200px">
-                <input id="user-input" type="text" placeholder="Filter by user…" class="search-input flex-1 min-w-0" style="max-width:160px">
-                <select id="status-select" class="search-input" style="max-width:140px">
-                    <option value="">All statuses</option>
-                    <option value="ok">ok</option>
-                    <option value="error">error</option>
-                </select>
-                <select id="since-select" class="search-input" style="max-width:160px" title="Only show events since…">
-                    <option value="">Any time</option>
-                    <option value="3600">Last hour</option>
-                    <option value="86400">Last 24h</option>
-                    <option value="604800">Last 7d</option>
-                    <option value="2592000">Last 30d</option>
-                </select>
-                <a href="/api/activity/export.csv" class="refresh-btn">
-                    <i data-lucide="download" class="w-3.5 h-3.5"></i>
-                    <span class="hidden sm:inline">CSV</span>
-                </a>
-                <button id="refresh-btn" class="refresh-btn">
-                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5 icon"></i>
-                    <span class="hidden sm:inline">Refresh</span>
-                </button>
-            </div>
-        </div>
 
         <!-- Table -->
         <div class="table-wrap animate-fade-in" style="animation-delay:0.1s">
