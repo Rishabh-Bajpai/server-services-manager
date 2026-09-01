@@ -96,24 +96,51 @@
             padding: 2rem 1rem; text-align: center;
             color: var(--text-muted); font-size: 0.875rem;
         }
-        .key-row {
-            display: grid;
-            grid-template-columns: auto 1fr auto;
-            gap: 1rem;
-            padding: 0.875rem 1rem;
-            border-bottom: 1px solid var(--border-subtle);
-            align-items: center;
-            transition: background 0.1s ease;
-        }
-        .key-row:hover { background: var(--bg-secondary); }
-        .key-row:last-child { border-bottom: none; }
         .key-algo {
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.75rem;
             font-weight: 600;
             color: var(--accent-blue);
         }
-        .key-fp {
+        .keys-wrap {
+            max-height: 600px;
+            max-height: min(600px, calc(100dvh - 260px));
+            overflow-y: auto;
+            overflow-x: auto;
+            min-width: 560px;
+        }
+        .keys-table {
+            width: 100%;
+            min-width: 560px;
+            table-layout: fixed;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        .keys-table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: var(--bg-card);
+            font-size: 0.6875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-muted);
+            font-weight: 600;
+            text-align: left;
+            padding: 0.625rem 1rem;
+            border-bottom: 1px solid var(--border-active);
+        }
+        .keys-table th:nth-child(1), .keys-table td:nth-child(1) { width: 170px; }
+        .keys-table th:nth-child(3), .keys-table td:nth-child(3) { width: 130px; text-align: right; }
+        .keys-table td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border-subtle);
+            vertical-align: middle;
+            overflow: hidden;
+        }
+        .keys-table tbody tr:last-child td { border-bottom: none; }
+        .keys-table tbody tr:hover { background: var(--bg-secondary); }
+        .key-line {
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.75rem;
             color: var(--text-secondary);
@@ -220,8 +247,19 @@
                     Authorized keys
                 </h2>
             </div>
-            <div id="keys-list" class="max-h-[640px] overflow-y-auto">
-                <div class="empty-state">Loading…</div>
+            <div class="keys-wrap">
+                <table class="keys-table">
+                    <thead>
+                        <tr>
+                            <th>Algorithm</th>
+                            <th>Key</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="keys-list">
+                        <tr><td colspan="3" class="empty-state">Loading…</td></tr>
+                    </tbody>
+                </table>
             </div>
         </section>
 
@@ -387,38 +425,40 @@
                     (k.algorithm || '').toLowerCase().includes(filterText))
                 : keys;
             if (!keys.length) {
-                wrap.innerHTML = '<div class="empty-state">No keys yet. Click <strong>Add Key</strong> to add your first one.</div>';
+                wrap.innerHTML = '<tr><td colspan="3" class="empty-state">No keys yet. Click <strong>Add Key</strong> to add your first one.</td></tr>';
                 return;
             }
             if (!filtered.length) {
-                wrap.innerHTML = '<div class="empty-state">No keys match the filter.</div>';
+                wrap.innerHTML = '<tr><td colspan="3" class="empty-state">No keys match the filter.</td></tr>';
                 return;
             }
             const rows = filtered.map(k => {
-                const fp = (k.fingerprint || '').replace('SHA256:', '');
-                const fpShort = fp.length > 24 ? fp.slice(0, 12) + '…' + fp.slice(-8) : fp;
                 const opts = (k.options && k.options.length)
                     ? `<span class="badge badge-yellow" title="${escapeHtml(k.options.join(' '))}">${k.options.length} option${k.options.length === 1 ? '' : 's'}</span>`
                     : '';
                 return `
-                    <div class="key-row">
-                        <div class="flex flex-col gap-1 items-start min-w-[120px]">
-                            <span class="key-algo">${escapeHtml(k.algorithm)}</span>
-                            ${opts}
-                        </div>
-                        <div class="min-w-0">
+                    <tr>
+                        <td>
+                            <div class="flex flex-col items-start gap-1">
+                                <span class="key-algo">${escapeHtml(k.algorithm)}</span>
+                                ${opts}
+                            </div>
+                        </td>
+                        <td>
                             <div class="key-comment" title="${escapeHtml(k.comment || '(no comment)')}">${escapeHtml(k.comment || '(no comment)')}</div>
-                            <div class="key-fp" title="${escapeHtml(k.fingerprint)}">${escapeHtml(fpShort)}</div>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <button class="btn" onclick="copyText('${escapeHtml(k.raw)}')" title="Copy raw line">
-                                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
-                            </button>
-                            <button class="btn btn-danger" onclick="askRemove('${escapeHtml(k.fingerprint)}', '${escapeHtml(k.comment || '')}', ${keys.length})">
-                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-                            </button>
-                        </div>
-                    </div>
+                            <div class="key-line" title="${escapeHtml(k.raw)}">${escapeHtml(k.raw)}</div>
+                        </td>
+                        <td>
+                            <div class="flex items-center justify-end gap-2">
+                                <button class="btn" onclick="copyText('${escapeHtml(k.raw)}')" title="Copy key">
+                                    <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                                </button>
+                                <button class="btn btn-danger" onclick="askRemove('${escapeHtml(k.fingerprint)}', '${escapeHtml(k.comment || '')}', ${keys.length})">
+                                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
                 `;
             }).join('');
             wrap.innerHTML = rows;

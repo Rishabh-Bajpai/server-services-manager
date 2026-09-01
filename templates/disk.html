@@ -104,19 +104,35 @@
         .crumb:hover { background: var(--bg-secondary); color: var(--text-primary); }
         .crumb.current { color: var(--text-primary); background: var(--bg-secondary); }
         .crumb-sep { color: var(--text-muted); font-size: 0.75rem; user-select: none; }
-        .item-row {
-            display: grid;
-            grid-template-columns: 1.5rem 1fr 6rem 4rem;
-            align-items: center;
-            gap: 0.75rem;
-            padding: 0.625rem 0.875rem;
+        .disk-table { width: 100%; min-width: 560px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+        .disk-table thead th {
+            text-align: left; font-size: 0.6875rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-muted); padding: 0.75rem 1rem;
+            background: var(--bg-secondary);
             border-bottom: 1px solid var(--border-subtle);
-            transition: background 0.1s ease;
-            cursor: pointer;
+            position: sticky; top: 0; z-index: 2;
+            user-select: none;
         }
-        .item-row:hover { background: var(--bg-secondary); }
-        .item-row:last-child { border-bottom: none; }
+        .disk-table thead th.text-right, .disk-table tbody td.text-right { text-align: right; }
+        .disk-table tbody tr { transition: background 0.1s ease; cursor: pointer; }
+        .disk-table tbody tr:hover { background: rgba(255,255,255,0.025); }
+        .disk-table tbody td {
+            padding: 0.625rem 1rem;
+            border-bottom: 1px solid var(--border-subtle);
+            font-size: 0.8125rem; color: var(--text-primary);
+            vertical-align: middle;
+        }
+        .disk-table tbody tr:last-child td { border-bottom: none; }
+        .table-scroll {
+            max-height: min(560px, calc(100dvh - 300px));
+            min-height: 200px;
+            overflow-y: auto; overflow-x: auto;
+            overscroll-behavior: contain;
+            -webkit-overflow-scrolling: touch;
+        }
         .item-name {
+            display: block;
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.8125rem;
             color: var(--text-primary);
@@ -146,7 +162,7 @@
         .treemap-wrap {
             position: relative;
             width: 100%;
-            height: min(60vh, 480px);
+            height: min(60dvh, 480px);
             background: var(--bg-secondary);
             border-radius: 0.75rem;
             overflow: hidden;
@@ -223,7 +239,7 @@
         current='/disk',
     ) }}
     {% set subheader %}
-        <div id="breadcrumb" class="flex flex-wrap items-center gap-1.5 min-h-[2rem]">
+        <div id="breadcrumb" class="flex items-center gap-1.5 min-h-[2rem] overflow-x-auto whitespace-nowrap">
             <span class="text-xs text-[var(--text-muted)] py-2">Loading…</span>
         </div>
         <span class="flex-1"></span>
@@ -279,7 +295,7 @@
                     </h2>
                     <input id="filter-input" class="text-input" style="max-width: 240px" placeholder="Filter by name…" oninput="renderItems()">
                 </div>
-                <div id="items-list" class="max-h-[600px] overflow-y-auto">
+                <div id="items-list" class="table-scroll">
                     <div class="empty-state">Loading…</div>
                 </div>
             </section>
@@ -291,7 +307,7 @@
                         Top 20 largest
                     </h2>
                 </div>
-                <div id="largest-list" class="max-h-[600px] overflow-y-auto">
+                <div id="largest-list" class="table-scroll">
                     <div class="empty-state">Loading…</div>
                 </div>
             </section>
@@ -610,15 +626,25 @@
                     ? `onclick="navigateTo('${escapeAttr(parent + it.name)}')"`
                     : '';
                 rows.push(`
-                    <div class="item-row" ${onclick}>
-                        <i data-lucide="${icon}" class="w-3.5 h-3.5 ${it.is_dir ? 'text-[var(--accent-blue)]' : 'text-[var(--accent-purple)]'}"></i>
-                        <span class="item-name" title="${escapeHtml(it.name)}">${escapeHtml(it.name)}</span>
-                        <div class="item-bar"><div class="item-bar-fill ${it.is_dir ? '' : 'file'}" style="width:${width}%"></div></div>
-                        <span class="item-size">${humanize(it.size)}</span>
-                    </div>
+                    <tr ${onclick}>
+                        <td class="w-10 text-center"><i data-lucide="${icon}" class="w-3.5 h-3.5 ${it.is_dir ? 'text-[var(--accent-blue)]' : 'text-[var(--accent-purple)]'}"></i></td>
+                        <td class="item-name" title="${escapeHtml(it.name)}">${escapeHtml(it.name)}</td>
+                        <td class="w-28"><div class="item-bar"><div class="item-bar-fill ${it.is_dir ? '' : 'file'}" style="width:${width}%"></div></div></td>
+                        <td class="item-size">${humanize(it.size)}</td>
+                    </tr>
                 `);
             }
-            list.innerHTML = rows.join('');
+            list.innerHTML = `
+                <table class="disk-table">
+                    <thead><tr>
+                        <th class="w-10"></th>
+                        <th>Name</th>
+                        <th class="w-28">Share</th>
+                        <th class="w-24 text-right">Size</th>
+                    </tr></thead>
+                    <tbody>${rows.join('')}</tbody>
+                </table>
+            `;
             lucide.createIcons();
         }
 
@@ -633,16 +659,25 @@
             }
             const rows = items.map((it, idx) => {
                 const icon = it.is_dir ? 'folder' : 'file';
-                const onclick = it.is_dir ? `navigateTo('${escapeAttr(it.path)}')"` : '';
+                const onclick = it.is_dir ? `onclick="navigateTo('${escapeAttr(it.path)}')"` : '';
                 return `
-                    <div class="item-row" style="grid-template-columns: 1.5rem 1fr 6rem;" ${onclick}>
-                        <span class="text-xs font-mono text-[var(--text-muted)] text-right">${idx + 1}</span>
-                        <span class="item-name" title="${escapeHtml(it.name)}"><i data-lucide="${icon}" class="w-3 h-3 inline ${it.is_dir ? 'text-[var(--accent-blue)]' : 'text-[var(--accent-purple)]'}"></i> ${escapeHtml(it.name)}</span>
-                        <span class="item-size">${humanize(it.size)}</span>
-                    </div>
+                    <tr ${onclick}>
+                        <td class="w-10 text-right text-xs font-mono text-[var(--text-muted)]">${idx + 1}</td>
+                        <td class="item-name" title="${escapeHtml(it.name)}"><i data-lucide="${icon}" class="w-3 h-3 inline ${it.is_dir ? 'text-[var(--accent-blue)]' : 'text-[var(--accent-purple)]'}"></i> ${escapeHtml(it.name)}</td>
+                        <td class="item-size">${humanize(it.size)}</td>
+                    </tr>
                 `;
             }).join('');
-            wrap.innerHTML = rows;
+            wrap.innerHTML = `
+                <table class="disk-table">
+                    <thead><tr>
+                        <th class="w-10 text-right">#</th>
+                        <th>Name</th>
+                        <th class="w-24 text-right">Size</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
             lucide.createIcons();
         }
 

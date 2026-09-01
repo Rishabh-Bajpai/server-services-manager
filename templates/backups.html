@@ -83,13 +83,22 @@
             font-size: 0.8125rem; outline: none; width: 100%;
         }
         .select-input:focus, .text-input:focus { border-color: var(--accent-blue); }
-        .data-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+        .table-wrap {
+            overflow-x: auto;
+            overflow-y: auto;
+            max-height: min(520px, calc(100dvh - 300px));
+            overscroll-behavior: contain;
+        }
+        .data-table { width: 100%; min-width: 640px; table-layout: fixed; border-collapse: collapse; }
         .data-table th {
             text-align: left; font-size: 0.6875rem; font-weight: 700;
             text-transform: uppercase; letter-spacing: 0.05em;
             color: var(--text-muted); padding: 0.625rem 0.875rem;
             background: var(--bg-secondary);
             border-bottom: 1px solid var(--border-subtle);
+            position: sticky;
+            top: 0;
+            z-index: 1;
         }
         .data-table td {
             padding: 0.625rem 0.875rem;
@@ -177,7 +186,7 @@
                     </div>
                 </details>
             </div>
-            <div class="overflow-x-auto">
+            <div class="table-wrap">
                 <table class="data-table">
                     <thead>
                         <tr>

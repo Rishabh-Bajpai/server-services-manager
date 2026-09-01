@@ -92,14 +92,16 @@
             font-size: 0.8125rem; outline: none; width: 100%;
         }
         .select-input:focus, .text-input:focus { border-color: var(--accent-blue); }
-        .data-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+        .data-table { width: 100%; table-layout: fixed; border-collapse: collapse; min-width: 640px; }
         .data-table th {
+            position: sticky; top: 0; z-index: 1;
             text-align: left; font-size: 0.6875rem; font-weight: 700;
             text-transform: uppercase; letter-spacing: 0.05em;
             color: var(--text-muted); padding: 0.625rem 0.875rem;
             background: var(--bg-secondary);
             border-bottom: 1px solid var(--border-subtle);
         }
+        .table-scroll { max-height: min(520px, calc(100dvh - 300px)); min-height: 200px; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
         .data-table td {
             padding: 0.625rem 0.875rem;
             border-bottom: 1px solid var(--border-subtle);
@@ -182,7 +184,7 @@
                     Rules (<span id="rule-count">0</span>)
                 </h2>
             </div>
-            <div class="overflow-x-auto">
+            <div class="table-scroll">
                 <table class="data-table">
                     <thead>
                         <tr>
