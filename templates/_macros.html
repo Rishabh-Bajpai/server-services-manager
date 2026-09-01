@@ -233,23 +233,23 @@
         <div class="ui-modal-actions"></div>
     </div>
 </div>
-<header class="border-b border-[var(--border-subtle)] bg-[var(--bg-card)]/60 backdrop-blur-md sticky top-0 z-30">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
-        <div class="flex items-center gap-3 min-w-0 flex-1">
+<header class="border-b border-[var(--border-subtle)] bg-[var(--bg-card)]/60 backdrop-blur-md sticky top-0 z-30 h-14">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-full flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3 shrink-0 min-w-0">
             <button onclick="uiToggleMobileMenu()" onTouchStart="uiToggleMobileMenu()" class="xl:hidden p-1.5 -ml-1 rounded-lg hover:bg-white/5 text-[var(--text-secondary)]" title="Menu" aria-label="Toggle menu" id="ui-menu-btn">
                 <i data-lucide="menu" class="w-5 h-5"></i>
             </button>
-            <a href="/" class="flex items-center gap-2.5 min-w-0" title="Server Services Manager">
+            <a href="/" class="flex items-center gap-2 shrink-0" title="Server Services Manager">
                 <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20 flex-shrink-0 overflow-hidden">
                     <img src="/favicon.ico" alt="SSM" class="w-8 h-8">
                 </div>
                 <span class="hidden sm:inline text-base font-semibold tracking-tight bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent whitespace-nowrap">SSM</span>
             </a>
             <span class="text-[var(--border-active)] hidden sm:inline">/</span>
-            <div class="flex items-center gap-2 min-w-0">
+            <div class="flex items-center gap-1.5 shrink-0">
                 <i data-lucide="{{ icon }}" class="w-5 h-5 flex-shrink-0"
                    style="color: {{ icon_color }}"></i>
-                <h1 class="text-base sm:text-lg font-semibold truncate">{{ title }}</h1>
+                <h1 class="text-sm sm:text-[15px] font-semibold whitespace-nowrap">{{ title }}</h1>
                 {% if badge_id %}
                 <span id="{{ badge_id }}" class="hidden sm:inline-flex badge badge-gray">…</span>
                 {% elif badge_html %}
@@ -257,32 +257,31 @@
                 {% endif %}
             </div>
         </div>
-        <div class="flex items-center gap-2 flex-wrap justify-end">
-            <div id="ui-nav-bar" class="hidden xl:flex items-center gap-1.5 flex-wrap justify-end">
-                {{ _ui_nav_primary(current) }}
-                {% set more_active = current in ['/control','/cron','/notifications','/disk','/cluster','/plugins','/config','/alerts','/packages','/backups','/firewall','/logs'] %}
-                <div id="ui-nav-more" class="relative">
-                    <div id="ui-nav-more-pill" class="ui-nav-pill cursor-pointer select-none {{ 'active' if more_active else '' }}" onclick="uiToggleMore()" title="More pages">
-                        <i data-lucide="chevron-down" class="w-4 h-4"></i>
-                        <span>More</span>
-                    </div>
-                    <div id="ui-more-dropdown" class="hidden absolute right-0 top-full mt-2 z-40" style="min-width: 200px;">
-                        <div class="ui-more-dropdown-inner flex flex-col gap-0.5">
-                            {{ _ui_nav_more_items(current) }}
-                            <hr class="border-[var(--border-subtle)] my-1">
-                            <a href="/docs/" target="_blank" rel="noopener" class="ui-more-item">
-                                <i data-lucide="book-open" class="w-4 h-4"></i>API Docs
-                            </a>
-                        </div>
+        <div id="ui-nav-bar" class="hidden xl:flex items-center gap-1.5 flex-1 justify-center mx-4">
+            {{ _ui_nav_primary(current) }}
+            {% set more_active = current in ['/control','/cron','/notifications','/disk','/cluster','/plugins','/config','/alerts','/packages','/backups','/firewall','/logs'] %}
+            <div id="ui-nav-more" class="relative shrink-0">
+                <div id="ui-nav-more-pill" class="ui-nav-pill cursor-pointer select-none {{ 'active' if more_active else '' }}" onclick="uiToggleMore()" title="More pages">
+                    <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                    <span>More</span>
+                </div>
+                <div id="ui-more-dropdown" class="hidden absolute right-0 top-full mt-2 z-40" style="min-width: 200px;">
+                    <div class="ui-more-dropdown-inner flex flex-col gap-0.5">
+                        {{ _ui_nav_more_items(current) }}
+                        <hr class="border-[var(--border-subtle)] my-1">
+                        <a href="/docs/" target="_blank" rel="noopener" class="ui-more-item">
+                            <i data-lucide="book-open" class="w-4 h-4"></i>API Docs
+                        </a>
                     </div>
                 </div>
-                <a href="/logout" class="ui-nav-pill !text-[var(--text-muted)] hover:!text-[var(--accent-red)] hover:!border-[var(--accent-red)]/30" title="Logout">
-                    <i data-lucide="log-out" class="w-4 h-4"></i><span class="hidden xl:inline">Logout</span>
-                </a>
             </div>
-            <div class="flex items-center gap-2 flex-wrap justify-end">
-                {{ actions|safe }}
-            </div>
+            <a href="/logout" class="ui-nav-pill !text-[var(--text-muted)] hover:!text-[var(--accent-red)] hover:!border-[var(--accent-red)]/30 shrink-0" title="Logout">
+                <i data-lucide="log-out" class="w-4 h-4"></i><span class="hidden xl:inline">Logout</span>
+            </a>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+            {{ actions|safe }}
+        </div>
         </div>
     </div>
     {# Mobile slide-down menu (mirrors the desktop nav) #}

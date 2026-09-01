@@ -142,18 +142,9 @@
 
     {% import "_macros.html" as ui %}
 {% set actions %}
-            <a href="/system-services" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
-                <i data-lucide="server-cog" class="w-4 h-4"></i>
-                <span class="hidden sm:inline">System</span>
-            </a>
-            <a href="/cron" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
-                <i data-lucide="calendar-clock" class="w-4 h-4"></i>
-                <span class="hidden sm:inline">Cron</span>
-            </a>
-            <a href="/notifications" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
-                <i data-lucide="bell-ring" class="w-4 h-4"></i>
-                <span class="hidden sm:inline">Health</span>
-            </a>
+            
+            
+            
             {% endset %}
 {{ ui.header(
             title="Activity Log",

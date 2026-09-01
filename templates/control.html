@@ -229,10 +229,7 @@
 
     {% import "_macros.html" as ui %}
 {% set actions %}
-            <a href="/monitor" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
-                <i data-lucide="activity" class="w-4 h-4"></i>
-                <span class="hidden sm:inline">Monitor</span>
-            </a>
+            
             {% endset %}
 {{ ui.header(
             title="Control Panel",
@@ -241,7 +238,7 @@
             actions=actions,
             current='/control',
         ) }}
-<div class="max-w-5xl mx-auto p-4 sm:p-6">
+<div class="max-w-7xl mx-auto p-4 sm:p-6">
         <!-- Header -->
         
         
