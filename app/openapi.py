@@ -150,7 +150,6 @@ _TAGS_BY_PATH_PREFIX = [
     ("/api/activity", "Activity"),
     ("/api/palette", "Command Palette"),
     ("/api/plugins", "Plugins"),
-    ("/api/files", "Files"),
     ("/api/control", "Control Panel"),
     ("/api/health", "Health"),
     ("/programs", "Programs"),

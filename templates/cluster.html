@@ -551,9 +551,10 @@
             document.getElementById('modal-mdns').classList.remove('open');
         }
         function fillPeerForm(host, port) {
-            document.getElementById('peer-host').value = host;
-            document.getElementById('peer-name').value = host.split('.')[0];
-            document.getElementById('peer-port').value = port;
+            document.getElementById('add-host').value = host;
+            const labelEl = document.getElementById('add-label');
+            if (labelEl && !labelEl.value) labelEl.value = host.split('.')[0];
+            document.getElementById('add-port').value = port;
             openAdd();
         }
 

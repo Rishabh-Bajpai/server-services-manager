@@ -14,7 +14,7 @@ import yaml
 
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash, Response, send_from_directory
 from flask_socketio import SocketIO
-from app.process_manager import ProcessManager, ProgramConfig
+from app.process_manager import ProcessManager, ProgramConfig, ProgramStatus
 from app.terminal_manager import TerminalManager
 from app import system_services
 from app.log_streamer import get_streamer
@@ -75,12 +75,12 @@ def _on_program_state_change(program, old_status, new_status):
     severity = "info"
     if new_status == ProgramStatus.FAILED:
         severity = "error"
+    message = f"{program.config.name} {old_status.value} -> {new_status.value}"
     event = _notifier_mod.Event(
         service=program.config.name,
         kind="state_change",
-        severity=severity,
-        message=f"{program.config.name} {old_status.value} -> {new_status.value}",
-        detail=f"command={program.config.command!r} cwd={program.config.cwd!r}",
+        state=new_status.value,
+        detail=f"{message} | command={program.config.command!r} cwd={program.config.cwd!r}",
         timestamp=time.time(),
     )
     # Push to socketio so the UI sees a toast for service events.
@@ -92,7 +92,7 @@ def _on_program_state_change(program, old_status, new_status):
             "old": old_status.value,
             "new": new_status.value,
             "severity": severity,
-            "message": event.message,
+            "message": message,
             "timestamp": event.timestamp,
         })
     except Exception:
@@ -147,9 +147,8 @@ def health():
 def login():
     global _password_hash
     if request.method == 'POST':
-        password = request.form.get('password')
-        
-        if check_password_hash(_password_hash, password):
+        password = request.form.get('password') or ""
+        if password and check_password_hash(_password_hash, password):
             session['logged_in'] = True
             return redirect(url_for('index'))
         else:
@@ -597,7 +596,7 @@ def list_files():
         logger.info(f"Base: raw='{base_dir_raw}', real='{base_dir}'")
         logger.info(f"Target: raw='{target_dir_raw}', real='{target_dir}'")
         
-        if not target_dir.startswith(base_dir):
+        if target_dir != base_dir and not target_dir.startswith(base_dir + os.sep):
             logger.warning(f"Access denied: {target_dir} is not under {base_dir}")
             return jsonify({
                 "error": "Access denied", 
@@ -657,11 +656,11 @@ def upload_file():
             return jsonify({"error": "No selected file"}), 400
             
         if file:
-            filename = secure_filename(file.filename)
-            base_dir = os.path.expanduser('~')
+            filename = secure_filename(file.filename) if file.filename else ""
+            base_dir = os.path.realpath(os.path.expanduser('~'))
             target_dir = os.path.realpath(os.path.join(base_dir, path))
             
-            if not target_dir.startswith(base_dir):
+            if target_dir != base_dir and not target_dir.startswith(base_dir + os.sep):
                 return jsonify({"error": "Access denied"}), 403
 
             file.save(os.path.join(target_dir, filename))
@@ -677,10 +676,10 @@ def download_file():
         if not path:
              return jsonify({"error": "No path specified"}), 400
              
-        base_dir = os.path.expanduser('~')
+        base_dir = os.path.realpath(os.path.expanduser('~'))
         target_path = os.path.realpath(os.path.join(base_dir, path))
         
-        if not target_path.startswith(base_dir):
+        if target_path != base_dir and not target_path.startswith(base_dir + os.sep):
             return jsonify({"error": "Access denied"}), 403
             
         if not os.path.exists(target_path):
@@ -1644,20 +1643,26 @@ def _redact_secrets(data):
     field values with '***' so they don't get sent to the
     browser. The on-disk file is not modified.
     """
-    if not isinstance(data, dict):
-        return data
-    out = {}
-    for k, v in data.items():
-        kl = str(k).lower()
-        if isinstance(v, dict):
-            out[k] = _redact_secrets(v)
-        elif isinstance(v, list):
-            out[k] = [_redact_secrets(x) if isinstance(x, dict) else x for x in v]
-        elif any(t in kl for t in ("password", "secret", "token", "key")) and isinstance(v, str):
-            out[k] = "***"
-        else:
-            out[k] = v
-    return out
+    if isinstance(data, dict):
+        out = {}
+        for k, v in data.items():
+            kl = str(k).lower()
+            is_secret = any(t in kl for t in ("password", "secret", "token", "key"))
+            if isinstance(v, dict):
+                out[k] = _redact_secrets(v)
+            elif isinstance(v, list):
+                if is_secret:
+                    out[k] = ["***" if isinstance(x, str) else _redact_secrets(x) if isinstance(x, dict) else x for x in v]
+                else:
+                    out[k] = [_redact_secrets(x) if isinstance(x, dict) else x for x in v]
+            elif is_secret and isinstance(v, str):
+                out[k] = "***"
+            else:
+                out[k] = v
+        return out
+    if isinstance(data, list):
+        return [_redact_secrets(x) if isinstance(x, dict) else x for x in data]
+    return data
 
 
 def _control_commands_for_palette():
