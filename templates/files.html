@@ -94,6 +94,17 @@
         .crumb:hover { background: var(--bg-secondary); color: var(--text-primary); }
         .crumb.current { color: var(--text-primary); background: var(--bg-secondary); }
         .crumb-sep { color: var(--text-muted); font-size: 0.75rem; user-select: none; }
+        .crumb-bar {
+            display: flex; align-items: center; gap: 0.25rem;
+            min-height: 2rem; flex-wrap: nowrap; white-space: nowrap;
+            overflow-x: auto;
+        }
+        .tree-scroll, .items-scroll {
+            max-height: 560px;
+            max-height: min(560px, calc(100dvh - 300px));
+        }
+        .tree-scroll { overflow-y: auto; }
+        .items-scroll { overflow: auto; }
         .tree {
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.8125rem;
@@ -148,6 +159,7 @@
             border-radius: 0.5rem;
             padding: 1rem;
             max-height: 600px;
+            max-height: min(560px, calc(100dvh - 300px));
             overflow: auto;
         }
         .preview-text {
@@ -223,6 +235,7 @@
             <i data-lucide="upload" class="w-3.5 h-3.5"></i>
             <span class="hidden sm:inline">Upload</span>
         </button>
+        <div class="flex items-center gap-1.5">
         <button class="btn" onclick="downloadZip()" id="btn-zip" disabled title="Download selected as zip">
             <i data-lucide="archive" class="w-3.5 h-3.5"></i>
             <span class="hidden sm:inline">Zip</span>
@@ -231,26 +244,27 @@
             <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
             <span class="hidden sm:inline">Delete</span>
         </button>
+        </div>
     {% endset %}
     {{ ui.subheader(subheader) }}
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <div class="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4">
-            <aside class="panel-card p-3 max-h-[78vh] overflow-y-auto">
+            <aside class="panel-card p-3">
                 <div class="flex items-center justify-between mb-2">
                     <h2 class="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Tree</h2>
                     <button class="text-[var(--text-muted)] hover:text-[var(--text-primary)]" onclick="loadTree()" title="Refresh">
                         <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
                     </button>
                 </div>
-                <div id="tree" class="tree">
+                <div id="tree" class="tree tree-scroll">
                     <div class="empty-state">Loading…</div>
                 </div>
             </aside>
 
             <div class="space-y-3 min-w-0">
                 <section class="panel-card p-3">
-                    <div id="breadcrumb" class="flex flex-wrap items-center gap-1 min-h-[2rem]">
+                    <div id="breadcrumb" class="crumb-bar">
                         <span class="empty-state py-1">~</span>
                     </div>
                 </section>
@@ -264,8 +278,10 @@
                             </h2>
                             <div class="text-xs text-[var(--text-muted)]" id="dir-stats">—</div>
                         </div>
-                        <div id="items-list" class="max-h-[600px] overflow-y-auto">
-                            <div class="empty-state">Loading…</div>
+                        <div class="items-scroll">
+                            <div id="items-list" class="min-w-[560px]">
+                                <div class="empty-state">Loading…</div>
+                            </div>
                         </div>
                     </section>
 

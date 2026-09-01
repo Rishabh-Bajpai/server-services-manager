@@ -69,16 +69,15 @@
         .table-wrap {
             background: var(--bg-card);
             border: 1px solid var(--border-subtle);
-            border-radius: 0.75rem; overflow: hidden;
+            border-radius: 0.75rem; overflow-x: auto;
         }
-        .events-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+        .events-table { width: 100%; min-width: 560px; border-collapse: separate; border-spacing: 0; }
         .events-table thead th {
             text-align: left; font-size: 0.6875rem; font-weight: 700;
             text-transform: uppercase; letter-spacing: 0.06em;
             color: var(--text-muted); padding: 0.75rem 1rem;
             background: var(--bg-secondary);
             border-bottom: 1px solid var(--border-subtle);
-            position: sticky; top: 0; z-index: 2;
         }
         .events-table tbody td {
             padding: 0.625rem 1rem;
@@ -87,7 +86,11 @@
             vertical-align: middle;
         }
         .events-table tbody tr:last-child td { border-bottom: none; }
-        .table-scroll { max-height: 60vh; overflow-y: auto; }
+        .table-scroll {
+            max-height: 60dvh; overflow-y: auto; overflow-x: auto;
+            overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+        }
+        .table-scroll .events-table thead th { position: sticky; top: 0; z-index: 2; }
 
         .summary-card {
             background: var(--bg-card);

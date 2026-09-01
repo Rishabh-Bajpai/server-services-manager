@@ -148,6 +148,14 @@
             border-radius: 0.75rem;
             padding: 1.5rem;
             max-width: 480px; width: 90%;
+            max-height: calc(100vh - 2rem);
+            max-height: calc(100dvh - 2rem);
+            overflow-y: auto;
+        }
+        .node-scroll {
+            max-height: calc(100vh - 24rem);
+            max-height: calc(100dvh - 24rem);
+            overflow-y: auto;
         }
         .toast-container {
             position: fixed; top: 1rem; right: 1rem; z-index: 100;
@@ -242,7 +250,7 @@
                     Peer nodes (<span id="peer-count">0</span>)
                 </h2>
             </div>
-            <div id="peers-grid" class="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div id="peers-grid" class="node-scroll p-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                 <div class="empty-state col-span-full">Loading…</div>
             </div>
         </section>
