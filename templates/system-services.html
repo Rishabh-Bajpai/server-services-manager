@@ -135,7 +135,7 @@
             overflow: hidden;
         }
 
-        .units-table { width: 100%; min-width: 0; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+        .units-table { width: 100%; min-width: 640px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
         .units-table thead th {
             text-align: left;
             font-size: 0.6875rem;
@@ -163,7 +163,8 @@
         }
         .units-table tbody tr:last-child td { border-bottom: none; }
 
-        .table-scroll { max-height: calc(100vh - 320px); overflow-y: auto; overflow-x: auto; }
+        .table-scroll { max-height: min(560px, calc(100dvh - 260px)); min-height: 240px; overflow-y: auto; overflow-x: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+        @media (max-width: 640px) { .table-scroll { max-height: calc(100dvh - 300px); } }
 
         .side-panel {
             position: fixed; top: 0; right: 0; bottom: 0;
