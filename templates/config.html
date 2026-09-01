@@ -95,8 +95,10 @@
             font-size: 0.75rem;
             line-height: 1.6;
             color: var(--text-primary);
-            overflow-x: auto;
+            overflow: auto;
             white-space: pre;
+            max-height: min(560px, calc(100dvh - 320px));
+            overscroll-behavior: contain;
         }
     </style>
 </head>
