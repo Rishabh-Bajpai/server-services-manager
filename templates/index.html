@@ -158,6 +158,59 @@
             font-size: 12px;
             line-height: 1.6;
         }
+
+        /* Toggle knob — Tailwind's peer-checked on a nested <span> inside
+           <label> doesn't match (peer ~ sibling selector), so the knob
+           would never slide. The label bg peer-checked works, but the
+           inner span needs an explicit sibling rule. */
+        .peer:checked ~ label + span { transform: translateX(1.25rem); }
+        /* Fallback for the boot toggle which uses green when checked */
+        #boot-toggle:checked ~ label { background: var(--accent-green); border-color: var(--accent-green); }
+
+        /* Modals used by this page (Import, Limits, Palette). The shared
+           _macros.html provides .ui-modal-* but this page uses
+           .modal-overlay/.modal-box (palette/import/limits modals).
+           Without these, the palette renders inline and pushes the
+           page content up. */
+        .modal-overlay {
+            position: fixed; inset: 0; z-index: 60;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+            display: none; align-items: center; justify-content: center;
+            padding: 1rem;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-box {
+            background: var(--bg-card); border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem; padding: 1.5rem;
+            max-width: 28rem; width: 90%;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            max-height: 90vh; overflow-y: auto;
+        }
+        .modal-box h2 { font-size: 1.125rem; font-weight: 700; margin-bottom: 0.5rem; }
+        .modal-box p { font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1rem; line-height: 1.5; }
+        .modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem; }
+        .modal-actions .btn-cancel {
+            padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+            font-size: 0.8125rem; font-weight: 600;
+            background: rgba(255,255,255,0.06); color: var(--text-secondary);
+            border: 1px solid transparent; cursor: pointer;
+        }
+        .modal-actions .btn-cancel:hover { background: rgba(255,255,255,0.1); }
+        .modal-actions .btn-primary {
+            padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+            font-size: 0.8125rem; font-weight: 600;
+            background: var(--accent-blue); color: #fff;
+            border: 1px solid var(--accent-blue); cursor: pointer;
+        }
+        .modal-actions .btn-primary:hover { background: #2563eb; }
+        .modal-error { color: var(--accent-red); font-size: 0.75rem; margin-bottom: 0.75rem; }
+        .search-input {
+            width: 100%; background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle); border-radius: 0.5rem;
+            padding: 0.5rem 0.75rem; font-size: 0.875rem;
+            color: var(--text-primary); outline: none;
+        }
+        .search-input:focus { border-color: var(--accent-blue); }
     </style>
 </head>
 
@@ -294,18 +347,16 @@
                     <div class="relative inline-block w-10 h-5 flex-shrink-0">
                         <input type="checkbox" id="autostart" checked
                             class="sr-only peer">
-                        <label for="autostart" class="absolute inset-0 w-10 h-5 bg-[var(--bg-secondary)] rounded-full cursor-pointer peer-checked:bg-[var(--accent-blue)] transition-colors border border-[var(--border-subtle)] peer-checked:border-[var(--accent-blue)]">
-                            <span class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></span>
-                        </label>
+                        <label for="autostart" class="absolute inset-0 w-10 h-5 bg-[var(--bg-secondary)] rounded-full cursor-pointer peer-checked:bg-[var(--accent-blue)] transition-colors border border-[var(--border-subtle)] peer-checked:border-[var(--accent-blue)]"></label>
+                        <span class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5 pointer-events-none"></span>
                     </div>
                     <label for="autostart" class="text-sm text-[var(--text-secondary)]">Auto-start on launch</label>
                 </div>
                 <div class="flex items-center gap-3 py-2" id="boot-toggle-row" style="display:none">
                     <div class="relative inline-block w-10 h-5 flex-shrink-0">
                         <input type="checkbox" id="boot-toggle" class="sr-only peer">
-                        <label for="boot-toggle" class="absolute inset-0 w-10 h-5 bg-[var(--bg-secondary)] rounded-full cursor-pointer peer-checked:bg-[var(--accent-green)] transition-colors border border-[var(--border-subtle)] peer-checked:border-[var(--accent-green)]">
-                            <span class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></span>
-                        </label>
+                        <label for="boot-toggle" class="absolute inset-0 w-10 h-5 bg-[var(--bg-secondary)] rounded-full cursor-pointer peer-checked:bg-[var(--accent-green)] transition-colors border border-[var(--border-subtle)] peer-checked:border-[var(--accent-green)]"></label>
+                        <span class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5 pointer-events-none"></span>
                     </div>
                     <div class="flex-1">
                         <label for="boot-toggle" class="text-sm text-[var(--text-secondary)]">Start at boot (systemd)</label>
