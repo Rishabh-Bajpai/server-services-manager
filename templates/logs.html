@@ -64,9 +64,9 @@
             font-size: 0.75rem;
             line-height: 1.5;
             color: var(--text-primary);
-            white-space: pre-wrap;
-            word-break: break-all;
+            white-space: pre;
             padding: 0.0625rem 0;
+            min-width: max-content;
         }
         .log-line .highlight {
             background: rgba(245, 158, 11, 0.25);
@@ -116,6 +116,10 @@
             font-size: 0.6875rem; font-family: 'JetBrains Mono', monospace;
             color: var(--text-secondary);
         }
+
+        .ui-subheader .text-input,
+        .ui-subheader .select-input,
+        .ui-subheader .search-input { flex-shrink: 0; }
     </style>
 </head>
 <body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
@@ -206,7 +210,7 @@
                     </button>
                 </div>
             </div>
-            <div id="log-output" class="p-3 max-h-[70vh] overflow-y-auto bg-[var(--bg-primary)]">
+            <div id="log-output" class="p-3 max-h-[70vh] overflow-y-auto overflow-x-auto overscroll-y-contain bg-[var(--bg-primary)]">
                 <div class="empty-state">Enter a name and click Search.</div>
             </div>
         </section>
