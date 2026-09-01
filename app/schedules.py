@@ -74,10 +74,17 @@ def _unit_path(name: str, kind: str) -> str:
 
 
 def _run_systemctl(args: list, password: Optional[str] = None) -> Tuple[int, str, str]:
-    """Run ``systemctl --user`` with optional sudo for write ops."""
+    """Run ``systemctl --user`` with optional sudo for write ops.
+
+    Note: user units (``--user``) never need sudo — ``daemon-reload``/
+    ``enable`` for ``~/.config/systemd/user`` works as the user.
+    Using ``sudo -S`` would run ``systemctl --user`` as root and lose
+    ``DBUS_SESSION_BUS_ADDRESS`` (No medium found). So we keep sudo
+    only for non-``--user`` invocations.
+    """
     cmd = ["systemctl", "--user"] + args
     stdin_data = None
-    if password:
+    if password and "--user" not in cmd:
         cmd = ["sudo", "-S", "-k"] + cmd
         # text=True below requires a str, not bytes. The trailing newline
         # is what sudo reads before it execs the real command.

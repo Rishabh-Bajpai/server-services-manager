@@ -28,7 +28,8 @@ _BAD_CHARS = re.compile(r"[\n\r;|&`$<>\"'(){}#\[\]\\!*?~^]")
 def _run_systemctl(args: list, password: Optional[str] = None) -> Tuple[int, str, str]:
     cmd = ["systemctl", "--user"] + args
     stdin_data = None
-    if password:
+    # User drop-ins never need sudo (see schedules.py comment).
+    if password and "--user" not in cmd:
         cmd = ["sudo", "-S", "-k"] + cmd
         stdin_data = password + "\n"
     try:
@@ -179,7 +180,9 @@ def apply(name: str, settings: Dict[str, str],
     ok, err = _write_drop_in(name, current)
     if not ok:
         return False, err
-    rc, _, err = _run_systemctl(["daemon-reload"], password=password)
+    # User units don't need sudo; daemon-reload is --user (see _run_systemctl).
+    # Using sudo would run systemctl --user as root and lose DBUS_SESSION_BUS_ADDRESS.
+    rc, _, err = _run_systemctl(["daemon-reload"], password=None)
     if rc != 0:
         return False, f"daemon-reload: {err.strip()}"
     return True, ""
@@ -206,7 +209,7 @@ def clear(name: str, password: Optional[str] = None) -> Tuple[bool, str]:
             shutil.rmtree(_unit_dir(name))
         except OSError as e:
             return False, f"rmtree: {e}"
-    rc, _, err = _run_systemctl(["daemon-reload"], password=password)
+    rc, _, err = _run_systemctl(["daemon-reload"], password=None)
     if rc != 0:
         return False, f"daemon-reload: {err.strip()}"
     return True, ""

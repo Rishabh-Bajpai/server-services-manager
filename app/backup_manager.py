@@ -376,7 +376,9 @@ def _disable_and_remove_units(name: str) -> None:
 def _run_systemctl_user(args: List[str], password: Optional[str] = None) -> Tuple[int, str, str]:
     cmd = ["systemctl", "--user"] + args
     stdin_data = None
-    if password:
+    # User timers (ssm-backup-*) are in ~/.config/systemd/user — no sudo needed.
+    # Using sudo would run systemctl --user as root and lose DBUS (No medium found).
+    if password and "--user" not in cmd:
         cmd = ["sudo", "-S", "-k"] + cmd
         # text=True below requires a str, not bytes. The trailing
         # newline is what sudo reads before it execs the real command.
