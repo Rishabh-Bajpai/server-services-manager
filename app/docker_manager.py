@@ -141,7 +141,10 @@ def _client(timeout: float = 5.0):
     """Return a fresh DockerClient. The SDK client is cheap to construct."""
     import docker  # type: ignore
     from docker.errors import APIError  # noqa: F401  (imported for caller visibility)
-    return docker.DockerClient(base_url=DEFAULT_SOCKET, timeout=timeout)
+    try:
+        return docker.DockerClient(base_url=DEFAULT_SOCKET, timeout=timeout)
+    except Exception as e:  # noqa: BLE001  (version probe needs socket, may raise DockerException)
+        raise DockerError(_format_error(e), code=_classify(e))
 
 
 # ---------------------------------------------------------------------------
