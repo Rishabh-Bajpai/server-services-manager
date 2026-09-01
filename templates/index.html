@@ -170,6 +170,15 @@
              actions because those are dashboard-only. -->
         {% import "_macros.html" as ui %}
         {% set actions %}
+        {% endset %}
+        {{ ui.header(
+            title="Dashboard",
+            icon="layout-dashboard",
+            icon_color="var(--accent-blue)",
+            actions=actions,
+            current='/',
+        ) }}
+        {% set subheader %}
             <button onclick="openImportModal()"
                 class="btn"
                 title="Import services from JSON export">
@@ -182,10 +191,9 @@
                 <i data-lucide="download" class="w-3.5 h-3.5"></i>
                 <span class="hidden 2xl:inline">Export</span>
             </a>
-            <button onclick="openModal()"
-                class="btn btn-primary">
-                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
-                <span class="hidden sm:inline">Add Service</span>
+            <button onclick="openPalette()" class="btn" title="Command palette (Ctrl+K)">
+                <i data-lucide="search" class="w-3.5 h-3.5"></i>
+                <kbd class="hidden md:inline text-[10px] font-mono opacity-60">⌘K</kbd>
             </button>
             <a href="/docs/" target="_blank" rel="noopener"
                 class="btn"
@@ -193,22 +201,18 @@
                 <i data-lucide="book-open" class="w-3.5 h-3.5"></i>
                 <span class="hidden 2xl:inline">API</span>
             </a>
-            <button onclick="openPalette()" class="btn" title="Command palette (Ctrl+K)">
-                <i data-lucide="search" class="w-3.5 h-3.5"></i>
-                <kbd class="hidden md:inline text-[10px] font-mono opacity-60">⌘K</kbd>
+            <span class="flex-1"></span>
+            <button onclick="openModal()"
+                class="btn btn-primary">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">Add Service</span>
             </button>
             <div id="connection-status"
                 class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20">
                 <span class="w-2 h-2 rounded-full bg-current status-running"></span>
             </div>
         {% endset %}
-        {{ ui.header(
-            title="Dashboard",
-            icon="layout-dashboard",
-            icon_color="var(--accent-blue)",
-            actions=actions,
-            current='/',
-        ) }}
+        {{ ui.subheader(subheader) }}
 
         <!-- Mobile slide-down menu. Mirrors the desktop nav-bar items
               so phones don't lose access to any of them.
