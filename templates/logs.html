@@ -117,7 +117,7 @@
         }
     </style>
 </head>
-<body class="text-[var(--text-primary)] min-h-screen">
+<body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
     {% import "_macros.html" as ui %}
     {% set actions %}
         <button class="btn btn-primary" onclick="runSearch(true)">
@@ -127,7 +127,7 @@
     {% endset %}
     {{ ui.header(
         title="Log Search",
-        icon="search",
+        icon="file-text",
         icon_color="var(--accent-blue)",
         actions=actions,
         current='/logs',

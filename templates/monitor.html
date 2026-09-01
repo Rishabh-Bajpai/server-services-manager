@@ -94,10 +94,9 @@
     </style>
 </head>
 <body class="bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-screen">
-    <div class="max-w-7xl mx-auto p-3 sm:p-6">
-        <!-- Header -->
-        {% import "_macros.html" as ui %}
-        {% set actions %}
+
+    {% import "_macros.html" as ui %}
+{% set actions %}
             <span id="connection-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-[var(--accent-green)]/10 text-[var(--accent-green)] border border-[var(--accent-green)]/20">
                 <span class="w-2 h-2 rounded-full bg-current pulse-dot"></span>
                 <span class="hidden sm:inline">Connected</span>
@@ -106,18 +105,19 @@
                 <i data-lucide="gamepad-2" class="w-4 h-4"></i>
                 <span class="hidden sm:inline">Control</span>
             </a>
-            <a href="/logout" class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20 rounded-lg hover:bg-[var(--accent-red)]/20 transition-all text-sm font-medium">
-                <i data-lucide="log-out" class="w-4 h-4"></i>
-                <span class="hidden sm:inline">Logout</span>
-            </a>
-        {% endset %}
-        {{ ui.header(
+            {% endset %}
+{{ ui.header(
             title="System Monitor",
             icon="activity",
             icon_color="var(--accent-green)",
             actions=actions,
             current='/monitor',
         ) }}
+<div class="max-w-7xl mx-auto p-3 sm:p-6">
+        <!-- Header -->
+        
+        
+        
 
         <!-- Top Row: System Info + CPU -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">

@@ -139,9 +139,9 @@
     </style>
 </head>
 <body class="bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-screen">
-    <div class="max-w-7xl mx-auto p-4 sm:p-6">
-        {% import "_macros.html" as ui %}
-        {% set actions %}
+
+    {% import "_macros.html" as ui %}
+{% set actions %}
             <a href="/system-services" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
                 <i data-lucide="server-cog" class="w-4 h-4"></i>
                 <span class="hidden sm:inline">System</span>
@@ -154,18 +154,18 @@
                 <i data-lucide="bell-ring" class="w-4 h-4"></i>
                 <span class="hidden sm:inline">Health</span>
             </a>
-            <a href="/logout" class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20 rounded-lg hover:bg-[var(--accent-red)]/20 transition-all text-sm font-medium">
-                <i data-lucide="log-out" class="w-4 h-4"></i>
-                <span class="hidden sm:inline">Logout</span>
-            </a>
-        {% endset %}
-        {{ ui.header(
+            {% endset %}
+{{ ui.header(
             title="Activity Log",
             icon="history",
             icon_color="var(--accent-purple)",
             actions=actions,
             current='/activity',
         ) }}
+<div class="max-w-7xl mx-auto p-4 sm:p-6">
+        
+        
+        
 
         <!-- Summary cards -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6 animate-fade-in" id="summary"></div>

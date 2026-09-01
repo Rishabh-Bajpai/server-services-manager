@@ -175,7 +175,7 @@
         .sk { display:inline-block; height:14px; border-radius:4px; background:var(--border-subtle); animation:sk 1.5s ease-in-out infinite; }
     </style>
 </head>
-<body class="text-[var(--text-primary)] min-h-screen">
+<body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
     {% import "_macros.html" as ui %}
     {% set actions %}
         <a href="/api/alerts/export.csv" class="btn" target="_blank">
@@ -189,7 +189,7 @@
     {% endset %}
     {{ ui.header(
         title="Alert History",
-        icon="bell-ring",
+        icon="megaphone",
         icon_color="var(--accent-yellow)",
         badge_html='<span class="badge badge-yellow">notification log</span>',
         actions=actions,

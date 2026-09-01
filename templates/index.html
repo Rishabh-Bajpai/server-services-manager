@@ -134,20 +134,7 @@
 
         /* Mobile menu tile — looks like the desktop nav pills but
            laid out in a grid for finger-friendly tapping. */
-        .nav-tile {
-            display: flex; align-items: center; gap: 0.5rem;
-            padding: 0.5rem 0.75rem;
-            background: rgba(255,255,255,0.04);
-            border: 1px solid var(--border-subtle);
-            border-radius: 0.5rem;
-            color: var(--text-primary);
-            font-size: 0.8125rem; font-weight: 500;
-            transition: background 0.15s ease;
-            cursor: pointer;
-        }
-        .nav-tile:hover { background: rgba(255,255,255,0.08); }
-
-        .gradient-border {
+.gradient-border {
             position: relative;
         }
 
@@ -203,11 +190,6 @@
                 title="OpenAPI / Swagger UI">
                 <i data-lucide="book-open" class="w-4 h-4"></i>
                 <span class="hidden 2xl:inline">API</span>
-            </a>
-            <a href="/logout"
-                class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20 rounded-lg hover:bg-[var(--accent-red)]/20 transition-all text-sm font-medium">
-                <i data-lucide="log-out" class="w-4 h-4"></i>
-                <span class="hidden sm:inline">Logout</span>
             </a>
             <button onclick="openPalette()" class="flex items-center gap-2 px-3 py-1.5 bg-white/5 text-[var(--text-muted)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 hover:text-[var(--text-primary)] transition-all text-sm font-medium" title="Command palette (Ctrl+K)">
                 <i data-lucide="search" class="w-3.5 h-3.5"></i>
