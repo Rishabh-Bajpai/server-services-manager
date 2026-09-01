@@ -408,7 +408,7 @@
         </div>
      </main>
 
-    <div id="remove-modal" class="modal-backdrop hidden">
+    <div id="remove-modal" onclick="if(event.target===this) closeRemoveModal()" class="modal-backdrop hidden">
         <div class="modal-card">
             <h3 class="text-lg font-semibold mb-2">Remove container?</h3>
             <p class="text-sm text-[var(--text-secondary)] mb-4">
@@ -613,8 +613,8 @@
         }).join('');
         lucide.createIcons();
     }
-    function removeImage(id) {
-        if (!confirm(`Remove image ${id}? This cannot be undone.`)) return;
+    async function removeImage(id) {
+        if (!await uiConfirm(`Remove image ${id}?`, 'This cannot be undone.', true)) return;
         api('/api/docker/images/' + encodeURIComponent(id), { method: 'DELETE' })
             .then(({ ok, data }) => {
                 if (!ok) {
@@ -909,5 +909,16 @@
         if (document.getElementById('filter-all').checked || activeTab !== 'stats') loadContainers();
     }, 15000);
     </script>
+<script>
+
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const rm=document.getElementById('remove-modal');
+    if(rm && !rm.classList.contains('hidden')) { if(typeof closeRemoveModal==='function') closeRemoveModal(); return; }
+    const panel=document.getElementById('detail-panel');
+    if(panel && !panel.classList.contains('hidden')) { if(typeof closeDetail==='function') closeDetail(); }
+});
+
+</script>
 </body>
 </html>

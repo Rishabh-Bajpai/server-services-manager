@@ -272,7 +272,7 @@
     </div>
 
     <!-- Modal -->
-    <div id="modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4 animate-fade-in">
+    <div id="modal" onclick="if(event.target===this) closeModal()" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4 animate-fade-in">
         <div class="bg-[var(--bg-card)] text-[var(--text-primary)] rounded-2xl border border-[var(--border-subtle)] shadow-2xl w-full max-w-md p-6 relative animate-slide-up gradient-border">
             <button onclick="closeModal()" class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-[var(--text-muted)] hover:bg-white/10 hover:text-[var(--text-primary)] transition-all">
                 <i data-lucide="x" class="w-4 h-4"></i>
@@ -365,7 +365,7 @@
     </div>
 
     <!-- Import Modal -->
-    <div class="modal-overlay" id="import-modal">
+    <div class="modal-overlay" id="import-modal" onclick="if(event.target===this) closeImportModal()">
         <div class="modal-box">
             <h2>Import services</h2>
             <p>Upload a JSON export to add (or replace) the configured services. Drag-and-drop a file or pick one below.</p>
@@ -386,7 +386,7 @@
     </div>
 
     <!-- Resource Limits Modal -->
-    <div class="modal-overlay" id="limits-modal">
+    <div class="modal-overlay" id="limits-modal" onclick="if(event.target===this) closeLimitsModal()">
         <div class="modal-box" style="max-width:36rem">
             <div class="flex items-center justify-between mb-3">
                 <h2 class="mb-0 flex items-center gap-2">
@@ -413,7 +413,7 @@
     </div>
 
     <!-- File Manager Modal -->
-    <div id="file-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+    <div id="file-modal" onclick="if(event.target===this) closeFileModal()" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
         <div
             class="bg-[var(--bg-card)] text-[var(--text-primary)] rounded-2xl border border-[var(--border-subtle)] shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col relative animate-slide-up gradient-border">
             <button onclick="closeFileManager()" class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-[var(--text-muted)] hover:bg-white/10 hover:text-[var(--text-primary)] transition-all z-10">
@@ -895,7 +895,7 @@
         }
 
         async function deleteService(name) {
-            if (!confirm(`Are you sure you want to delete service "${name}"?`)) return;
+            if (!await uiConfirm(`Delete service "${name}"?`, 'This cannot be undone.', true)) return;
 
             try {
                 const res = await fetch(`/programs/${name}`, { method: 'DELETE' });
@@ -961,7 +961,7 @@
         }
 
         async function clearLogs(name) {
-            if (!confirm(`Clear all logs for "${name}"?`)) return;
+            if (!await uiConfirm(`Clear all logs for "${name}"?`, 'This will wipe the in-memory buffer and persisted log file.', true)) return;
             try {
                 const res = await fetch(`/programs/${name}/logs`, { method: 'DELETE' });
                 if (!res.ok) {
@@ -1022,7 +1022,7 @@
                 errorEl.style.display = 'block';
                 return;
             }
-            if (mode === 'replace' && !confirm('Replace will DELETE all existing services. Continue?')) {
+            if (mode === 'replace' && !await uiConfirm('Replace all services?', 'Replace will DELETE all existing services. Continue?', true)) {
                 return;
             }
             btn.disabled = true;
@@ -1102,7 +1102,7 @@
             const clear = document.getElementById('limits-clear');
             if (clear) {
                 clear.onclick = async () => {
-                    if (!confirm('Remove all resource limits for this service?')) return;
+                    if (!await uiConfirm('Remove resource limits?', 'Remove all resource limits for this service?', true)) return;
                     const r = await fetch(`/api/programs/${encodeURIComponent(_limitsProgramName)}/limits`, {
                         method: 'DELETE',
                     });
@@ -1807,6 +1807,23 @@
             }, 3000);
         }
     </script>
+<script>
+
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const ids = [['modal','closeModal'], ['import-modal','closeImportModal'], ['limits-modal','closeLimitsModal'], ['file-modal','closeFileModal']];
+    for (const [id, fn] of ids) {
+        const el = document.getElementById(id);
+        if (el && (!el.classList.contains('hidden') && el.style.display !== 'none' || el.classList.contains('open') || el.classList.contains('active') || el.classList.contains('flex'))) {
+            if (typeof window[fn] === 'function') window[fn]();
+            // fallback hide
+            el.classList.add('hidden'); el.classList.remove('flex','open','active');
+            break;
+        }
+    }
+});
+
+</script>
 </body>
 
 </html>

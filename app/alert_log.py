@@ -262,13 +262,23 @@ def summary(since: Optional[float] = None) -> dict:
 
 
 def export_csv(entries) -> str:
-    """Format a CSV from a list of event dicts."""
+    """Format a CSV from a list of event dicts. Uses BOM and QUOTE_ALL for Excel safety."""
     import csv
     import io
     out = io.StringIO()
     fieldnames = ["timestamp", "service", "channel", "recipient", "success", "latency_ms", "error"]
-    writer = csv.DictWriter(out, fieldnames=fieldnames, extrasaction="ignore")
+    writer = csv.DictWriter(out, fieldnames=fieldnames, extrasaction="ignore",
+                            quoting=csv.QUOTE_ALL, lineterminator="\n")
     writer.writeheader()
     for e in entries:
-        writer.writerow({k: e.get(k, "") for k in fieldnames})
-    return out.getvalue()
+        row = {}
+        for k in fieldnames:
+            v = e.get(k, "")
+            if v is None:
+                v = ""
+            vs = str(v)
+            if vs and vs[0] in ("=", "+", "-", "@"):
+                vs = "'" + vs
+            row[k] = vs
+        writer.writerow(row)
+    return "\ufeff" + out.getvalue()

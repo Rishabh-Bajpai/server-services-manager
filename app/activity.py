@@ -116,16 +116,27 @@ def list_entries(
 
 
 def export_csv(entries: Iterable[dict]) -> str:
-    """Format a CSV from a list of entry dicts."""
+    """Format a CSV from a list of entry dicts. Uses BOM for Excel, QUOTE_ALL, and str coercion."""
     import csv
     import io
     out = io.StringIO()
     fieldnames = ["timestamp", "user", "ip", "action", "target", "status", "detail"]
-    writer = csv.DictWriter(out, fieldnames=fieldnames, extrasaction="ignore")
+    writer = csv.DictWriter(out, fieldnames=fieldnames, extrasaction="ignore",
+                            quoting=csv.QUOTE_ALL, lineterminator="\n")
     writer.writeheader()
     for e in entries:
-        writer.writerow({k: e.get(k, "") for k in fieldnames})
-    return out.getvalue()
+        row = {}
+        for k in fieldnames:
+            v = e.get(k, "")
+            if v is None:
+                v = ""
+            # Prevent CSV injection for detail/status fields starting with = + - @
+            vs = str(v)
+            if vs and vs[0] in ("=", "+", "-", "@"):
+                vs = "'" + vs
+            row[k] = vs
+        writer.writerow(row)
+    return "\ufeff" + out.getvalue()
 
 
 def count_by_action() -> List[dict]:

@@ -198,7 +198,7 @@
     </main>
 
     <!-- Create modal -->
-    <div id="create-modal" class="modal-backdrop hidden">
+    <div id="create-modal" onclick="if(event.target===this) closeCreate()" class="modal-backdrop hidden">
         <div class="modal-card">
             <h3 class="text-lg font-semibold mb-3">New backup job</h3>
             <div class="space-y-3 text-xs">
@@ -251,7 +251,7 @@
     </div>
 
     <!-- Run / Delete confirm modal -->
-    <div id="confirm-modal" class="modal-backdrop hidden">
+    <div id="confirm-modal" onclick="if(event.target===this) closeConfirm()" class="modal-backdrop hidden">
         <div class="modal-card">
             <h3 class="text-lg font-semibold mb-2" id="confirm-title">Confirm</h3>
             <p class="text-sm text-[var(--text-secondary)] mb-4" id="confirm-body"></p>
@@ -500,5 +500,16 @@
     load();
     setInterval(load, 30000);
     </script>
+<script>
+
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const c = document.getElementById('create-modal');
+    const k = document.getElementById('confirm-modal');
+    if (c && !c.classList.contains('hidden')) { if(typeof closeCreate==='function') closeCreate(); return; }
+    if (k && !k.classList.contains('hidden')) { if(typeof closeConfirm==='function') closeConfirm(); return; }
+});
+
+</script>
 </body>
 </html>

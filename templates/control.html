@@ -293,7 +293,7 @@
     </div>
 
     <!-- Confirm Modal -->
-    <div class="modal-overlay" id="confirm-modal">
+    <div class="modal-overlay" id="confirm-modal" onclick="if(event.target===this) closeConfirm()">
         <div class="modal-box">
             <h2 id="confirm-title">Confirm Action</h2>
             <p id="confirm-message">Are you sure?</p>
@@ -305,7 +305,7 @@
     </div>
 
     <!-- Auth Modal -->
-    <div class="modal-overlay" id="auth-modal">
+    <div class="modal-overlay" id="auth-modal" onclick="if(event.target===this) closeAuth()">
         <div class="modal-box">
             <h2 id="auth-title">Authentication Required</h2>
             <p id="auth-message">Enter your password to execute this command.</p>
@@ -518,5 +518,16 @@
 
         renderButtons();
     </script>
+<script>
+
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const am = document.getElementById('auth-modal');
+    const cm = document.getElementById('confirm-modal');
+    if (am && !am.classList.contains('hidden')) { if(typeof closeAuth==='function') closeAuth(); return; }
+    if (cm && !cm.classList.contains('hidden')) { if(typeof closeConfirm==='function') closeConfirm(); return; }
+});
+
+</script>
 </body>
 </html>

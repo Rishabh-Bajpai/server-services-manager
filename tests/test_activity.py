@@ -100,8 +100,8 @@ class TestExport:
         activity.log("test.action", target="x", status="ok", detail="hi", ip="1.2.3.4")
         csv = activity.export_csv(activity.list_entries())
         lines = csv.strip().split("\n")
-        # CSV writer uses \r\n on most platforms
-        header = lines[0].rstrip("\r")
+        # CSV writer uses \r\n on most platforms; header may be quoted and have BOM
+        header = lines[0].lstrip("\ufeff").rstrip("\r").replace('"', "")
         assert header == "timestamp,user,ip,action,target,status,detail"
         assert "test.action" in lines[1]
         assert "1.2.3.4" in lines[1]

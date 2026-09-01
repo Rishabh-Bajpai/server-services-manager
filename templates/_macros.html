@@ -211,9 +211,21 @@
             cancelBtn.focus();
         });
     };
-    window.uiAlert = function(title, desc) {
+     window.uiAlert = function(title, desc) {
         return window.uiConfirm(title, desc, false).then(function() {});
     };
+    // Close shared confirm/modal on Escape
+    document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Escape') return;
+        var overlay = document.getElementById('ui-modal');
+        if (overlay && overlay.classList.contains('open')) {
+            overlay.classList.remove('open');
+            // resolve pending promise if any is waiting - remove open will cause next uiConfirm to create new
+            // For already-open promise, we dispatch a cancel by clicking cancel
+            var cancelBtn = overlay.querySelector('.ui-btn');
+            if (cancelBtn) cancelBtn.click();
+        }
+    });
 </script>{% endraw %}<div id="ui-modal" class="ui-modal-overlay" onclick="if(event.target===this)this.classList.remove('open')">
     <div class="ui-modal-box">
         <div class="ui-modal-title"></div>

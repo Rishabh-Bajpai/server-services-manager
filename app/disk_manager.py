@@ -134,20 +134,20 @@ def _parse_du_lines(stdout: str, target: str) -> Tuple[int, List[Dict[str, Any]]
     home = home_dir()
     seen_total = False
     for raw in stdout.splitlines():
-        line = raw.strip()
-        if not line:
+        if not raw:
             continue
-        parts = line.split("\t", 1)
-        if len(parts) != 2:
+        size_str, sep, p = raw.partition("\t")
+        if not sep or not p:
             continue
-        size_str, p = parts
         try:
-            size = int(size_str)
+            size = int(size_str.strip())
         except ValueError:
             continue
         if not p:
             continue
-        p = p.rstrip(os.sep)
+        # Only strip trailing path separators, never spaces (names may legitimately contain them)
+        if p != os.sep:
+            p = p.rstrip(os.sep)
         if p == target:
             total = size
             seen_total = True

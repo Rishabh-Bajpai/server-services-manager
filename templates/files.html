@@ -539,9 +539,9 @@
             document.getElementById('upload-input').value = '';
         }
 
-        function deleteSelected() {
+        async function deleteSelected() {
             if (!selected.size) return;
-            if (!confirm(`Delete ${selected.size} item(s)?`)) return;
+            if (!await uiConfirm(`Delete ${selected.size} item(s)?`, 'This cannot be undone.', true)) return;
             const paths = [...selected].map(n => joinPath(currentPath, n));
             api('/api/files/bulk-delete', {
                 method: 'POST',

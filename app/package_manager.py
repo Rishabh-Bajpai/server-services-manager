@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import threading
 import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional
 
@@ -215,6 +216,7 @@ def _apt_security_package_names() -> set:
     """Return a set of package names that come from -security pocket.
 
     Uses ``apt list`` to look for packages whose repo ends in '-security'.
+    Matches any codename (noble, jammy, bookworm, etc.) generically.
     """
     try:
         proc = subprocess.run(
@@ -226,13 +228,22 @@ def _apt_security_package_names() -> set:
     out = set()
     for line in (proc.stdout or "").splitlines():
         line = line.strip()
-        if "/noble-security" not in line and "/noble-security" not in line.lower():
-            continue
         if "/" not in line:
             continue
-        name, _, _ = line.partition("/")
-        if name:
+        name, _, rest = line.partition("/")
+        if not name or not rest:
+            continue
+        # repo token is first word after slash, e.g. "noble-security ..."
+        repo = rest.strip().split()[0] if rest.strip() else ""
+        if not repo.lower().endswith("-security") and "-security" not in line.lower():
+            continue
+        # ensure repo actually ends with -security (avoid false positives like "not-security-related")
+        if repo.lower().endswith("-security"):
             out.add(name)
+        elif "-security" in line.lower():
+            # fallback for unusual apt output formats
+            if any(tok.lower().endswith("-security") for tok in rest.lower().split()):
+                out.add(name)
     return out
 
 
@@ -317,7 +328,7 @@ def install_packages(packages: List[str], manager: Optional[str] = None,
     ``on_done(job_id, success, output)`` callback is invoked.
     """
     mngr = manager or detect_manager()
-    job_id = f"job-{int(time.time() * 1000)}"
+    job_id = f"job-{int(time.time() * 1000)}-{uuid.uuid4().hex[:8]}"
     log_path = _create_log_path(job_id)
     job = {
         "id": job_id,

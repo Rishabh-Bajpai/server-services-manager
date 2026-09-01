@@ -389,11 +389,15 @@ def preview(path: str, max_bytes: Optional[int] = None) -> Dict[str, Any]:
         "truncated": truncated,
     }
     if kind == "text":
-        # Read up to cap bytes and decode as utf-8 with
-        # replacement so a single bad byte doesn't break the
-        # whole preview.
+        # Enforce _TEXT_MAX for inline text to avoid slurping huge logs
+        # into memory — files larger than 1 MB get a hint, not full content.
+        text_cap = min(cap, _TEXT_MAX)
+        if size > _TEXT_MAX:
+            out["too_large_for_inline_text"] = True
+            # still read at most text_cap for a small peek
+            out["truncated"] = True
         with open(target, "rb") as f:
-            data = f.read(cap)
+            data = f.read(text_cap if size > _TEXT_MAX else cap)
         out["encoding"] = "utf-8"
         try:
             out["content"] = data.decode("utf-8")
@@ -414,8 +418,12 @@ def preview(path: str, max_bytes: Optional[int] = None) -> Dict[str, Any]:
             out["too_large_for_inline_text"] = True
     elif kind in ("image", "pdf"):
         import base64
+        # Cap image/pdf inline preview to 10 MB to avoid 67 MB base64 strings
+        inline_cap = min(cap, 10 * 1024 * 1024)
+        if size > inline_cap:
+            out["truncated"] = True
         with open(target, "rb") as f:
-            data = f.read(cap)
+            data = f.read(inline_cap)
         out["data_b64"] = base64.b64encode(data).decode("ascii")
     else:
         # Video/audio/binary: just hand back metadata; the

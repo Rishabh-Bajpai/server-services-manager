@@ -613,6 +613,10 @@ def list_files():
         items = []
         for entry in os.scandir(target_dir):
             try:
+                # Block symlink escapes: don't list entries whose resolved target is outside $HOME
+                entry_real = os.path.realpath(entry.path)
+                if entry_real != base_dir and not entry_real.startswith(base_dir + os.sep):
+                    continue
                 # Safe access to file stats
                 is_dir = entry.is_dir()
                 stat = entry.stat()

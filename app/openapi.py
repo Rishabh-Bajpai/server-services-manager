@@ -37,7 +37,7 @@ logger = logging.getLogger("OpenAPI")
 # Description registry: keyed by (rule_path, methods_tuple)
 # ---------------------------------------------------------------------------
 
-_REGISTRY: Dict[tuple, dict] = {}
+_REGISTRY: Dict[Callable, dict] = {}
 _SECURITY_SCHEMES: List[dict] = []
 
 
@@ -56,7 +56,7 @@ def describe(
     """
 
     def wrap(fn: Callable) -> Callable:
-        _REGISTRY[id(fn)] = {
+        _REGISTRY[fn] = {
             "summary": summary,
             "description": description,
             "tag": tag,
@@ -222,7 +222,7 @@ def generate_spec(flask_app) -> dict:
             paths[openapi_path] = {}
 
         path_params = _path_parameters(rule)
-        meta = _REGISTRY.get(id(view_fn), {})
+        meta = _REGISTRY.get(view_fn, {})
         tag = meta.get("tag") or _tag_for_path(openapi_path)
         summary = meta.get("summary") or ""
         description = meta.get("description") or ""

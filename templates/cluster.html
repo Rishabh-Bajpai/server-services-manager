@@ -479,8 +479,8 @@
             el.classList.remove('hidden');
         }
 
-        function askRemove(peerId, label) {
-            if (!confirm(`Remove peer "${label}"?`)) return;
+        async function askRemove(peerId, label) {
+            if (!await uiConfirm(`Remove peer "${label}"?`, 'The peer will be removed from the cluster registry.', true)) return;
             api('/api/cluster/nodes/' + encodeURIComponent(peerId), { method: 'DELETE' })
                 .then(({ status, data }) => {
                     if (status === 200) {
@@ -559,7 +559,7 @@
         }
 
         document.addEventListener('keydown', e => {
-            if (e.key === 'Escape') closeAdd();
+            if (e.key === 'Escape') { closeAdd(); closeMdns(); }
         });
 
         lucide.createIcons();

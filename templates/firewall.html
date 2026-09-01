@@ -195,7 +195,7 @@
     </main>
 
     <!-- Add rule modal -->
-    <div id="add-modal" class="modal-backdrop hidden">
+    <div id="add-modal" onclick="if(event.target===this) closeAddRule()" class="modal-backdrop hidden">
         <div class="modal-card">
             <h3 class="text-lg font-semibold mb-3">Add firewall rule</h3>
             <div class="space-y-3 text-xs">
@@ -237,7 +237,7 @@
     </div>
 
     <!-- Default policy modal -->
-    <div id="default-modal" class="modal-backdrop hidden">
+    <div id="default-modal" onclick="if(event.target===this) closeDefaultModal()" class="modal-backdrop hidden">
         <div class="modal-card">
             <h3 class="text-lg font-semibold mb-3">Set default policy</h3>
             <div class="space-y-3 text-xs">
@@ -270,7 +270,7 @@
     </div>
 
     <!-- Toggle firewall modal -->
-    <div id="toggle-modal" class="modal-backdrop hidden">
+    <div id="toggle-modal" onclick="if(event.target===this) closeToggle()" class="modal-backdrop hidden">
         <div class="modal-card">
             <h3 class="text-lg font-semibold mb-2" id="toggle-title">Toggle firewall</h3>
             <p class="text-sm text-[var(--text-secondary)] mb-4" id="toggle-body"></p>
@@ -519,5 +519,15 @@
     lucide.createIcons();
     loadStatus();
     </script>
+<script>
+
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (typeof closeAddRule==='function') { const el=document.getElementById('add-modal'); if(el && !el.classList.contains('hidden')) { closeAddRule(); return; } }
+    if (typeof closeDefaultModal==='function') { const el=document.getElementById('default-modal'); if(el && !el.classList.contains('hidden')) { closeDefaultModal(); return; } }
+    if (typeof closeToggle==='function') { const el=document.getElementById('toggle-modal'); if(el && !el.classList.contains('hidden')) { closeToggle(); return; } }
+});
+
+</script>
 </body>
 </html>

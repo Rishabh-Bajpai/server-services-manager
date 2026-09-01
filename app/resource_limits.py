@@ -19,9 +19,10 @@ from typing import Dict, Optional, Tuple
 logger = logging.getLogger("ResourceLimits")
 
 # Sanitized form of the value to write to the drop-in file. Just
-# reject shell metacharacters — systemd's own parser will validate
-# the actual format (e.g. ``50%`` vs ``200M``).
-_BAD_CHARS = re.compile(r"[\n\r;|&`$<>\"']")
+# reject shell metacharacters and systemd comment/continuation chars —
+# systemd's own parser will validate the actual format (e.g. ``50%`` vs ``200M``).
+# Allowlist approach: keep % for cpu_quota, but reject # \ []{}()!*?~^ etc.
+_BAD_CHARS = re.compile(r"[\n\r;|&`$<>\"'(){}#\[\]\\!*?~^]")
 
 
 def _run_systemctl(args: list, password: Optional[str] = None) -> Tuple[int, str, str]:
