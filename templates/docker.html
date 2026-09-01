@@ -191,13 +191,19 @@
         .btn-danger:hover { background: rgba(239,68,68,0.25); }
 
         .table-wrap {
-            overflow-x: auto;
+            overflow-x: auto; overflow-y: auto;
+            max-height: min(520px, calc(100dvh - 280px));
+            min-height: 160px;
+            overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+            border-radius: 0.75rem;
         }
+        @media (max-width: 640px) { .table-wrap { max-height: calc(100dvh - 300px); } }
         .data-table {
-            width: 100%;
+            width: 100%; min-width: 640px;
             table-layout: fixed;
             border-collapse: collapse;
         }
+        .data-table thead th { position: sticky; top: 0; z-index: 1; }
         .data-table th {
             text-align: left;
             font-size: 0.6875rem;
