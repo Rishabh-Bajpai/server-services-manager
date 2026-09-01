@@ -90,7 +90,8 @@
         .sort-btn .sort-arrow { display: inline-block; margin-left: 2px; font-size: 10px; opacity: 0.3; }
         .sort-btn.sorted .sort-arrow { opacity: 1; color: var(--accent-blue); }
 
-        .chart-container { position: relative; height: 120px; }
+        .chart-container { position: relative; height: 120px; overflow: hidden; }
+        @media (max-width: 640px) { .chart-container { height: 100px; } }
     </style>
 </head>
 <body class="bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-screen">
@@ -278,22 +279,23 @@
         </div>
 
         <!-- Processes -->
-        <div class="card p-5 animate-fade-in" style="animation-delay: 0.3s">
-            <div class="flex items-center gap-2 mb-4">
+        <div class="card p-5 animate-fade-in overflow-hidden flex flex-col" style="animation-delay: 0.3s">
+            <div class="flex items-center gap-2 mb-4 shrink-0">
                 <div class="section-icon bg-[var(--accent-yellow)]/10">
                     <i data-lucide="list" class="w-4 h-4 text-[var(--accent-yellow)]"></i>
                 </div>
                 <span class="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Top Processes</span>
+                <span class="ml-auto text-[10px] text-[var(--text-muted)] font-mono hidden sm:inline">click header to sort</span>
             </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm text-left">
-                    <thead>
+            <div class="overflow-x-auto overflow-y-auto max-h-[420px] overscroll-contain rounded-lg border border-[var(--border-subtle)]">
+                <table class="w-full text-sm text-left min-w-[480px]">
+                    <thead class="sticky top-0 bg-[var(--bg-card)] z-10">
                         <tr class="text-[var(--text-muted)] text-xs uppercase border-b border-[var(--border-subtle)]">
-                            <th class="pb-2 font-semibold"><span class="sort-btn" data-col="pid" data-type="num">PID <span class="sort-arrow">▲</span></span></th>
-                            <th class="pb-2 font-semibold"><span class="sort-btn" data-col="name" data-type="str">Name <span class="sort-arrow">▲</span></span></th>
-                            <th class="pb-2 text-right font-semibold"><span class="sort-btn" data-col="cpu" data-type="num">CPU <span class="sort-arrow">▲</span></span></th>
-                            <th class="pb-2 text-right font-semibold"><span class="sort-btn" data-col="memory" data-type="num">MEM <span class="sort-arrow">▲</span></span></th>
-                            <th class="pb-2 font-semibold"><span class="sort-btn" data-col="status" data-type="str">State <span class="sort-arrow">▲</span></span></th>
+                            <th class="py-2.5 px-3 font-semibold whitespace-nowrap"><span class="sort-btn" data-col="pid" data-type="num">PID <span class="sort-arrow">▲</span></span></th>
+                            <th class="py-2.5 px-3 font-semibold min-w-[140px]"><span class="sort-btn" data-col="name" data-type="str">Name <span class="sort-arrow">▲</span></span></th>
+                            <th class="py-2.5 px-3 text-right font-semibold whitespace-nowrap"><span class="sort-btn" data-col="cpu" data-type="num">CPU <span class="sort-arrow">▲</span></span></th>
+                            <th class="py-2.5 px-3 text-right font-semibold whitespace-nowrap"><span class="sort-btn" data-col="memory" data-type="num">MEM <span class="sort-arrow">▲</span></span></th>
+                            <th class="py-2.5 px-3 font-semibold whitespace-nowrap"><span class="sort-btn" data-col="status" data-type="str">State <span class="sort-arrow">▲</span></span></th>
                         </tr>
                     </thead>
                     <tbody id="procs-body" class="font-mono text-xs"></tbody>
@@ -434,11 +436,11 @@
             const tbody = document.getElementById('procs-body');
             tbody.innerHTML = sorted.map(p => `
                 <tr class="proc-row border-b border-[var(--border-subtle)] last:border-0">
-                    <td class="py-2 text-[var(--text-muted)]">${p.pid}</td>
-                    <td class="py-2 text-[var(--text-primary)] truncate max-w-[120px] font-medium">${p.name}</td>
-                    <td class="py-2 text-right font-semibold ${p.cpu > 50 ? 'text-[var(--accent-red)]' : p.cpu > 20 ? 'text-[var(--accent-yellow)]' : 'text-[var(--text-secondary)]'}">${p.cpu.toFixed(1)}%</td>
-                    <td class="py-2 text-right text-[var(--text-secondary)]">${p.memory.toFixed(1)}%</td>
-                    <td class="py-2"><span class="status-badge ${p.status === 'running' ? 'bg-[var(--accent-green)]/10 text-[var(--accent-green)] border border-[var(--accent-green)]/20' : 'bg-white/5 text-[var(--text-muted)] border border-[var(--border-subtle)]'}">${p.status}</span></td>
+                    <td class="py-2.5 px-3 text-[var(--text-muted)]">${p.pid}</td>
+                    <td class="py-2.5 px-3 text-[var(--text-primary)] truncate max-w-[160px] sm:max-w-[200px] font-medium" title="${p.name}">${p.name}</td>
+                    <td class="py-2.5 px-3 text-right font-semibold ${p.cpu > 50 ? 'text-[var(--accent-red)]' : p.cpu > 20 ? 'text-[var(--accent-yellow)]' : 'text-[var(--text-secondary)]'}">${p.cpu.toFixed(1)}%</td>
+                    <td class="py-2.5 px-3 text-right text-[var(--text-secondary)]">${p.memory.toFixed(1)}%</td>
+                    <td class="py-2.5 px-3"><span class="status-badge ${p.status === 'running' ? 'bg-[var(--accent-green)]/10 text-[var(--accent-green)] border border-[var(--accent-green)]/20' : 'bg-white/5 text-[var(--text-muted)] border border-[var(--border-subtle)]'}">${p.status}</span></td>
                 </tr>
             `).join('');
         }
