@@ -89,7 +89,7 @@
             border: 1px solid var(--border-subtle);
             border-radius: 0.75rem; overflow: hidden;
         }
-        .jobs-table { width: 100%; min-width: 0; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+        .jobs-table { width: 100%; min-width: 640px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
         .jobs-table thead th {
             text-align: left; font-size: 0.6875rem; font-weight: 700;
             text-transform: uppercase; letter-spacing: 0.06em;
@@ -108,7 +108,8 @@
             vertical-align: middle;
         }
         .jobs-table tbody tr:last-child td { border-bottom: none; }
-        .table-scroll { max-height: calc(100vh - 360px); overflow-y: auto; overflow-x: auto; }
+        .table-scroll { max-height: min(560px, calc(100dvh - 300px)); min-height: 200px; overflow-y: auto; overflow-x: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+        @media (max-width: 640px) { .table-scroll { max-height: calc(100dvh - 340px); } }
 
         .toggle {
             position: relative; display: inline-block;
