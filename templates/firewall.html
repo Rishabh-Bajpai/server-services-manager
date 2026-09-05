@@ -235,6 +235,8 @@
                     <label class="block mb-1 text-[var(--text-muted)]">App password (for sudo)</label>
                     <input id="rule-password" type="password" class="text-input" placeholder="password">
                 </div>
+                <div id="rule-preview" class="rounded-lg border border-[var(--border-subtle)] p-2.5 font-mono text-[11px] text-[var(--text-secondary)]">Preview will appear here.</div>
+                <div id="rule-warn" class="hidden rounded-lg border border-red-500/40 bg-red-500/10 p-2.5 text-[11px] text-[var(--accent-red)]">Warning: this would deny inbound SSH (port 22) from anywhere — you could lock yourself out. Add a source IP or use reject/limit instead.</div>
             </div>
             <div class="flex gap-2 justify-end mt-4">
                 <button class="btn" onclick="closeAddRule()">Cancel</button>
@@ -430,6 +432,38 @@
 
     function openAddRule() {
         document.getElementById('add-modal').classList.remove('hidden');
+        previewRule();
+    }
+    let previewTimer = null;
+    ['rule-action','rule-port','rule-proto','rule-source'].forEach(id => {
+        document.getElementById(id).addEventListener('input', () => {
+            clearTimeout(previewTimer);
+            previewTimer = setTimeout(previewRule, 250);
+        });
+    });
+    function previewRule() {
+        const body = {
+            action: document.getElementById('rule-action').value,
+            port: document.getElementById('rule-port').value.trim(),
+            protocol: document.getElementById('rule-proto').value,
+            source: document.getElementById('rule-source').value.trim(),
+            direction: 'in',
+        };
+        if (!body.port) {
+            document.getElementById('rule-preview').textContent = 'Enter a port to preview.';
+            document.getElementById('rule-warn').classList.add('hidden');
+            return;
+        }
+        api('/api/firewall/rule-preview', { method: 'POST', body: JSON.stringify(body) })
+            .then(({ ok, data }) => {
+                if (!ok) {
+                    document.getElementById('rule-preview').textContent = data.error || 'Invalid rule';
+                    document.getElementById('rule-warn').classList.add('hidden');
+                    return;
+                }
+                document.getElementById('rule-preview').textContent = data.preview || '';
+                document.getElementById('rule-warn').classList.toggle('hidden', !data.lockout_warning);
+            });
     }
     function closeAddRule() {
         document.getElementById('add-modal').classList.add('hidden');

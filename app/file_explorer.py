@@ -302,6 +302,73 @@ def mime_guess(path: str) -> str:
     return mime or "application/octet-stream"
 
 
+# Editable MIME allowlist (borrowed from Laranode config/laranode.php).
+# Gates the in-browser editor so binaries can't be corrupted by a text save.
+# ``preview()`` kind=text is still the primary signal; this list is the
+# conservative server-side gate exposed via /api/files/editable-types.
+EDITABLE_MIME_TYPES = frozenset({
+    "text/plain",
+    "text/html",
+    "text/css",
+    "text/csv",
+    "text/javascript",
+    "application/javascript",
+    "application/x-javascript",
+    "application/json",
+    "application/xml",
+    "application/x-yaml",
+    "application/x-httpd-php",
+    "application/x-sh",
+    "application/x-sql",
+    "text/x-php",
+    "text/x-python",
+    "text/x-shellscript",
+    "text/x-sql",
+    "text/markdown",
+    "text/x-typescript",
+    "inode/x-empty",
+    "application/x-empty",
+})
+
+
+def is_editable_mime(mime: str) -> bool:
+    """Return True if ``mime`` is safe to open in the text editor."""
+    if not mime:
+        return False
+    m = mime.split(";")[0].strip().lower()
+    if m in EDITABLE_MIME_TYPES:
+        return True
+    # text/* is editable by default (covers text/plain, text/yaml, etc.).
+    return m.startswith("text/")
+
+
+def is_editable_path(path: str) -> bool:
+    """Return True if ``path`` looks editable by extension/MIME."""
+    if not path:
+        return False
+    ext = os.path.splitext(path)[1].lower()
+    if ext in _TEXT_EXTS:
+        return True
+    if ext in _IMAGE_EXTS or ext in _PDF_EXTS or ext in _VIDEO_EXTS or ext in _AUDIO_EXTS:
+        return False
+    return is_editable_mime(mime_guess(path))
+
+
+def resolve_api_path(path: str) -> str:
+    """Public wrapper for route handlers: resolve + chroot-check ``path``."""
+    return _resolve(path)
+
+
+def classify_api_path(path: str) -> str:
+    """Public wrapper for route handlers: classify an absolute path.
+
+    Note: peeks up to 8KB for null bytes when the extension is unknown,
+    so callers should treat this as a metadata read on a $HOME-chrooted
+    path, not a content oracle outside the chroot.
+    """
+    return _classify(path)
+
+
 def _classify(path: str) -> str:
     """Classify a file as text, image, pdf, video, audio, or binary.
 

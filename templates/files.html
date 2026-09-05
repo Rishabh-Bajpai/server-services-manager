@@ -544,19 +544,44 @@
             document.getElementById('upload-input').click();
         }
 
-        function doUpload(files) {
+        const UPLOAD_CHUNK_SIZE = 2 * 1024 * 1024; // 2MB — matches Laranode chunk pattern
+        async function uploadSingle(file, path) {
+            if (file.size <= UPLOAD_CHUNK_SIZE) {
+                const fd = new FormData();
+                fd.append('file', file);
+                fd.append('path', path);
+                const r = await fetch('/api/files/upload', { method: 'POST', body: fd, credentials: 'same-origin' });
+                const j = await r.json();
+                if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+                return j.filename || file.name;
+            }
+            const totalChunks = Math.ceil(file.size / UPLOAD_CHUNK_SIZE);
+            for (let i = 0; i < totalChunks; i++) {
+                const chunk = file.slice(i * UPLOAD_CHUNK_SIZE, (i + 1) * UPLOAD_CHUNK_SIZE);
+                const fd = new FormData();
+                fd.append('file', chunk, file.name + '.part');
+                fd.append('path', path);
+                fd.append('chunkIndex', String(i));
+                fd.append('totalChunks', String(totalChunks));
+                fd.append('originalName', file.name);
+                const r = await fetch('/api/files/upload', { method: 'POST', body: fd, credentials: 'same-origin' });
+                const j = await r.json();
+                if (!r.ok) throw new Error((j.files && j.files[0] && j.files[0].error) || j.error || ('HTTP ' + r.status));
+            }
+            return file.name;
+        }
+        async function doUpload(files) {
             if (!files || !files.length) return;
-            const fd = new FormData();
-            for (const f of files) fd.append('file', f);
-            fd.append('path', currentPath);
-            fetch('/api/files/upload', {
-                method: 'POST', body: fd, credentials: 'same-origin',
-            }).then(r => r.json().then(j => ({ status: r.status, data: j })))
-              .then(({ status, data }) => {
-                  if (status >= 400) { toast(data.error || 'HTTP ' + status, 'error'); return; }
-                  toast('Uploaded ' + (data.filename || files[0].name), 'success');
-                  loadDir(currentPath);
-              });
+            try {
+                for (const f of files) {
+                    toast('Uploading ' + f.name + (f.size > UPLOAD_CHUNK_SIZE ? ' (chunked)…' : '…'), 'info', 2500);
+                    const name = await uploadSingle(f, currentPath);
+                    toast('Uploaded ' + name, 'success');
+                }
+                loadDir(currentPath);
+            } catch (e) {
+                toast(e.message || 'upload failed', 'error');
+            }
             document.getElementById('upload-input').value = '';
         }
 

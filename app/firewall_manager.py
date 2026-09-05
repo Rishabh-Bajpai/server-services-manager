@@ -499,6 +499,57 @@ def set_default(policy: str, direction: str, password: str) -> dict:
     return {"ok": True, "output": out or f"default {direction} = {policy}"}
 
 
+def build_rule_spec(
+    action: str = "allow",
+    port: str = "",
+    protocol: str = "tcp",
+    source: str = "",
+    direction: str = "in",
+) -> dict:
+    """Validate + normalize a rule form into a spec dict (Laranode-inspired).
+
+    Mirrors ``BuildUfwRuleSpecAction`` (direction/proto/from/to/port) but
+    returns a structured spec plus a human preview string and an SSH
+    lockout warning flag. Never touches the system; raises FirewallError
+    with code=invalid on bad input so the API can return 400.
+    """
+    act = (action or "").strip().lower()
+    if act not in ("allow", "deny", "reject", "limit"):
+        raise FirewallError(f"invalid action: {action!r}", code="invalid")
+    prt = str(port or "").strip()
+    if not prt:
+        raise FirewallError("port is required", code="invalid")
+    # Accept "22", "22/tcp", "8000:9000". Reject junk early.
+    prt_core = prt.split("/")[0]
+    if ":" in prt_core:
+        lo, _, hi = prt_core.partition(":")
+        if not (lo.isdigit() and hi.isdigit() and 1 <= int(lo) <= 65535 and 1 <= int(hi) <= 65535):
+            raise FirewallError(f"invalid port range: {port!r}", code="invalid")
+    elif not (prt_core.isdigit() and 1 <= int(prt_core) <= 65535):
+        # Also allow service names like "http"? No — require numeric to
+        # avoid ufw app-profile ambiguity. Keep strict for safety.
+        raise FirewallError(f"invalid port: {port!r} (1-65535)", code="invalid")
+    proto = (protocol or "").strip().lower() or "tcp"
+    if proto not in ("tcp", "udp", "any"):
+        raise FirewallError(f"invalid protocol: {protocol!r}", code="invalid")
+    src = (source or "").strip()
+    if src.lower() in ("", "any", "anywhere"):
+        src = ""
+    direc = (direction or "in").strip().lower()
+    if direc not in ("in", "out"):
+        raise FirewallError(f"invalid direction: {direction!r}", code="invalid")
+    spec = {"action": act, "port": prt_core, "protocol": proto, "source": src, "direction": direc}
+    # Human preview, e.g. "deny in from any to any port 22/tcp".
+    preview = (
+        f"{act} {direc} proto {proto} from {src or 'any'} to any port {prt_core}"
+    )
+    # SSH lockout heuristic: denying inbound 22 without source restriction.
+    lockout_warning = (
+        act in ("deny", "reject") and direc == "in" and prt_core == "22" and not src
+    )
+    return {"spec": spec, "preview": preview, "lockout_warning": lockout_warning}
+
+
 def add_rule(spec: dict, password: str) -> dict:
     det = is_available()
     if not det["available"]:
