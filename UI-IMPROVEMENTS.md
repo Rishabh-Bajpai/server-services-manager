@@ -1246,7 +1246,37 @@ classes. Same latent bug fixed proactively in backups
 screenshot, since classList checks are what let this slip
 through the first time. Secrets clean.
 
-### Next route: (to be picked — `/backups` is next in line)
+### Route 12 — Backups (`/backups`)  [x]
+
+Files: `templates/backups.html` (only file changed; backend
+validation, user-level units, and routes already sound —
+names are charset-restricted so the inline handlers are
+safe, delete needs no password by design).
+
+1. **Content width.** Same narrow `max-w-7xl` wrapper; now
+   `w-[90%]` capped at 1760px. Measured live: 90%.
+2. **Table height.** Dropped the 520px cap; offset measured
+   live (top 213px → `100dvh - 260px`).
+3. **Pause-live.** The 30s re-render could shift rows
+   mid-click on the run/enable/delete buttons. Live/Pause
+   toggle in the subheader freezes ticks; resuming
+   re-fetches. Verified label round-trip.
+4. **Load failure feedback.** A failed fetch previously left
+   the skeleton rows forever; now toasts + shows a retry
+   empty-state.
+5. **Create hardening.** Password field wiped on submit and
+   close; Create button disables during the POST so
+   double-click can't fire duplicate creates.
+
+**Verified live** (zero JS errors, `node --check` clean):
+full round trip with a throwaway job — create modal opens
+(computed `flex`), type switch swaps labels, job created
+and rendered with status, confirm modal titled correctly,
+deleted with zero jobs and zero leftover unit files or
+backups.json entries. Full suite: 837 passed (pre-existing
+alert_log failure excluded); secrets clean.
+
+### Next route: (to be picked — `/disk` is next in line)
 
 ---
 

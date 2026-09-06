@@ -83,10 +83,13 @@
             font-size: 0.8125rem; outline: none; width: 100%;
         }
         .select-input:focus, .text-input:focus { border-color: var(--accent-blue); }
+        /* Offset measured live: table top sits ~213px below the
+           viewport top, so this ends the table ~47px above the
+           bottom edge. */
         .table-wrap {
             overflow-x: auto;
             overflow-y: auto;
-            max-height: min(520px, calc(100dvh - 300px));
+            max-height: calc(100dvh - 260px);
             overscroll-behavior: contain;
         }
         .data-table { width: 100%; min-width: 640px; table-layout: fixed; border-collapse: collapse; }
@@ -163,6 +166,10 @@
         current='/backups',
     ) }}
     {% set subheader %}
+        <button id="live-btn" class="btn" onclick="toggleLive()" title="Pause live auto-refresh (freezes rows so clicks don't shift)">
+            <i data-lucide="pause" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline" id="live-btn-label">Live</span>
+        </button>
         <button class="btn btn-primary" onclick="openCreate()">
             <i data-lucide="plus" class="w-3.5 h-3.5"></i>
             <span class="hidden sm:inline">New backup</span>
@@ -170,7 +177,7 @@
     {% endset %}
     {{ ui.subheader(subheader) }}
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+    <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6 space-y-4">
         <section class="panel-card">
             <div class="p-4 border-b border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] space-y-2">
                 <div>Local-disk backups via systemd timers. Each job runs as a oneshot
@@ -418,6 +425,16 @@
         return `${month}mo ago`;
     }
 
+    let livePaused = false;
+    function toggleLive() {
+        livePaused = !livePaused;
+        document.getElementById('live-btn-label').textContent = livePaused ? 'Paused' : 'Live';
+        document.getElementById('live-btn').title = livePaused
+            ? 'Resume live auto-refresh'
+            : 'Pause live auto-refresh (freezes rows so clicks don\'t shift)';
+        if (!livePaused) load();
+    }
+
     function load() {
         api('/api/backups').then(async ({ data }) => {
             jobs = data.jobs || [];
@@ -432,6 +449,10 @@
                 } catch (e) { /* leave j.timer undefined */ }
             }));
             render();
+        }).catch(err => {
+            toast('failed to load backups: ' + (err && err.message ? err.message : err), 'error');
+            document.getElementById('jobs-tbody').innerHTML =
+                '<tr><td colspan="8"><div class="empty-state">Could not reach the server. Click New backup or wait for the next refresh.</div></td></tr>';
         });
     }
 
@@ -453,10 +474,13 @@
     }
     function closeCreate() {
         hideModal('create-modal');
+        document.getElementById('f-password').value = '';
     }
     function submitCreate() {
         const preset = document.getElementById('f-schedule-preset').value;
         const custom = document.getElementById('f-schedule').value;
+        const password = document.getElementById('f-password').value;
+        document.getElementById('f-password').value = '';
         const body = {
             name: document.getElementById('f-name').value.trim(),
             type: document.getElementById('f-type').value,
@@ -464,10 +488,12 @@
             destination: document.getElementById('f-dest').value.trim(),
             schedule: preset === 'custom' ? custom : preset,
             retention: parseInt(document.getElementById('f-retention').value, 10) || 7,
-            password: document.getElementById('f-password').value,
+            password: password,
         };
         if (!body.name) { toast('name is required', 'error'); return; }
         if (!body.schedule) { toast('schedule is required', 'error'); return; }
+        const btns = document.querySelectorAll('#create-modal .btn-primary');
+        btns.forEach(b => b.disabled = true);
         api('/api/backups', { method: 'POST', body: JSON.stringify(body) })
             .then(({ ok, data }) => {
                 if (!ok) { toast(data.error || 'create failed', 'error'); return; }
@@ -475,7 +501,8 @@
                 else toast('backup job created', 'success');
                 closeCreate();
                 load();
-            });
+            })
+            .finally(() => btns.forEach(b => b.disabled = false));
     }
 
     async function toggleJob(name, enable) {
@@ -529,7 +556,7 @@
 
     lucide.createIcons();
     load();
-    setInterval(load, 30000);
+    setInterval(() => { if (!livePaused) load(); }, 30000);
     </script>
 <script>
 
