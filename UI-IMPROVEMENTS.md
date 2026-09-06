@@ -1113,6 +1113,22 @@ systemd with a unit-specific empty state when no managed
 service exists (this host). Switching kinds updates the
 empty-state guidance. Verified live, zero JS errors.
 
+### Route 10 follow-up II — subheader regroup  [x]
+
+User feedback: eight flat labeled controls in a row were
+unreadable. The subheader is now three bordered clusters —
+**Log source** (kind + name + contextual storage/priority),
+**Filter lines** (match text + since + until), **Show**
+(page size + Search). Per-control labels dropped in favor
+of placeholders (`managed service name` vs
+`e.g. nginx.service` swaps with kind) plus `title`
+tooltips; priority `info` relabeled `info+` (it's a minimum,
+not exact). Contextual selects moved inside the source
+cluster via a `setWrap()` helper (the old `hidden`-class
+toggle alone couldn't work with the new inline display).
+Verified live with screenshot + kind-switch + search (29
+lines), zero JS errors.
+
 ### Next route: (to be picked — `/firewall` is next in line)
 
 ---

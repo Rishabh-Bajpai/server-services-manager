@@ -129,6 +129,20 @@
         .ui-subheader .text-input,
         .ui-subheader .select-input,
         .ui-subheader .search-input { flex-shrink: 0; }
+
+        .ctl-group {
+            display: flex; flex-direction: column; gap: 0.25rem;
+            padding: 0.375rem 0.625rem 0.5rem;
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.625rem;
+            background: rgba(255,255,255,0.015);
+        }
+        .ctl-group-label {
+            font-size: 0.625rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.08em;
+            color: var(--text-muted);
+        }
+        .ctl-group .text-input, .ctl-group .select-input { width: auto; }
     </style>
 </head>
 <body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
@@ -143,65 +157,59 @@
         current='/logs',
     ) }}
     {% set subheader %}
-        <div class="flex items-center gap-1.5">
-            <label class="block text-[0.625rem] uppercase tracking-wider text-[var(--text-muted)]">Source</label>
-            <select id="kind" class="select-input" style="max-width:10rem" onchange="onKindChange()">
-                <option value="program">Managed program</option>
-                <option value="systemd">Systemd unit</option>
-            </select>
+        <div class="ctl-group">
+            <span class="ctl-group-label">Log source</span>
+            <div class="flex items-center gap-1.5 flex-wrap">
+                <select id="kind" class="select-input" style="max-width:10rem" onchange="onKindChange()" title="Where to search">
+                    <option value="program">Managed program</option>
+                    <option value="systemd">Systemd unit</option>
+                </select>
+                <input id="name" type="text" class="text-input" style="max-width:11rem" placeholder="e.g. api or nginx.service" title="Service or unit name" onkeydown="if(event.key==='Enter')runSearch(true)">
+                <span id="source-wrap" class="hidden items-center gap-1.5" style="display:none">
+                    <select id="source" class="select-input" style="max-width:10rem" title="Which log storage to search">
+                        <option value="all">All (memory + disk)</option>
+                        <option value="memory">In-memory only</option>
+                        <option value="disk">Persisted only</option>
+                    </select>
+                </span>
+                <span id="priority-wrap" class="hidden items-center gap-1.5" style="display:none">
+                    <select id="priority" class="select-input" style="max-width:8rem" title="Minimum journal priority">
+                        <option value="all">All priorities</option>
+                        <option value="emerg">emerg</option>
+                        <option value="alert">alert</option>
+                        <option value="crit">crit</option>
+                        <option value="err">err</option>
+                        <option value="warning">warning</option>
+                        <option value="notice">notice</option>
+                        <option value="info" selected>info+</option>
+                        <option value="debug">debug</option>
+                    </select>
+                </span>
+            </div>
         </div>
-        <div class="flex items-center gap-1.5">
-            <label class="block text-[0.625rem] uppercase tracking-wider text-[var(--text-muted)]">Name</label>
-            <input id="name" type="text" class="text-input" style="max-width:11rem" placeholder="e.g. api or nginx.service" onkeydown="if(event.key==='Enter')runSearch(true)">
+        <div class="ctl-group">
+            <span class="ctl-group-label">Filter lines</span>
+            <div class="flex items-center gap-1.5 flex-wrap">
+                <input id="q" type="text" class="text-input" style="max-width:12rem" placeholder="match text…" title="Substring to match in each line" onkeydown="if(event.key==='Enter')runSearch(true)">
+                <input id="since" type="text" class="text-input" style="max-width:7rem" placeholder="since: 5m, 1h, 2d" title="Only lines at or after this time" onkeydown="if(event.key==='Enter')runSearch(true)">
+                <input id="until" type="text" class="text-input" style="max-width:7rem" placeholder="until (optional)" title="Only lines at or before this time" onkeydown="if(event.key==='Enter')runSearch(true)">
+            </div>
         </div>
-        <div class="flex items-center gap-1.5">
-            <label class="block text-[0.625rem] uppercase tracking-wider text-[var(--text-muted)]">Since</label>
-            <input id="since" type="text" class="text-input" style="max-width:7rem" placeholder="5m, 1h, 2d" onkeydown="if(event.key==='Enter')runSearch(true)">
+        <div class="ctl-group">
+            <span class="ctl-group-label">Show</span>
+            <div class="flex items-center gap-1.5 flex-wrap">
+                <select id="limit" class="select-input" style="max-width:6rem" title="Lines per page">
+                    <option>50</option>
+                    <option selected>200</option>
+                    <option>500</option>
+                    <option>2000</option>
+                </select>
+                <button id="btn-search" class="btn btn-primary" onclick="runSearch(true)">
+                    <i data-lucide="search" class="w-3.5 h-3.5"></i>
+                    <span class="hidden sm:inline">Search</span>
+                </button>
+            </div>
         </div>
-        <div class="flex items-center gap-1.5">
-            <label class="block text-[0.625rem] uppercase tracking-wider text-[var(--text-muted)]">Until</label>
-            <input id="until" type="text" class="text-input" style="max-width:7rem" placeholder="optional" onkeydown="if(event.key==='Enter')runSearch(true)">
-        </div>
-        <div class="flex items-center gap-1.5">
-            <label class="block text-[0.625rem] uppercase tracking-wider text-[var(--text-muted)]">Search</label>
-            <input id="q" type="text" class="text-input" style="max-width:12rem" placeholder="substring to match in each line" onkeydown="if(event.key==='Enter')runSearch(true)">
-        </div>
-        <div id="source-wrap" class="hidden flex items-center gap-1.5">
-            <label class="block text-[0.625rem] uppercase tracking-wider text-[var(--text-muted)]">Storage</label>
-            <select id="source" class="select-input" style="max-width:10rem">
-                <option value="all">All (memory + disk)</option>
-                <option value="memory">In-memory only</option>
-                <option value="disk">Persisted only</option>
-            </select>
-        </div>
-        <div id="priority-wrap" class="hidden flex items-center gap-1.5">
-            <label class="block text-[0.625rem] uppercase tracking-wider text-[var(--text-muted)]">Priority</label>
-            <select id="priority" class="select-input" style="max-width:8rem">
-                <option value="all">All</option>
-                <option value="emerg">emerg</option>
-                <option value="alert">alert</option>
-                <option value="crit">crit</option>
-                <option value="err">err</option>
-                <option value="warning">warning</option>
-                <option value="notice">notice</option>
-                <option value="info" selected>info</option>
-                <option value="debug">debug</option>
-            </select>
-        </div>
-        <div class="flex items-center gap-1.5">
-            <label class="block text-[0.625rem] uppercase tracking-wider text-[var(--text-muted)]">Page</label>
-            <select id="limit" class="select-input" style="max-width:6rem">
-                <option>50</option>
-                <option selected>200</option>
-                <option>500</option>
-                <option>2000</option>
-            </select>
-        </div>
-        <span class="flex-1"></span>
-        <button id="btn-search" class="btn btn-primary" onclick="runSearch(true)">
-            <i data-lucide="search" class="w-3.5 h-3.5"></i>
-            <span class="hidden sm:inline">Search</span>
-        </button>
     {% endset %}
     {{ ui.subheader(subheader) }}
 
@@ -283,10 +291,18 @@
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
+    function setWrap(id, show) {
+        const el = document.getElementById(id);
+        el.classList.toggle('hidden', !show);
+        el.style.display = show ? 'inline-flex' : 'none';
+    }
     function onKindChange() {
         const kind = document.getElementById('kind').value;
-        document.getElementById('source-wrap').classList.toggle('hidden', kind !== 'program');
-        document.getElementById('priority-wrap').classList.toggle('hidden', kind !== 'systemd');
+        setWrap('source-wrap', kind === 'program');
+        setWrap('priority-wrap', kind === 'systemd');
+        document.getElementById('name').placeholder = kind === 'program'
+            ? 'managed service name'
+            : 'e.g. nginx.service';
         const empty = document.getElementById('log-empty');
         if (empty) {
             empty.textContent = kind === 'program'
