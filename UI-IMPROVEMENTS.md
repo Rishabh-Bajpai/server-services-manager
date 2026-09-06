@@ -1198,6 +1198,35 @@ shared password modal; limited-status banner when sudo
 expires. Full suite: 837 passed (pre-existing alert_log
 failure excluded); secrets clean.
 
+### Route 11 follow-up — buttons up, height fit, policy
+explained  [x]
+
+User feedback: table overflowed the page; "default policy"
+unexplained; enable/disable/reload/policy belong in the
+subheader.
+
+1. **Height.** Measured the overhang live (table top 370px
+   vs a 300px offset → 70px past the viewport). Moving the
+   buttons up saved ~54px (top now 316px); offset set to
+   `100dvh - 340px`, verified ending exactly 24px above the
+   viewport bottom with ~zero page scroll.
+2. **Actions moved.** Enable/Disable/Reload/Default policy
+   now live in the subheader with tooltips, toggled by
+   `setActionButtons()` (enable⇄disable by state, policy
+   ufw-only, all hidden when unavailable).
+3. **Latent CSS bug exposed by the move:** Tailwind's
+   `.hidden` loses to the custom `.btn { display:
+   inline-flex }` depending on stylesheet order, so both
+   Enable and Disable showed at once. Fixed deterministically
+   with `.btn.hidden` / `.modal-backdrop.hidden`
+   double-class rules (verified `display:none` live).
+4. **Default policy explained** in the modal (fallback for
+   unmatched traffic + the typical deny-in/allow-out
+   setup).
+
+Verified live with screenshots (zero JS errors,
+`node --check` clean); secrets clean.
+
 ### Next route: (to be picked — `/backups` is next in line)
 
 ---

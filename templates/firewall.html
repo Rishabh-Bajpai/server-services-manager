@@ -77,6 +77,10 @@
         }
         .btn:hover { background: var(--border-subtle); }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        /* Double-class on purpose: beats both .btn and Tailwind's
+           .hidden regardless of stylesheet order. */
+        .btn.hidden { display: none; }
+        .modal-backdrop.hidden { display: none; }
         .btn-primary { background: var(--accent-blue); color: #061a30; border-color: var(--accent-blue); }
         .btn-primary:hover { background: #60a5fa; }
         .btn-danger { background: rgba(239,68,68,0.15); color: var(--accent-red); border-color: rgba(239,68,68,0.3); }
@@ -101,7 +105,10 @@
             background: var(--bg-secondary);
             border-bottom: 1px solid var(--border-subtle);
         }
-        .table-scroll { max-height: calc(100dvh - 300px); min-height: 200px; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+        /* Offset measured live: table top sits ~316px below the
+           viewport top, so this ends the table ~24px above the
+           bottom edge instead of overflowing the page. */
+        .table-scroll { max-height: calc(100dvh - 340px); min-height: 200px; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
         .data-table td {
             padding: 0.625rem 0.875rem;
             border-bottom: 1px solid var(--border-subtle);
@@ -160,11 +167,27 @@
         current='/firewall',
     ) }}
     {% set subheader %}
-        <button class="btn" onclick="loadStatus()">
+        <button class="btn" onclick="loadStatus()" title="Reload status and rules from the firewall">
             <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
             <span class="hidden sm:inline">Refresh</span>
         </button>
-        <button id="btn-add-rule" class="btn btn-primary" onclick="openAddRule()">
+        <button id="btn-enable" class="btn btn-success hidden" onclick="openToggle('enable')" title="Turn the firewall on (rules take effect immediately)">
+            <i data-lucide="power" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Enable</span>
+        </button>
+        <button id="btn-disable" class="btn btn-danger hidden" onclick="openToggle('disable')" title="Turn the firewall off (all filtering stops)">
+            <i data-lucide="power" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Disable</span>
+        </button>
+        <button id="btn-reload" class="btn hidden" onclick="apiReload()" title="Re-apply the current ruleset without changing it">
+            <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Reload</span>
+        </button>
+        <button id="btn-default" class="btn hidden" onclick="openDefault()" title="Change the fallback action for traffic that matches no rule">
+            <i data-lucide="settings" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Default policy</span>
+        </button>
+        <button id="btn-add-rule" class="btn btn-primary" onclick="openAddRule()" title="Add an allow/deny rule for a port">
             <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add rule
         </button>
     {% endset %}
@@ -250,6 +273,7 @@
     <div id="default-modal" onclick="if(event.target===this) closeDefaultModal()" class="modal-backdrop hidden">
         <div class="modal-card">
             <h3 class="text-lg font-semibold mb-3">Set default policy</h3>
+            <p class="text-xs text-[var(--text-secondary)] mb-3">The fallback action for traffic that matches <span class="text-[var(--text-primary)] font-semibold">none</span> of your rules. Typical setup: <span class="font-mono">deny</span> incoming (block everything not explicitly allowed) and <span class="font-mono">allow</span> outgoing.</p>
             <div class="space-y-3 text-xs">
                 <div>
                     <label class="block mb-1 text-[var(--text-muted)]">Direction</label>
@@ -336,7 +360,18 @@
             </div>`;
         document.getElementById('status-cards').innerHTML = '';
         document.getElementById('rules-tbody').innerHTML = '<tr><td colspan="6"><div class="empty-state">No firewall available</div></td></tr>';
+        setActionButtons(null);
         lucide.createIcons();
+    }
+
+    function setActionButtons(state) {
+        // state may be null (backend unavailable) → hide everything
+        // except Refresh / Add rule.
+        const ok = !!state;
+        document.getElementById('btn-enable').classList.toggle('hidden', !(ok && !state.enabled));
+        document.getElementById('btn-disable').classList.toggle('hidden', !(ok && state.enabled));
+        document.getElementById('btn-reload').classList.toggle('hidden', !ok);
+        document.getElementById('btn-default').classList.toggle('hidden', !(ok && state.backend === 'ufw'));
     }
 
     function render(state) {
@@ -344,6 +379,7 @@
         backendBadge.textContent = state.backend;
         backendBadge.classList.remove('hidden');
         document.getElementById('btn-add-rule').classList.toggle('hidden', state.backend !== 'ufw');
+        setActionButtons(state);
         // Status cards
         const cards = document.getElementById('status-cards');
         const enabledClass = state.enabled ? 'badge-green' : 'badge-red';
@@ -364,15 +400,6 @@
             <div class="status-card">
                 <div class="label">Rules</div>
                 <div class="value">${(state.rules || []).length}</div>
-            </div>
-            <div class="col-span-full flex flex-wrap gap-2 mt-1">
-                ${state.enabled
-                    ? '<button class="btn btn-danger" onclick="openToggle(\'disable\')"><i data-lucide="power" class="w-3.5 h-3.5"></i> Disable</button>'
-                    : '<button class="btn btn-success" onclick="openToggle(\'enable\')"><i data-lucide="power" class="w-3.5 h-3.5"></i> Enable</button>'}
-                <button class="btn" onclick="apiReload()"><i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> Reload</button>
-                ${state.backend === 'ufw'
-                    ? '<button class="btn" onclick="openDefault()"><i data-lucide="settings" class="w-3.5 h-3.5"></i> Set default policy</button>'
-                    : ''}
             </div>`;
         // Rules table
         const tbody = document.getElementById('rules-tbody');
@@ -435,6 +462,7 @@
             toast('failed to load firewall status: ' + (err && err.message ? err.message : err), 'error');
             document.getElementById('status-cards').innerHTML = '';
             document.getElementById('rules-tbody').innerHTML = '<tr><td colspan="6"><div class="empty-state">Could not reach the server. Click Refresh to retry.</div></td></tr>';
+            setActionButtons(null);
         });
     }
 
