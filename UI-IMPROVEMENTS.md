@@ -802,7 +802,35 @@ mirror already-tested single-action calls. (One syntax slip
 — a dropped `});` in `loadImages` — was caught by the
 console-error check and fixed before verification.)
 
-### Next route: (to be picked — `/docker` done)
+### Route 6 — Cron (`/cron`)  [x]
+
+Files: `templates/cron.html` (only file changed; no backend
+changes).
+
+1. **Content width.** Same narrow `max-w-7xl` wrapper; now
+   `w-[90%]` capped at 1760px. Measured live: 90%, table fits
+   with no horizontal scroll (9 jobs).
+
+2. **Table height cap.** `.table-scroll` had `max-height:
+   min(560px, …)`; dropped the 560px cap so the list extends to
+   near the viewport bottom.
+
+3. **Enable/disable toggle was inverted (real bug).** The
+   `change` event fires AFTER the checkbox flips, so
+   `cb.checked` is already the desired end state — but the code
+   read `!cb.checked` as the target. Unchecking an enabled job
+   opened an "Enable cron job" dialog and sent `enabled: true`
+   to the server (title, payload, and toast all backwards).
+   Now uses `cb.checked` as `wantEnabled`. Verified live:
+   uncheck → "Disable cron job" modal with the visual
+   reverted; no jobs are disabled on this host so the reverse
+   direction was verified by code symmetry (single boolean
+   path). Nothing was executed (modal cancelled).
+
+**Verified live** (Playwright, zero JS errors, `node --check`
+clean).
+
+### Next route: (to be picked — `/cron` done)
 
 ---
 

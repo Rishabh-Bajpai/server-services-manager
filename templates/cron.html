@@ -108,7 +108,7 @@
             vertical-align: middle;
         }
         .jobs-table tbody tr:last-child td { border-bottom: none; }
-        .table-scroll { max-height: min(560px, calc(100dvh - 300px)); min-height: 200px; overflow-y: auto; overflow-x: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+        .table-scroll { max-height: calc(100dvh - 300px); min-height: 200px; overflow-y: auto; overflow-x: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
         @media (max-width: 640px) { .table-scroll { max-height: calc(100dvh - 340px); } }
 
         .toggle {
@@ -263,7 +263,7 @@
         </button>
     {% endset %}
     {{ ui.subheader(subheader) }}
-<main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+<main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6">
         <!-- Schedule validator -->
         <div class="mb-4 p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-subtle)] animate-fade-in">
             <div class="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -473,16 +473,18 @@
         // ----- Toggle (enable/disable) -----
         function onToggle(event) {
             const cb = event.target;
-            // Revert visual until confirmed
-            const wasChecked = !cb.checked;
-            cb.checked = wasChecked;
+            // The change event fires AFTER the flip, so cb.checked is
+            // already the state the user clicked TO — that is the
+            // desired end state. Revert the visual until confirmed.
+            const wantEnabled = cb.checked;
+            cb.checked = !wantEnabled;
             pendingToggle = {
                 source: cb.dataset.source,
                 line_number: parseInt(cb.dataset.line, 10),
-                enabled: wasChecked,  // we want it to BE in the state the user clicked TO
+                enabled: wantEnabled,
                 cb: cb,
             };
-            openAuth(wasChecked ? 'Enable cron job' : 'Disable cron job');
+            openAuth(wantEnabled ? 'Enable cron job' : 'Disable cron job');
         }
 
         function openAuth(title) {
