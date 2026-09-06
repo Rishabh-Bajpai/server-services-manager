@@ -425,6 +425,10 @@
             <div class="panel-card overflow-hidden">
                 <div class="p-4 border-b border-[var(--border-subtle)] flex items-center gap-3 flex-wrap">
                     <span class="text-sm font-semibold">Compose stacks</span>
+                    <div class="relative flex-1 min-w-[10rem]">
+                        <i data-lucide="search" class="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+                        <input id="stack-search" type="text" class="search-input" placeholder="Filter stacks or containers..." oninput="renderStacks()">
+                    </div>
                     <span id="stack-count" class="text-xs text-[var(--text-muted)] font-mono whitespace-nowrap"></span>
                     <span class="flex-1"></span>
                     <button class="btn" onclick="setAllStacks(true)" title="Expand all stacks"><i data-lucide="chevrons-down" class="w-3.5 h-3.5"></i> Expand</button>
@@ -1154,10 +1158,8 @@
         return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
     }
     // Expanded/collapsed state per stack (in-memory; resets on reload).
-    // On first render, stacks that need attention (partially running)
-    // start expanded so problems are visible immediately.
+    // All stacks start collapsed.
     const expandedStacks = new Set();
-    let stacksInitDone = false;
     function setAllStacks(open) {
         const stacks = stackList();
         expandedStacks.clear();
@@ -1176,18 +1178,19 @@
     }
     function renderStacks() {
         const list = document.getElementById('stacks-list');
-        const stacks = stackList();
-        if (!stacksInitDone) {
-            stacksInitDone = true;
-            stacks.forEach(([name, items]) => {
-                const running = items.filter(c => c.is_running).length;
-                if (running > 0 && running < items.length) expandedStacks.add(name);
-            });
-        }
+        const q = (document.getElementById('stack-search').value || '').toLowerCase();
+        const stacks = stackList().map(([name, items]) => {
+            if (!q) return [name, items];
+            if (name.toLowerCase().includes(q)) return [name, items];
+            const hits = items.filter(c => c.name.toLowerCase().includes(q) ||
+                (c.image || '').toLowerCase().includes(q));
+            return hits.length ? [name, hits] : null;
+        }).filter(Boolean);
         document.getElementById('stack-count').textContent = stacks.length + ' stacks';
         updateViewCount();
         if (!stacks.length) {
-            list.innerHTML = '<div class="empty-state">No containers</div>';
+            const filtering = (document.getElementById('stack-search').value || '').trim() !== '';
+            list.innerHTML = `<div class="empty-state">${filtering ? 'No stacks match the filter.' : 'No containers'}</div>`;
             return;
         }
         list.innerHTML = stacks.map(([name, items]) => {

@@ -783,8 +783,11 @@ Frontend (`templates/docker.html` only):
     screen. Clicking a header expands its containers (name,
     image, state badge, status); clicking a container jumps to
     its detail in the Containers view. Expand/Collapse-all
-    buttons in the header; partially-running stacks auto-expand
-    on first render so problems are visible immediately.
+    buttons in the header. All stacks start collapsed (an
+    earlier auto-expand of degraded stacks was removed as
+    inconsistent); a "Filter stacks or containers..." search
+    matches stack names as well as container names/images,
+    showing only matching containers inside a hit stack.
 
 **Verified live** (Playwright, 59 containers, 52 images, zero
 JS errors): Running filter "53 / 59", bulk "2 selected", 24
