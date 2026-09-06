@@ -344,6 +344,24 @@
         .refresh-btn:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
         .refresh-btn.loading .icon { animation: spin 0.8s linear infinite; }
         .refresh-btn .icon { transition: transform 0.3s; }
+        .refresh-btn.paused { border-color: rgba(245,158,11,0.4); color: var(--accent-yellow); }
+
+        .row-check { accent-color: var(--accent-purple); width: 0.875rem; height: 0.875rem; cursor: pointer; vertical-align: middle; }
+
+        .graph-legend { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.5rem; font-size: 10px; color: var(--text-muted); font-weight: 500; }
+        .graph-legend .key { display: inline-flex; align-items: center; gap: 0.375rem; }
+        .graph-legend .swatch { display: inline-block; width: 22px; height: 0; border-top: 2px solid #3b82f6; }
+        .graph-legend .swatch.wants { border-top: 2px dashed #8b5cf6; }
+        .graph-legend .swatch.order { border-top: 2px dotted #64748b; }
+
+        .logs-filter {
+            background: var(--bg-secondary); border: 1px solid var(--border-subtle);
+            border-radius: 0.375rem; padding: 0.25rem 0.5rem; font-size: 11px;
+            color: var(--text-primary); outline: none; width: 9rem;
+        }
+        .logs-filter:focus { border-color: var(--accent-purple); }
+        .log-line.filtered-out { display: none; }
+        .log-line mark { background: rgba(245,158,11,0.35); color: inherit; border-radius: 2px; padding: 0 1px; }
     </style>
 </head>
 <body class="bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-screen">
@@ -370,27 +388,44 @@
         <div id="state-tabs" class="flex flex-wrap items-center gap-1.5">
             <button class="filter-tab active" data-state="all">All</button>
             <button class="filter-tab" data-state="active"><span class="state-dot state-running"></span><span>Active</span></button>
+            <button class="filter-tab" data-state="running"><span class="state-dot state-running"></span><span>Running</span></button>
             <button class="filter-tab" data-state="inactive"><span class="state-dot state-stopped"></span><span>Inactive</span></button>
+            <button class="filter-tab" data-state="static"><span class="state-dot state-static"></span><span>Static</span></button>
             <button class="filter-tab" data-state="failed"><span class="state-dot state-failed"></span><span>Failed</span></button>
         </div>
         <div class="relative flex-1 min-w-[12rem]">
             <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"></i>
-            <input id="search-input" type="text" placeholder="Search units by name…" class="search-input" autocomplete="off">
+            <input id="search-input" type="text" placeholder="Search units by name or description…" class="search-input" autocomplete="off">
         </div>
+        <button id="failed-chip" class="filter-tab" style="display:none;border-color:rgba(239,68,68,0.4);color:var(--accent-red)" title="Show failed units">
+            <span class="state-dot state-failed"></span><span id="failed-chip-text">0 failed</span>
+        </button>
         <span id="count-display" class="text-xs text-[var(--text-muted)] font-medium whitespace-nowrap px-2"></span>
-        <button id="refresh-btn" class="refresh-btn" title="Refresh list">
-            <i data-lucide="refresh-cw" class="w-3.5 h-3.5 icon"></i>
-            <span class="hidden sm:inline">Refresh</span>
+        <button id="live-btn" class="refresh-btn" title="Pause live auto-refresh (keeps rows clickable)">
+            <i data-lucide="pause" class="w-3.5 h-3.5 icon"></i>
+            <span class="hidden sm:inline" id="live-btn-label">Live</span>
         </button>
     {% endset %}
     {{ ui.subheader(subheader) }}
 <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6">
+        <!-- Bulk action bar (visible when rows are selected) -->
+        <div id="bulk-bar" class="animate-fade-in" style="display:none;align-items:center;gap:0.5rem;margin-bottom:0.75rem;padding:0.625rem 0.875rem;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.3);border-radius:0.75rem;font-size:0.8125rem">
+            <span id="bulk-count" class="font-semibold text-[var(--accent-purple)] whitespace-nowrap">0 selected</span>
+            <span style="flex:1"></span>
+            <button class="row-action-btn" style="height:auto;padding:0.375rem 0.625rem;width:auto;display:inline-flex;gap:0.375rem" onclick="bulkAction('start')" title="Start selected"><i data-lucide="play" class="w-3.5 h-3.5"></i><span class="text-xs">Start</span></button>
+            <button class="row-action-btn" style="height:auto;padding:0.375rem 0.625rem;width:auto;display:inline-flex;gap:0.375rem" onclick="bulkAction('stop')" title="Stop selected"><i data-lucide="square" class="w-3.5 h-3.5"></i><span class="text-xs">Stop</span></button>
+            <button class="row-action-btn restart" style="height:auto;padding:0.375rem 0.625rem;width:auto;display:inline-flex;gap:0.375rem" onclick="bulkAction('restart')" title="Restart selected"><i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i><span class="text-xs">Restart</span></button>
+            <button class="row-action-btn" style="height:auto;padding:0.375rem 0.625rem;width:auto;display:inline-flex;gap:0.375rem" onclick="bulkAction('enable')" title="Enable selected at boot"><i data-lucide="check-circle" class="w-3.5 h-3.5"></i><span class="text-xs">Enable</span></button>
+            <button class="row-action-btn" style="height:auto;padding:0.375rem 0.625rem;width:auto;display:inline-flex;gap:0.375rem" onclick="bulkAction('disable')" title="Disable selected at boot"><i data-lucide="circle" class="w-3.5 h-3.5"></i><span class="text-xs">Disable</span></button>
+            <button class="row-action-btn" style="height:auto;padding:0.375rem 0.625rem;width:auto;display:inline-flex;gap:0.375rem" onclick="clearSelection()" title="Clear selection"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+        </div>
         <!-- Table -->
         <div class="table-wrap animate-fade-in">
             <div class="table-scroll">
                 <table class="units-table">
                     <thead>
                         <tr>
+                            <th style="width:36px" onclick="event.stopPropagation()"><input type="checkbox" id="select-all" class="row-check" title="Select all visible rows"></th>
                             <th style="width:32px"></th>
                             <th style="width:26%">Name</th>
                             <th style="width:110px">State</th>
@@ -522,6 +557,11 @@
                         </div>
                     </div>
                     <p class="text-xs text-[var(--text-muted)] mb-2">Hover a node to see its edges. Missing units are shown with a dashed border.</p>
+                    <div class="graph-legend">
+                        <span class="key"><span class="swatch"></span>Requires</span>
+                        <span class="key"><span class="swatch wants"></span>Wants</span>
+                        <span class="key"><span class="swatch order"></span>After / Before</span>
+                    </div>
                     <div id="graph-canvas" style="background:#050508;border:1px solid var(--border-subtle);border-radius:0.5rem;padding:1rem;min-height:300px;overflow:auto;position:relative">
                         <div class="empty-state" id="graph-empty" style="color:var(--text-muted);text-align:center;padding:2rem">Loading…</div>
                     </div>
@@ -560,6 +600,7 @@
                             <button onclick="loadLogs()" class="row-action-btn" style="height:auto;padding:0.375rem 0.625rem;width:auto;display:inline-flex;gap:0.375rem" title="Reload from disk">
                                 <i data-lucide="refresh-ccw" class="w-3.5 h-3.5"></i>
                             </button>
+                            <input id="log-filter" class="logs-filter" type="text" placeholder="Filter lines…" autocomplete="off" title="Show only matching lines (highlights the match)">
                         </div>
                     </div>
                     <div class="flex items-center gap-3 mb-2 text-[10px] text-[var(--text-muted)] font-medium">
@@ -671,6 +712,31 @@
                 .replace(/'/g, '&#39;');
         }
 
+        // Row selection for bulk actions (survives re-renders via names).
+        const selectedUnits = new Set();
+        function toggleSelect(name, box) {
+            if (box.checked) selectedUnits.add(name);
+            else selectedUnits.delete(name);
+            syncBulkBar();
+        }
+        function clearSelection() {
+            selectedUnits.clear();
+            document.querySelectorAll('.row-select').forEach(b => { b.checked = false; });
+            syncBulkBar();
+        }
+        function syncBulkBar() {
+            const bar = $('bulk-bar');
+            const n = selectedUnits.size;
+            bar.style.display = n > 0 ? 'flex' : 'none';
+            $('bulk-count').textContent = `${n} selected`;
+            const visible = [...document.querySelectorAll('.row-select')];
+            const all = $('select-all');
+            if (all) {
+                all.checked = visible.length > 0 && visible.every(b => b.checked);
+            }
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
         function renderTable() {
             const tbody = $('units-tbody');
             const empty = $('empty-state');
@@ -678,9 +744,18 @@
             const rows = [];
             for (const u of allUnits) {
                 if (filters.type !== 'all' && u.type !== filters.type) continue;
-                if (q && !u.name.toLowerCase().includes(q)) continue;
+                // 'running' and 'static' have no server-side state param,
+                // so they filter client-side (server returns everything).
+                if (filters.state === 'running' && !u.is_running) continue;
+                if (filters.state === 'static' && u.unit_file_state !== 'static') continue;
+                if (q && !u.name.toLowerCase().includes(q) &&
+                    !(u.description || '').toLowerCase().includes(q)) continue;
                 rows.push(u);
             }
+            // Failed-attention chip (counts across all units, not the filter).
+            const failedN = allUnits.filter(u => u.is_failed).length;
+            $('failed-chip').style.display = failedN > 0 ? 'inline-flex' : 'none';
+            $('failed-chip-text').textContent = `${failedN} failed`;
             $('count-display').textContent =
                 rows.length === allUnits.length
                     ? `${allUnits.length} units`
@@ -701,6 +776,7 @@
                     'data-name': u.name,
                 });
                 tr.innerHTML = `
+                    <td onclick="event.stopPropagation()"><input type="checkbox" class="row-check row-select" data-name="${escapeHtml(u.name)}" ${selectedUnits.has(u.name) ? 'checked' : ''} onchange="toggleSelect('${escapeHtml(u.name)}', this)" title="Select for bulk actions"></td>
                     <td><span class="state-dot ${stateClassFor(u)}"></span></td>
                     <td>
                         <div class="font-mono text-[var(--text-primary)] font-semibold truncate" title="${escapeHtml(u.name)}">${escapeHtml(u.name)}</div>
@@ -722,15 +798,45 @@
             tbody.innerHTML = '';
             tbody.appendChild(frag);
             lucide.createIcons();
+            syncBulkBar();
+            const all = $('select-all');
+            if (all && !all.dataset.wired) {
+                all.dataset.wired = '1';
+                all.onchange = () => {
+                    document.querySelectorAll('.row-select').forEach(b => {
+                        b.checked = all.checked;
+                        if (all.checked) selectedUnits.add(b.dataset.name);
+                        else selectedUnits.delete(b.dataset.name);
+                    });
+                    syncBulkBar();
+                };
+            }
         }
 
         // ----- Loading -----
+        // Pause-live toggle: stops the 5s auto-refresh so rows stay
+        // clickable while interacting (the refresh button was removed
+        // in favor of this — refresh happens automatically when live).
+        let livePaused = false;
+        $('live-btn').onclick = () => {
+            livePaused = !livePaused;
+            const btn = $('live-btn');
+            btn.classList.toggle('paused', livePaused);
+            btn.querySelector('.icon').setAttribute('data-lucide', livePaused ? 'play' : 'pause');
+            $('live-btn-label').textContent = livePaused ? 'Paused' : 'Live';
+            btn.title = livePaused ? 'Resume live auto-refresh' : 'Pause live auto-refresh (keeps rows clickable)';
+            lucide.createIcons();
+            if (!livePaused) loadUnits(false);
+        };
+
         async function loadUnits(showSpinner = true) {
-            const btn = $('refresh-btn');
-            if (showSpinner) btn.classList.add('loading');
             try {
                 const params = new URLSearchParams();
-                if (filters.state !== 'all') params.set('state', filters.state);
+                // 'running'/'static' filter client-side; ask the server
+                // for everything in those cases.
+                if (filters.state !== 'all' && filters.state !== 'running' && filters.state !== 'static') {
+                    params.set('state', filters.state);
+                }
                 if (filters.search) params.set('q', filters.search);
                 const r = await fetch('/api/system-services?' + params.toString());
                 const data = await r.json();
@@ -740,11 +846,30 @@
                 }
                 allUnits = data.units || [];
                 renderTable();
+                refreshOpenPanel();
             } catch (e) {
                 toast('Network error: ' + e.message, 'error');
-            } finally {
-                btn.classList.remove('loading');
             }
+        }
+
+        // Keep the open side panel fresh on each tick (Overview tab
+        // only — never disturb Logs/Graph/Unit-file views, modals,
+        // or error states).
+        async function refreshOpenPanel() {
+            if (!$('side-panel').classList.contains('open')) return;
+            if (!currentUnit || !currentUnit.name) return;
+            if (activeTab !== 'overview') return;
+            if ($('auth-modal').classList.contains('active')) return;
+            if ($('edit-modal').classList.contains('active')) return;
+            try {
+                const name = currentUnit.name;
+                const r = await fetch('/api/system-services/' + encodeURIComponent(name));
+                if (!r.ok) return;
+                const u = await r.json();
+                if (currentUnit && currentUnit.name === name && activeTab === 'overview') {
+                    populatePanel(u);
+                }
+            } catch (e) { /* next tick will retry */ }
         }
 
         // ----- Filters -----
@@ -771,8 +896,6 @@
             clearTimeout(searchDebounce);
             searchDebounce = setTimeout(() => renderTable(), 80);
         });
-        $('refresh-btn').onclick = () => loadUnits(false);
-
         // ----- Side panel -----
         async function openPanel(name) {
             currentUnit = name;
@@ -1179,6 +1302,14 @@
         }
 
         $('log-lines').addEventListener('change', loadLogs);
+        let logFilterDebounce = null;
+        $('log-filter').addEventListener('input', (e) => {
+            clearTimeout(logFilterDebounce);
+            logFilterDebounce = setTimeout(() => {
+                logFilter = e.target.value.trim().toLowerCase();
+                applyLogFilter();
+            }, 150);
+        });
         $('log-priority').addEventListener('change', () => {
             if (logStreamState.active) {
                 stopLogStream();
@@ -1189,13 +1320,45 @@
         // ----- Live log streaming (SSE) -----
         const logStreamState = { active: false, unit: null, source: null, priority: null };
 
+        // Substring filter for the Logs tab (mirrors /logs): hides
+        // non-matching lines and highlights the match.
+        let logFilter = '';
+        function renderLogLine(div, text) {
+            div.className = 'log-line';
+            if (!logFilter) {
+                div.textContent = text;
+                return;
+            }
+            const idx = text.toLowerCase().indexOf(logFilter);
+            if (idx === -1) {
+                div.textContent = text;
+                div.classList.add('filtered-out');
+                return;
+            }
+            div.innerHTML = escapeHtml(text.slice(0, idx)) + '<mark>' +
+                escapeHtml(text.slice(idx, idx + logFilter.length)) + '</mark>' +
+                escapeHtml(text.slice(idx + logFilter.length));
+        }
+        function applyLogFilter() {
+            const target = $('logs-content');
+            let visible = 0;
+            for (const div of target.children) {
+                // textContent strips any previous <mark>, so re-render
+                // from the raw text each time the filter changes.
+                renderLogLine(div, div.textContent);
+                if (!div.classList.contains('filtered-out')) visible++;
+            }
+            const total = target.children.length;
+            $('log-line-count').textContent = logFilter
+                ? `${visible} of ${total} lines`
+                : (total === 1 ? '1 line' : `${total} lines`);
+        }
         function appendLogLines(lines) {
             const target = $('logs-content');
             const frag = document.createDocumentFragment();
             for (const l of lines) {
                 const div = document.createElement('div');
-                div.className = 'log-line';
-                div.textContent = l;
+                renderLogLine(div, l);
                 frag.appendChild(div);
             }
             target.appendChild(frag);
@@ -1205,6 +1368,7 @@
             }
             const count = target.children.length;
             setLogLineCount(count);
+            if (logFilter) applyLogFilter();
         }
 
         function setLogLineCount(n) {
@@ -1375,8 +1539,46 @@
             const btn = $('auth-execute');
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner"></span>';
-            const { name, action } = pendingAction || {};
+            const pending = pendingAction || {};
             try {
+                // Bulk path: run the action on each selected unit,
+                // then report a summary (wrong password aborts all).
+                if (pending.bulk) {
+                    const { names, action } = pending;
+                    let ok = 0;
+                    const failed = [];
+                    for (const name of names) {
+                        try {
+                            const r = await fetch('/api/system-services/' + encodeURIComponent(name) + '/' + action, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ password }),
+                            });
+                            const data = await r.json().catch(() => ({}));
+                            if (!r.ok) {
+                                if (data.code === 'permission') {
+                                    $('auth-error').textContent = data.error || 'Wrong password';
+                                    $('auth-error').style.display = 'block';
+                                    $('auth-password').value = '';
+                                    $('auth-password').focus();
+                                    return;
+                                }
+                                failed.push(name);
+                            } else {
+                                ok++;
+                            }
+                        } catch (e) {
+                            failed.push(name);
+                        }
+                    }
+                    closeAuth();
+                    clearSelection();
+                    await loadUnits(false);
+                    if (failed.length === 0) toast(`${action}: ${ok}/${names.length} ok`, 'success');
+                    else toast(`${action}: ${ok} ok, ${failed.length} failed (${failed.slice(0, 3).join(', ')}${failed.length > 3 ? '…' : ''})`, 'error');
+                    return;
+                }
+                const { name, action } = pending;
                 const r = await fetch('/api/system-services/' + encodeURIComponent(name) + '/' + action, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1475,9 +1677,34 @@
             if ($('side-panel').classList.contains('open')) { closePanel(); return; }
         });
 
-        // Initial load + auto-refresh every 5s
+        // Failed chip jumps straight to the Failed filter.
+        $('failed-chip').onclick = () => {
+            document.querySelectorAll('#state-tabs .filter-tab').forEach(b => {
+                b.classList.toggle('active', b.dataset.state === 'failed');
+            });
+            filters.state = 'failed';
+            loadUnits();
+        };
+
+        // ----- Bulk actions -----
+        function bulkAction(action) {
+            if (selectedUnits.size === 0) return;
+            pendingAction = { names: [...selectedUnits], action, bulk: true };
+            const labels = {
+                start: 'Start units', stop: 'Stop units', restart: 'Restart units',
+                enable: 'Enable at boot', disable: 'Disable at boot',
+            };
+            $('auth-title').textContent = labels[action] || 'Confirm action';
+            $('auth-message').textContent = `Enter your password to ${action} ${pendingAction.names.length} selected unit(s).`;
+            $('auth-password').value = '';
+            $('auth-error').style.display = 'none';
+            $('auth-modal').classList.add('active');
+            setTimeout(() => $('auth-password').focus(), 100);
+        }
+
+        // Initial load + auto-refresh every 5s (skipped while paused)
         loadUnits();
-        setInterval(() => loadUnits(false), 5000);
+        setInterval(() => { if (!livePaused) loadUnits(false); }, 5000);
     </script>
 </body>
 </html>

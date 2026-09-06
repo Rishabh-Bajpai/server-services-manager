@@ -637,6 +637,56 @@ backend changes).
    any viewport (min-height 240px kept for short/filtered
    lists).
 
+5. **Auto-refresh stole row clicks; refresh button removed.**
+   The 5s re-render could replace rows mid-click. Added a
+   Live/Pause toggle (pause icon → play, yellow "Paused" state)
+   that skips the refresh tick; the manual Refresh button was
+   removed since refresh is automatic when live. Verified: rows
+   byte-identical across 6s while paused, updating on resume.
+
+6. **Bulk actions.** Checkbox column (plus select-all header
+   checkbox that tracks visible rows); selection survives
+   re-renders via a name set. A purple bulk bar ("N selected")
+   offers Start / Stop / Restart / Enable / Disable / Clear.
+   The auth modal was extended with a bulk path that runs the
+   action per unit with one password, then toasts a summary
+   ("restart: 3 ok, 1 failed (foo.service)"). Verified: 476
+   checkboxes, "2 selected", modal reads "Start units / start 2
+   selected unit(s)".
+
+7. **Running / Static filters.** Tabs existed only for
+   All/Active/Inactive/Failed although badges show running and
+   static. Added Running and Static tabs (client-side filters on
+   `is_running` / `unit_file_state`; the server is asked for all
+   units in those modes). Verified: Running "72 / 476", Static
+   "123 / 476".
+
+8. **Description search.** The search only matched unit names;
+   "kernel" matched nothing useful. It now matches name OR
+   description. Verified: "kernel" → "16 / 476 units".
+
+9. **Stale side panel.** Overview data never refreshed after
+   opening. Each list tick now silently re-fetches the open
+   unit — but only on the Overview tab, never on Logs/Graph/
+   Unit-file, and never while the auth/edit modal is open.
+   Verified: panel stays open and populated across ticks.
+
+10. **Logs tab filter.** Added a "Filter lines…" input beside
+    the Reload button (mirrors `/logs`): non-matching lines
+    hide, matches highlight with `<mark>`, counter reads "31 of
+    100 lines", debounced 150ms, applies to streamed lines too.
+    Verified: no-match hides all 100; "session opened" finds 31
+    with highlights.
+
+11. **Graph legend.** Static legend under the hint (Requires
+    solid blue, Wants dashed purple, After/Before dotted gray).
+
+12. **Failed-attention chip.** Red "N failed" chip appears in
+    the filter bar when any unit is failed; clicking jumps to
+    the Failed filter. (Hidden on this host — 0 failed units —
+    so chip visibility itself was verified by code path; the
+    Failed tab shows "0 units".)
+
 ### Next route: (to be picked — `/system-services` done)
 
 ---
