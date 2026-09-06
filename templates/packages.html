@@ -282,6 +282,10 @@
                 <input id="select-all" type="checkbox" onchange="toggleSelectAll(this.checked)">
                 Select all
             </label>
+            <button class="btn" onclick="selectSecurity()" title="Select all security updates in the current filter">
+                <i data-lucide="shield-alert" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">Security</span>
+            </button>
             <button id="btn-install" class="btn btn-primary" onclick="doInstall()" disabled>
                 <i data-lucide="download" class="w-3.5 h-3.5"></i>
                 Install (<span id="install-count">0</span>)
@@ -460,6 +464,13 @@
         renderRows();
         updateInstallButton();
     }
+    function selectSecurity() {
+        let n = 0;
+        filteredRows().forEach(u => { if (u.is_security && !selected.has(u.name)) { selected.add(u.name); n++; } });
+        renderRows();
+        updateInstallButton();
+        toast(n ? ('selected ' + n + ' security update' + (n === 1 ? '' : 's')) : 'no security updates in this filter', n ? 'success' : 'info');
+    }
     function toggleRow(name, checked) {
         if (checked) selected.add(name); else selected.delete(name);
         document.getElementById('header-check').checked = false;
@@ -598,10 +609,29 @@
         });
     }
 
+    // Refresh button busy state with an elapsed-seconds ticker, since
+    // `apt-get update` can take 30s+ on slow mirrors.
+    function setRefreshBusy(btn, busy) {
+        if (busy) {
+            btn.disabled = true;
+            const t0 = Date.now();
+            const tick = () => {
+                const s = Math.floor((Date.now() - t0) / 1000);
+                btn.innerHTML = '<span class="spinner"></span> <span>Refreshing… ' + s + 's</span>';
+            };
+            tick();
+            btn._tickTimer = setInterval(tick, 1000);
+        } else {
+            if (btn._tickTimer) { clearInterval(btn._tickTimer); btn._tickTimer = null; }
+            btn.disabled = false;
+            btn.innerHTML = '<i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">Refresh</span>';
+            lucide.createIcons();
+        }
+    }
+
     function doRefresh() {
         const btn = document.getElementById('btn-refresh');
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner"></span> <span>Refreshing…</span>';
+        setRefreshBusy(btn, true);
         api('/api/packages/refresh', { method: 'POST' }).then(({ data }) => {
             if (data.last_error && data.last_error.includes('sudo password required')) {
                 // Refresh needs root: prompt once, then retry with it.
@@ -616,17 +646,12 @@
                 toast('refreshed: ' + data.count + ' updates', 'success');
                 loadState();
             }
-        }).finally(() => {
-            btn.disabled = false;
-            btn.innerHTML = '<i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">Refresh</span>';
-            lucide.createIcons();
-        });
+        }).finally(() => setRefreshBusy(btn, false));
     }
 
     function doRefreshWithPassword(password) {
         const btn = document.getElementById('btn-refresh');
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner"></span> <span>Refreshing…</span>';
+        setRefreshBusy(btn, true);
         api('/api/packages/refresh', { method: 'POST', body: JSON.stringify({ password }) }).then(({ data }) => {
             if (data.last_error && data.last_error.includes('sudo rejected')) {
                 loadState();
@@ -638,11 +663,7 @@
                 toast('refreshed: ' + data.count + ' updates', 'success');
                 loadState();
             }
-        }).finally(() => {
-            btn.disabled = false;
-            btn.innerHTML = '<i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">Refresh</span>';
-            lucide.createIcons();
-        });
+        }).finally(() => setRefreshBusy(btn, false));
     }
 
     function doInstall() {
@@ -684,7 +705,12 @@
                     toast('install completed', 'success');
                     selected.clear();
                     updateInstallButton();
-                    loadState();
+                    // Re-fetch from the server so just-installed
+                    // packages drop out of the list immediately.
+                    // The sudo timestamp is virtually always still
+                    // fresh seconds after an install; if not,
+                    // doRefresh falls back to the password modal.
+                    doRefresh();
                 } else {
                     document.getElementById('job-status').innerHTML = '<span class="badge badge-red"><i data-lucide="x" style="width:10px;height:10px"></i>failed</span>';
                     toast('install failed (see log)', 'error');

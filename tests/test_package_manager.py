@@ -536,6 +536,26 @@ def test_refresh_reports_rejected_password(monkeypatch):
     assert "sudo rejected" in state.last_error
 
 
+def test_run_install_dnf_with_password_no_double_dash(tmp_path):
+    log_path = str(tmp_path / "dnf-job.log")
+    job = {"id": "job-dnf", "manager": "dnf", "packages": ["vim"],
+           "started_at": 0.0, "ended_at": 0.0, "success": False,
+           "log_path": log_path, "tail": ""}
+    validator = MagicMock()
+    validator.returncode = 0
+    proc = MagicMock()
+    proc.returncode = 0
+    with patch.object(pm.subprocess, "run", return_value=validator), \
+         patch.object(pm.subprocess, "Popen", return_value=proc) as popen:
+        pm._run_install(job, None, password="secret")
+    popen_args, popen_kwargs = popen.call_args
+    assert popen_args[0][:4] == ["sudo", "-S", "-p", ""]
+    assert popen_args[0][4:7] == ["dnf", "install", "-y"]
+    assert "--" not in popen_args[0]
+    proc.communicate.assert_called_once_with("secret\n")
+    assert job["success"] is True
+
+
 def test_install_packages_passes_password_to_worker(monkeypatch):
     monkeypatch.setattr(pm, "detect_manager", lambda: "apt")
     seen = {}

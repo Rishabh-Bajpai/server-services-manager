@@ -474,8 +474,11 @@ def _run_install(job: dict, on_done: Optional[Callable],
                           "-o", "Dpkg::Options::=--force-confdef",
                           "-o", "Dpkg::Options::=--force-confold", "--"] + packages
         elif mngr in ("dnf", "yum"):
+            # NB: no "--" delimiter here — dnf5 rejects it as an
+            # unknown argument. Flag injection is already blocked by
+            # the server-side name regex (must start alphanumeric).
             sudo = ["sudo", "-S", "-p", ""] if use_stdin_password else []
-            cmd = sudo + [mngr, "install", "-y", "--"] + packages
+            cmd = sudo + [mngr, "install", "-y"] + packages
         else:
             _append_log(log_path, f"unsupported manager: {mngr}\n")
             return

@@ -1039,6 +1039,34 @@ input is accepted — standard sudo semantics, not a bug.
 Full suite: 826 passed (pre-existing alert_log failure
 excluded); secrets clean.
 
+### Route 9 follow-up II — the four suggestions  [x]
+
+1. **Post-install refresh.** Install success now calls
+   `doRefresh()` instead of `loadState()`, so just-installed
+   packages drop out immediately (sudo timestamp is fresh
+   seconds after an install; otherwise the password modal).
+2. **Select-security button.** One click selects all
+   `is_security` rows in the current filter, with a toast
+   reporting the count (or "none in this filter").
+3. **Refresh elapsed ticker.** Shared `setRefreshBusy()`
+   helper shows `Refreshing… Ns` ticking each second in the
+   button for both refresh paths. Verified live (`2s` at
+   2.6s, restored after).
+4. **dnf/yum path.** Web check revealed **dnf5 rejects
+   `--`** as an unknown argument, so the delimiter is now
+   apt-only; RPM commands rely on the leading-alphanumeric
+   server regex (which provably blocks flag injection).
+   Added a dnf password-path mock test. RPM remains
+   mock-tested only — no RPM host to verify against.
+
+**Verified live** (zero JS errors, `node --check` clean):
+select-security toast correct with 0 security rows; ticker
+measured; auto-refresh completed (`Last refresh 0s ago`, 6
+rows). The install-success→refresh line itself is
+code-reviewed only — no live install run this time. Full
+suite: 827 passed (pre-existing alert_log failure excluded);
+secrets clean.
+
 ### Next route: (to be picked — `/logs` is next in line)
 
 ---
