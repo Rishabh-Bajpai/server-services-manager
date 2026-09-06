@@ -206,6 +206,15 @@
     {{ ui.subheader(subheader) }}
 
     <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6 space-y-4">
+        <div class="panel-card px-4 py-3 flex items-start gap-2.5 text-xs text-[var(--text-secondary)]">
+            <i data-lucide="info" class="w-4 h-4 mt-0.5 shrink-0 text-[var(--accent-blue)]"></i>
+            <div>
+                <span class="text-[var(--text-primary)] font-semibold">What can you search here?</span>
+                <span id="source-hint">Loading available sources…</span>
+                For arbitrary log files on disk, open them from the
+                <a href="/files" class="text-[var(--accent-blue)] hover:underline">Files</a> page instead.
+            </div>
+        </div>
         <section class="panel-card">
             <div class="p-4 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2 flex-wrap">
                 <div class="flex items-center gap-2 text-xs">
@@ -220,7 +229,7 @@
                 </div>
             </div>
             <div id="log-output" class="p-3 overflow-y-auto overflow-x-auto overscroll-y-contain bg-[var(--bg-primary)]" style="max-height:calc(100dvh - 330px);min-height:200px">
-                <div class="empty-state">Enter a name and click Search.</div>
+                <div class="empty-state" id="log-empty">Enter a name and click Search.</div>
             </div>
         </section>
     </main>
@@ -278,6 +287,35 @@
         const kind = document.getElementById('kind').value;
         document.getElementById('source-wrap').classList.toggle('hidden', kind !== 'program');
         document.getElementById('priority-wrap').classList.toggle('hidden', kind !== 'systemd');
+        const empty = document.getElementById('log-empty');
+        if (empty) {
+            empty.textContent = kind === 'program'
+                ? 'Enter a managed service name (as shown on the Dashboard) and click Search.'
+                : 'Enter a unit name (e.g. nginx.service, cron.service) and click Search.';
+        }
+    }
+
+    // Explain what is searchable: managed services (stdout/stderr
+    // captured by this dashboard) and the systemd journal. When no
+    // managed service exists, default to systemd units.
+    function loadSourcesHint() {
+        fetch('/api/palette/search?q=').then(r => r.json()).then(data => {
+            const names = new Set();
+            (data.results || []).forEach(item => {
+                if (item.kind === 'program' && item.id) names.add(String(item.id).split(':')[0]);
+            });
+            const hint = document.getElementById('source-hint');
+            if (names.size > 0) {
+                hint.textContent = `Search stdout/stderr of your ${names.size} managed service${names.size === 1 ? '' : 's'} (${[...names].slice(0, 5).join(', ')}${names.size > 5 ? ', …' : ''}), or the systemd journal of any unit on this host. `;
+            } else {
+                hint.textContent = 'You have no managed services yet (add one on the Dashboard) — so this currently searches the systemd journal of any unit on this host. ';
+                document.getElementById('kind').value = 'systemd';
+                onKindChange();
+            }
+        }).catch(() => {
+            document.getElementById('source-hint').textContent =
+                'Search stdout/stderr of your managed services, or the systemd journal of any unit on this host. ';
+        });
     }
 
     function buildQuery(offset) {
@@ -370,6 +408,7 @@
     }
 
     onKindChange();
+    loadSourcesHint();
     lucide.createIcons();
     </script>
 </body>

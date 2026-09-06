@@ -1101,6 +1101,18 @@ intentional bad-name test's HTTP status, not a JS error.)
 No managed programs exist on this host, so the program
 success path is code-reviewed only.
 
+### Route 10 follow-up — what is searchable  [x]
+
+User feedback: the page never explained what "logs" means
+here. Answer: stdout/stderr of Dashboard-managed services
+plus the systemd journal of any unit — not arbitrary files.
+The UI now says so: an info banner names both sources
+(with live managed-service count + names from the palette
+index), points at Files for on-disk logs, and auto-selects
+systemd with a unit-specific empty state when no managed
+service exists (this host). Switching kinds updates the
+empty-state guidance. Verified live, zero JS errors.
+
 ### Next route: (to be picked — `/firewall` is next in line)
 
 ---
