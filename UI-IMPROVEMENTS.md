@@ -1067,7 +1067,41 @@ code-reviewed only — no live install run this time. Full
 suite: 827 passed (pre-existing alert_log failure excluded);
 secrets clean.
 
-### Next route: (to be picked — `/logs` is next in line)
+### Route 10 — Logs (`/logs`)  [x]
+
+Files: `templates/logs.html` (only file changed; backend
+search routes already validate + document their params).
+
+1. **Content width.** Same narrow `max-w-7xl` wrapper; now
+   `w-[90%]` capped at 1760px. Measured live: 90%.
+2. **Output height.** `max-h-[70vh]` replaced with
+   `calc(100dvh - 330px)` (the taller wrapped subheader
+   needs the larger offset); measured cap 390px at 720p,
+   ending ~50px above the viewport bottom.
+3. **Search busy state + failure feedback.** `runSearch()`
+   previously gave zero feedback during flight (journalctl
+   can take seconds) and a failed fetch was completely
+   silent (no `.catch`). Now disables Search + Load more
+   with a spinner, and network failures toast. Verified:
+   mid-flight `disabled/Searching…`, restored after.
+4. **Load-more after editing inputs mixed queries.**
+   Changing any field then clicking Load more appended the
+   new query at the old offset. A search key
+   (kind+name+q+since+until+limit+source/priority) now
+   forces a restart on mismatch. Verified: 29 cron lines
+   then `session` via Load more → clean 18/18, not 47.
+5. **Enter key.** Only the Name field submitted on Enter;
+   Since/Until/Search now do too.
+
+**Verified live** (Playwright, zero JS errors,
+`node --check` clean): systemd `cron.service` search → 29
+lines, 50 highlights, stats `?/29/29`; program 404 path
+toasts and restores the button. (The one console 404 is the
+intentional bad-name test's HTTP status, not a JS error.)
+No managed programs exist on this host, so the program
+success path is code-reviewed only.
+
+### Next route: (to be picked — `/firewall` is next in line)
 
 ---
 

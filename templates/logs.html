@@ -42,6 +42,15 @@
 
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner {
+            display: inline-block;
+            width: 12px; height: 12px;
+            border: 2px solid var(--border-subtle);
+            border-top-color: var(--accent-blue);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
 
         .panel-card {
             background: var(--bg-card);
@@ -147,15 +156,15 @@
         </div>
         <div class="flex items-center gap-1.5">
             <label class="block text-[0.625rem] uppercase tracking-wider text-[var(--text-muted)]">Since</label>
-            <input id="since" type="text" class="text-input" style="max-width:7rem" placeholder="5m, 1h, 2d">
+            <input id="since" type="text" class="text-input" style="max-width:7rem" placeholder="5m, 1h, 2d" onkeydown="if(event.key==='Enter')runSearch(true)">
         </div>
         <div class="flex items-center gap-1.5">
             <label class="block text-[0.625rem] uppercase tracking-wider text-[var(--text-muted)]">Until</label>
-            <input id="until" type="text" class="text-input" style="max-width:7rem" placeholder="optional">
+            <input id="until" type="text" class="text-input" style="max-width:7rem" placeholder="optional" onkeydown="if(event.key==='Enter')runSearch(true)">
         </div>
         <div class="flex items-center gap-1.5">
             <label class="block text-[0.625rem] uppercase tracking-wider text-[var(--text-muted)]">Search</label>
-            <input id="q" type="text" class="text-input" style="max-width:12rem" placeholder="substring to match in each line">
+            <input id="q" type="text" class="text-input" style="max-width:12rem" placeholder="substring to match in each line" onkeydown="if(event.key==='Enter')runSearch(true)">
         </div>
         <div id="source-wrap" class="hidden flex items-center gap-1.5">
             <label class="block text-[0.625rem] uppercase tracking-wider text-[var(--text-muted)]">Storage</label>
@@ -189,14 +198,14 @@
             </select>
         </div>
         <span class="flex-1"></span>
-        <button class="btn btn-primary" onclick="runSearch(true)">
+        <button id="btn-search" class="btn btn-primary" onclick="runSearch(true)">
             <i data-lucide="search" class="w-3.5 h-3.5"></i>
             <span class="hidden sm:inline">Search</span>
         </button>
     {% endset %}
     {{ ui.subheader(subheader) }}
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+    <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6 space-y-4">
         <section class="panel-card">
             <div class="p-4 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2 flex-wrap">
                 <div class="flex items-center gap-2 text-xs">
@@ -210,7 +219,7 @@
                     </button>
                 </div>
             </div>
-            <div id="log-output" class="p-3 max-h-[70vh] overflow-y-auto overflow-x-auto overscroll-y-contain bg-[var(--bg-primary)]">
+            <div id="log-output" class="p-3 overflow-y-auto overflow-x-auto overscroll-y-contain bg-[var(--bg-primary)]" style="max-height:calc(100dvh - 330px);min-height:200px">
                 <div class="empty-state">Enter a name and click Search.</div>
             </div>
         </section>
@@ -225,6 +234,30 @@
     let currentSearch = '';
     let currentLines = [];
     let requestSeq = 0;
+    let lastKey = '';
+    let lastHasMore = false;
+
+    function setSearchBusy(busy) {
+        const btn = document.getElementById('btn-search');
+        btn.disabled = busy;
+        btn.innerHTML = busy
+            ? '<span class="spinner"></span> <span>Searching…</span>'
+            : '<i data-lucide="search" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">Search</span>';
+        if (!busy) lucide.createIcons();
+        document.getElementById('btn-load-more').disabled = busy || !lastHasMore;
+    }
+
+    function searchKey() {
+        const kind = document.getElementById('kind').value;
+        return [kind,
+            document.getElementById('name').value.trim(),
+            document.getElementById('q').value.trim(),
+            document.getElementById('since').value.trim(),
+            document.getElementById('until').value.trim(),
+            document.getElementById('limit').value,
+            kind === 'program' ? document.getElementById('source').value : document.getElementById('priority').value,
+        ].join('|');
+    }
 
     function toast(message, kind) {
         kind = kind || 'info';
@@ -274,11 +307,17 @@
         const kind = document.getElementById('kind').value;
         currentLimit = parseInt(document.getElementById('limit').value, 10) || 200;
         currentSearch = document.getElementById('q').value.trim();
+        // If any input changed since the last search, "Load more" would
+        // append the new query at the old offset — restart instead.
+        if (searchKey() !== lastKey) reset = true;
         if (reset) {
             currentOffset = 0;
             currentLines = [];
+            lastHasMore = false;
             document.getElementById('log-output').innerHTML = '';
+            lastKey = searchKey();
         }
+        setSearchBusy(true);
         const params = buildQuery(currentOffset);
         const base = kind === 'program' ? '/api/programs/' : '/api/system-services/';
         const url = base + encodeURIComponent(name) + '/logs/search?' + params.toString();
@@ -288,16 +327,23 @@
                 if (mySeq !== requestSeq) return; // a newer request superseded us
                 if (status !== 200) {
                     toast(data.error || 'search failed', 'error');
+                    setSearchBusy(false);
                     return;
                 }
                 currentMatched = data.matched || 0;
                 currentOffset = (data.offset || 0) + (data.logs || []).length;
                 currentLines = currentLines.concat(data.logs || []);
+                lastHasMore = !!data.has_more;
                 renderLines();
                 document.getElementById('stat-total').textContent = data.total != null ? data.total : '?';
                 document.getElementById('stat-matched').textContent = data.matched || 0;
                 document.getElementById('stat-showing').textContent = currentLines.length;
-                document.getElementById('btn-load-more').disabled = !data.has_more;
+                setSearchBusy(false);
+            })
+            .catch(err => {
+                if (mySeq !== requestSeq) return;
+                toast('search failed: ' + (err && err.message ? err.message : err), 'error');
+                setSearchBusy(false);
             });
     }
 
