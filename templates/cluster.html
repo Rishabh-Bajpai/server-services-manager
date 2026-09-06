@@ -190,11 +190,11 @@
         current='/cluster',
     ) }}
     {% set subheader %}
-        <button class="btn" onclick="probeAll()" title="Probe reachability">
+        <button class="btn" onclick="probeAll(this)" title="Probe reachability">
             <i data-lucide="activity" class="w-3.5 h-3.5"></i>
             <span class="hidden sm:inline">Probe</span>
         </button>
-        <button class="btn" onclick="mdnsBrowse()" title="mDNS browse (if zeroconf installed)">
+        <button class="btn" id="btn-mdns" onclick="mdnsBrowse()" title="mDNS browse (if zeroconf installed)">
             <i data-lucide="search" class="w-3.5 h-3.5"></i>
             <span class="hidden sm:inline">mDNS</span>
         </button>
@@ -205,7 +205,7 @@
     {% endset %}
     {{ ui.subheader(subheader) }}
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+    <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6 space-y-4">
         <section class="panel-card p-4">
             <div class="flex flex-wrap items-center justify-between gap-2">
                 <div>
@@ -355,6 +355,21 @@
             return String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
         }
 
+        // Escaper for values placed inside a double-quoted HTML
+        // attribute as a single-quoted JS string
+        // (onclick="fn('…')"). escapeHtml() is WRONG here: `&#39;`
+        // is HTML-decoded back to `'` before JS parses, breaking
+        // out of the string. Peer labels are free-text user input
+        // and mDNS hosts come from the LAN, so both must use this.
+        function escapeAttr(s) {
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/'/g, "\\'");
+        }
+
         function loadLocal() {
             api('/api/cluster/info').then(({ status, data }) => {
                 if (status >= 400) {
@@ -363,6 +378,9 @@
                 }
                 localInfo = data;
                 renderLocal();
+            }).catch(err => {
+                document.getElementById('local-info').textContent =
+                    'Could not reach the server: ' + (err && err.message ? err.message : err);
             });
         }
 
@@ -390,6 +408,10 @@
                 peersData = data;
                 renderStats();
                 renderPeers();
+            }).catch(err => {
+                toast('failed to load peers: ' + (err && err.message ? err.message : err), 'error');
+                document.getElementById('peers-grid').innerHTML =
+                    '<div class="empty-state col-span-full">Could not reach the server. Click Probe to retry.</div>';
             });
         }
 
@@ -432,7 +454,7 @@
                                     <div class="peer-host">${escapeHtml(p.host)}:${p.port}</div>
                                 </div>
                             </div>
-                            <button class="btn btn-danger" onclick="askRemove('${escapeHtml(p.id)}', '${escapeHtml(p.label)}')" title="Remove peer">
+                            <button class="btn btn-danger" onclick="askRemove('${escapeAttr(p.id)}', '${escapeAttr(p.label)}')" title="Remove peer">
                                 <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                             </button>
                         </div>
@@ -483,6 +505,9 @@
                 } else {
                     showAddError(data.error || `HTTP ${status}`);
                 }
+            }).catch(err => {
+                btn.disabled = false;
+                showAddError('failed: ' + (err && err.message ? err.message : err));
             });
         }
         function showAddError(msg) {
@@ -501,11 +526,11 @@
                     } else {
                         toast(data.error || `HTTP ${status}`, 'error');
                     }
-                });
+                })
+                .catch(err => toast('failed: ' + (err && err.message ? err.message : err), 'error'));
         }
 
-        function probeAll() {
-            const btn = event && event.currentTarget;
+        function probeAll(btn) {
             if (btn) btn.disabled = true;
             api('/api/cluster/probe', { method: 'POST' })
                 .then(({ status, data }) => {
@@ -518,12 +543,19 @@
                     const total = (data.results || []).length;
                     toast(`Probed ${ok}/${total} reachable`, ok === total ? 'success' : 'info');
                     loadPeers();
+                })
+                .catch(err => {
+                    if (btn) btn.disabled = false;
+                    toast('failed: ' + (err && err.message ? err.message : err), 'error');
                 });
         }
 
         function mdnsBrowse() {
+            const btn = document.getElementById('btn-mdns');
+            if (btn) btn.disabled = true;
             api('/api/cluster/mdns', { method: 'POST', body: JSON.stringify({ timeout: 2 }) })
                 .then(({ status, data }) => {
+                    if (btn) btn.disabled = false;
                     if (status >= 400) {
                         toast(data.error || `HTTP ${status}`, 'error');
                         return;
@@ -549,7 +581,7 @@
                                     <span class="mdns-chip"><i data-lucide="plug" class="w-3 h-3"></i> port ${escapeHtml(String(port))}</span>
                                 </div>
                             </div>
-                            <button class="btn" onclick="closeMdns(); fillPeerForm('${escapeHtml(host)}', ${port})" title="Add this peer">
+                            <button class="btn" onclick="closeMdns(); fillPeerForm('${escapeAttr(host)}', '${escapeAttr(String(port))}')" title="Add this peer">
                                 <i data-lucide="plus" class="w-3.5 h-3.5"></i>
                                 <span class="hidden sm:inline">Add</span>
                             </button>
@@ -557,6 +589,10 @@
                     }).join('');
                     document.getElementById('modal-mdns').classList.add('open');
                     lucide.createIcons();
+                })
+                .catch(err => {
+                    if (btn) btn.disabled = false;
+                    toast('failed: ' + (err && err.message ? err.message : err), 'error');
                 });
         }
         function closeMdns() {
@@ -565,8 +601,11 @@
         function fillPeerForm(host, port) {
             document.getElementById('add-host').value = host;
             const labelEl = document.getElementById('add-label');
-            if (labelEl && !labelEl.value) labelEl.value = host.split('.')[0];
-            document.getElementById('add-port').value = port;
+            if (labelEl && !labelEl.value) labelEl.value = String(host).split('.')[0];
+            // Port arrives as a string (mDNS may omit it); coerce and
+            // leave validation to submitAdd.
+            const p = parseInt(port, 10);
+            document.getElementById('add-port').value = Number.isFinite(p) ? p : '';
             openAdd();
         }
 

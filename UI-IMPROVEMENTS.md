@@ -1421,7 +1421,36 @@ parsing/validation/atomic-write already careful).
 Full suite: 855 passed (pre-existing alert_log failure
 excluded); secrets clean.
 
-### Next route: (to be picked — `/cluster` is next in line)
+### Route 15 — Cluster (`/cluster`)  [x]
+
+Files: `templates/cluster.html` (only file changed; backend
+registry/validation/secret handling already deliberate —
+secret exposure is documented for prefill, logged-in only).
+
+1. **Same onclick-escaping bug, twice (fixed).** Peer-card
+   remove used `escapeHtml()` on the free-text label, and
+   the mDNS add-button interpolated raw `port` — a quoted
+   label broke the button (script injection), and a hostile
+   LAN host could inject via mDNS. Both use `escapeAttr()`
+   now; `fillPeerForm` coerces the port defensively.
+   Proven live with a hostile-label peer
+   (`x');alert('PWNED');//"<img src=x>`): zero injected
+   elements, no alert, remove flow works, registry empty
+   afterwards (`[]`).
+2. **Implicit `event` global (fixed).** `probeAll()` read
+   `window.event` for its button; now takes `this`
+   explicitly. Probe verified live (ECONNREFUSED →
+   unreachable styling + message).
+3. **Content width** 90% (measured). **Silent failures
+   fixed**: `loadLocal`/`loadPeers`/`submitAdd`/remove/
+   probe/mDNS all report now (probe/mDNS buttons no longer
+   stick disabled); mDNS has a busy state.
+
+**Verified live** (zero JS errors, `node --check` clean).
+Full suite: 855 passed (pre-existing alert_log failure
+excluded); secrets clean.
+
+### Next route: (to be picked — `/files` is next in line)
 
 ---
 
