@@ -110,7 +110,7 @@
             actions=actions,
             current='/monitor',
         ) }}
-<main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+<main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6">
         <!-- Top Row: System Info + CPU -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
             <!-- System Info -->
@@ -302,14 +302,21 @@
                 <span class="ml-auto text-[10px] text-[var(--text-muted)] font-mono hidden sm:inline">click header to sort</span>
             </div>
             <div class="overflow-x-auto overflow-y-auto max-h-[420px] overscroll-contain rounded-lg border border-[var(--border-subtle)]">
-                <table class="w-full text-sm text-left min-w-[480px]">
+                <table class="w-full text-sm text-left min-w-[480px] table-fixed">
+                    <colgroup>
+                        <col style="width:72px">
+                        <col>
+                        <col style="width:92px">
+                        <col style="width:92px">
+                        <col style="width:128px">
+                    </colgroup>
                     <thead class="sticky top-0 bg-[var(--bg-card)] z-10">
                         <tr class="text-[var(--text-muted)] text-xs uppercase border-b border-[var(--border-subtle)]">
-                            <th class="py-2.5 px-3 font-semibold whitespace-nowrap"><span class="sort-btn" data-col="pid" data-type="num">PID <span class="sort-arrow">▲</span></span></th>
-                            <th class="py-2.5 px-3 font-semibold min-w-[140px]"><span class="sort-btn" data-col="name" data-type="str">Name <span class="sort-arrow">▲</span></span></th>
-                            <th class="py-2.5 px-3 text-right font-semibold whitespace-nowrap"><span class="sort-btn" data-col="cpu" data-type="num">CPU <span class="sort-arrow">▲</span></span></th>
-                            <th class="py-2.5 px-3 text-right font-semibold whitespace-nowrap"><span class="sort-btn" data-col="memory" data-type="num">MEM <span class="sort-arrow">▲</span></span></th>
-                            <th class="py-2.5 px-3 font-semibold whitespace-nowrap"><span class="sort-btn" data-col="status" data-type="str">State <span class="sort-arrow">▲</span></span></th>
+                            <th class="py-2.5 px-3 font-semibold whitespace-nowrap overflow-hidden"><span class="sort-btn" data-col="pid" data-type="num">PID <span class="sort-arrow">▲</span></span></th>
+                            <th class="py-2.5 px-3 font-semibold overflow-hidden"><span class="sort-btn" data-col="name" data-type="str">Name <span class="sort-arrow">▲</span></span></th>
+                            <th class="py-2.5 px-3 text-right font-semibold whitespace-nowrap overflow-hidden"><span class="sort-btn" data-col="cpu" data-type="num">CPU <span class="sort-arrow">▲</span></span></th>
+                            <th class="py-2.5 px-3 text-right font-semibold whitespace-nowrap overflow-hidden"><span class="sort-btn" data-col="memory" data-type="num">MEM <span class="sort-arrow">▲</span></span></th>
+                            <th class="py-2.5 px-3 font-semibold whitespace-nowrap overflow-hidden"><span class="sort-btn" data-col="status" data-type="str">State <span class="sort-arrow">▲</span></span></th>
                         </tr>
                     </thead>
                     <tbody id="procs-body" class="font-mono text-xs"></tbody>
@@ -334,11 +341,17 @@
         });
 
         const MAX_POINTS = 60;
-        const timeLabels = [];
-        const cpuAvgHistory = [];
-        const memHistory = [];
-        const netRecvHistory = [];
-        const netSentHistory = [];
+        // Fixed 60-point window for every chart: pre-fill with nulls so
+        // the x-axis never rescales. New values enter from the right
+        // (push + shift), the left stays empty until the window fills.
+        // spanGaps:false (set in makeChartConfig) breaks the line at
+        // nulls, so a fresh page shows an empty plot that fills rightward.
+        const timeLabels = Array.from({ length: MAX_POINTS }, () => '');
+        const nullWindow = () => new Array(MAX_POINTS).fill(null);
+        const cpuAvgHistory = nullWindow();
+        const memHistory = nullWindow();
+        const netRecvHistory = nullWindow();
+        const netSentHistory = nullWindow();
         let cpuCoreHistories = [];
 
         let sortCol = 'cpu';
@@ -357,6 +370,9 @@
         ];
 
         function makeChartConfig(datasets, yMax) {
+            // spanGaps:false keeps the line broken across the leading
+            // nulls, so the x-axis stays a fixed 60-point window.
+            datasets = datasets.map(d => ({ spanGaps: false, ...d }));
             return {
                 type: 'line',
                 data: { labels: timeLabels, datasets },
@@ -379,7 +395,7 @@
         function initCpuChart(numCores) {
             const datasets = [];
             for (let i = 0; i < numCores; i++) {
-                cpuCoreHistories[i] = [];
+                cpuCoreHistories[i] = nullWindow();
                 datasets.push({
                     data: cpuCoreHistories[i],
                     borderColor: coreColors[i % coreColors.length] + '55',
@@ -450,11 +466,11 @@
             const tbody = document.getElementById('procs-body');
             tbody.innerHTML = sorted.map(p => `
                 <tr class="proc-row border-b border-[var(--border-subtle)] last:border-0">
-                    <td class="py-2.5 px-3 text-[var(--text-muted)]">${p.pid}</td>
-                    <td class="py-2.5 px-3 text-[var(--text-primary)] truncate max-w-[160px] sm:max-w-[200px] font-medium" title="${p.name}">${p.name}</td>
-                    <td class="py-2.5 px-3 text-right font-semibold ${p.cpu > 50 ? 'text-[var(--accent-red)]' : p.cpu > 20 ? 'text-[var(--accent-yellow)]' : 'text-[var(--text-secondary)]'}">${p.cpu.toFixed(1)}%</td>
-                    <td class="py-2.5 px-3 text-right text-[var(--text-secondary)]">${p.memory.toFixed(1)}%</td>
-                    <td class="py-2.5 px-3"><span class="status-badge ${p.status === 'running' ? 'bg-[var(--accent-green)]/10 text-[var(--accent-green)] border border-[var(--accent-green)]/20' : 'bg-white/5 text-[var(--text-muted)] border border-[var(--border-subtle)]'}">${p.status}</span></td>
+                    <td class="py-2.5 px-3 text-[var(--text-muted)] truncate">${p.pid}</td>
+                    <td class="py-2.5 px-3 text-[var(--text-primary)] truncate font-medium" title="${p.name}">${p.name}</td>
+                    <td class="py-2.5 px-3 text-right font-semibold truncate ${p.cpu > 50 ? 'text-[var(--accent-red)]' : p.cpu > 20 ? 'text-[var(--accent-yellow)]' : 'text-[var(--text-secondary)]'}">${p.cpu.toFixed(1)}%</td>
+                    <td class="py-2.5 px-3 text-right text-[var(--text-secondary)] truncate">${p.memory.toFixed(1)}%</td>
+                    <td class="py-2.5 px-3 truncate"><span class="status-badge ${p.status === 'running' ? 'bg-[var(--accent-green)]/10 text-[var(--accent-green)] border border-[var(--accent-green)]/20' : 'bg-white/5 text-[var(--text-muted)] border border-[var(--border-subtle)]'}">${p.status}</span></td>
                 </tr>
             `).join('');
         }

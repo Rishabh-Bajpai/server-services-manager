@@ -518,9 +518,40 @@ Files: `templates/index.html` (only file changed; no backend changes).
 visible at full height (it is the drag-back handle). Removing it
 would require button-only restore; left as-is by design.
 
-### Next route: `/monitor` (System Monitor)
+### Route 2 — Monitor (`/monitor`)  [x]
 
-The next route in the pass after the dashboard.
+Files: `templates/monitor.html` (only file changed; no backend changes).
+
+1. **Content width.** The `<main>` wrapper was `max-w-7xl`
+   (1280px), wasting ~35% on wide screens. Now `w-[90%]` with a
+   `max-w-[1760px]` cap. Measured live: 1152px on a 1280px
+   viewport = exactly 90%.
+
+2. **Chart x-axis no longer rescales (CPU, memory, network).**
+   All history arrays started empty and grew point-by-point, so
+   Chart.js stretched the time axis until 60 points arrived.
+   Every history array (`timeLabels`, `cpuAvgHistory`,
+   `memHistory`, `netRecvHistory`, `netSentHistory`, plus each
+   per-core array at CPU-chart init) is now pre-filled to the
+   full 60-point window with nulls; new values enter from the
+   right via the existing push+shift. `spanGaps: false` is forced
+   on every dataset in `makeChartConfig()`, so the line stays
+   broken across the leading nulls — a fresh page shows an empty
+   plot that fills rightward, and the x scale stays pinned at
+   0–59 forever.
+
+3. **Top Processes fixed column widths.** The table is now
+   `table-fixed` with a `<colgroup>` (PID 72px, Name flexible,
+   CPU 92px, MEM 92px, State 128px); cells truncate instead of
+   pushing columns around. Measured live across two data
+   refreshes 4s apart: widths identical (72/676/92/92/128).
+
+**Verified live** (Playwright against the running server):
+- Width ratio 90%, `table-layout: fixed`, columns stable.
+- After ~20s: `labelsLen 60`, mem/net data length 60 with 11
+  real points, x scale `min 0 / max 59`.
+
+### Next route: (to be picked — `/monitor` done)
 
 ---
 
