@@ -1660,6 +1660,15 @@ program entry appended to `config.yaml`).
   upstream check, not a blocker.
 - **Edit proof:** delete+save round-tripped to disk
   (file emptied on disk after in-IDE save).
+- **Remote-access fix:** loopback-only bind broke non-localhost
+  access (`Firefox can't connect to 100.77.255.82:8600` over
+  Tailscale). code-server now binds `0.0.0.0:8600` with password
+  auth kept on (same gate as the app); installer migrates the
+  old loopback defaults and preserves deliberate custom binds.
+  Verified live over the Tailscale address, login → workbench.
+  If the frame still can't connect, allow the port in the
+  firewall (e.g. `ufw allow 8600/tcp`, or scope to
+  `100.64.0.0/10` for Tailscale-only).
 
 **Verified live** (app page zero JS errors; the 3 console
 errors are code-server's own asset noise: missing vsda

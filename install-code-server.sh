@@ -7,10 +7,11 @@
 #   1. Installs the code-server standalone tarball into
 #      ~/.local/lib + ~/.local/bin (pinned CODE_VERSION, no sudo).
 #   2. Writes ~/.config/code-server/config.yaml bound to
-#      127.0.0.1:8600 with password auth, syncing the password
+#      0.0.0.0:8600 with password auth, syncing the password
 #      from the app's .env PASSWORD (same login the user knows).
-#      An existing bind-addr is preserved; only the password is
-#      synced on re-runs.
+#      0.0.0.0 (not loopback) so LAN/Tailscale browsers can reach
+#      it; password auth stays on. A non-default existing
+#      bind-addr is preserved; the password is synced on re-runs.
 #   3. Installs the Office Viewer extension (cweijan.vscode-office)
 #      inside code-server for .docx/.xlsx/.pptx, unless present.
 #   4. Registers a `code-server` managed program in config.yaml
@@ -21,10 +22,15 @@ set -euo pipefail
 
 CODE_VERSION="${CODE_VERSION:-4.135.0}"
 # An explicitly exported CODE_PORT always wins. Otherwise an existing
-# bind-addr is preserved — unless it is still code-server's factory
-# default (127.0.0.1:8080), which we move to 8600 to avoid clashing
-# with the crowd on 8080.
+# bind-addr is preserved — unless it is a localhost default (the
+# factory 127.0.0.1:8080 or our old 127.0.0.1:8600). Loopback-only
+# breaks remote access (e.g. over Tailscale): the browser connects
+# to this box's LAN/tailscale address, where nothing would listen.
+# 0.0.0.0 keeps password auth on, so the gate is identical to the
+# app itself — scope it further with the firewall if needed
+# (e.g. allow 8600 only from 100.64.0.0/10 for Tailscale-only).
 if [ -z "${CODE_PORT+x}" ]; then CODE_PORT="8600"; CODE_PORT_EXPLICIT=0; else CODE_PORT_EXPLICIT=1; fi
+if [ -z "${BIND_HOST+x}" ]; then BIND_HOST="0.0.0.0"; BIND_HOST_EXPLICIT=0; else BIND_HOST_EXPLICIT=1; fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN="$HOME/.local/bin/code-server"
 
@@ -62,13 +68,13 @@ fi
 CS_DIR="$HOME/.config/code-server"
 mkdir -p "$CS_DIR"
 CS_CFG="$CS_DIR/config.yaml"
-BIND_ADDR="127.0.0.1:${CODE_PORT}"
-if [ "$CODE_PORT_EXPLICIT" = 0 ] && [ -f "$CS_CFG" ] && grep -Eq '^bind-addr:' "$CS_CFG"; then
+BIND_ADDR="${BIND_HOST}:${CODE_PORT}"
+if [ "$CODE_PORT_EXPLICIT" = 0 ] && [ "$BIND_HOST_EXPLICIT" = 0 ] && [ -f "$CS_CFG" ] && grep -Eq '^bind-addr:' "$CS_CFG"; then
     EXISTING="$(grep -E '^bind-addr:' "$CS_CFG" | tail -1 | awk '{print $2}')"
-    if [ "$EXISTING" != "127.0.0.1:8080" ]; then
-        BIND_ADDR="$EXISTING"
-        echo "keeping existing bind-addr: $BIND_ADDR"
-    fi
+    case "$EXISTING" in
+        127.0.0.1:8080|127.0.0.1:8600) ;;  # known loopback defaults: migrate out
+        *) BIND_ADDR="$EXISTING"; echo "keeping existing bind-addr: $BIND_ADDR";;
+    esac
 fi
 printf 'bind-addr: %s\nauth: password\npassword: %s\ncert: false\n' \
     "$BIND_ADDR" "$APP_PASSWORD" > "$CS_CFG"
