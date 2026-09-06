@@ -2392,6 +2392,13 @@ def api_backups_list():
     return jsonify({"jobs": jobs})
 
 
+def _parse_enabled_flag(value) -> bool:
+    """Parse the ``enabled`` request flag without bool("false") == True."""
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "on")
+    return bool(value)
+
+
 @app.route('/api/backups', methods=['POST'])
 @openapi_mod.describe(
     summary="Create a backup job",
@@ -2427,37 +2434,69 @@ def api_backups_create():
         if not data.get(k):
             return jsonify({"error": f"{k} is required"}), 400
     try:
+        retention = int(data.get('retention', 7))
+    except (TypeError, ValueError):
+        return jsonify({"error": "invalid retention (must be an integer 1-365)", "code": "invalid"}), 400
+    # A job is only marked enabled once its timer actually is. Without
+    # a password the timer can't be enabled, so the job starts
+    # disabled and the UI offers Enable — never a lying badge.
+    want_enabled = _parse_enabled_flag(data.get('enabled', True)) and bool(password)
+    try:
         job = backup_manager.create_job(
             name=data['name'],
             type_=data['type'],
             source=data['source'],
             destination=data['destination'],
             schedule=data['schedule'],
-            retention=int(data.get('retention', 7)),
-            enabled=bool(data.get('enabled', True)),
+            retention=retention,
+            enabled=False,
         )
     except ValueError as e:
         return jsonify({"error": str(e), "code": "invalid"}), 400
+    except RuntimeError as e:
+        return jsonify({"error": str(e), "code": "error"}), 500
 
-    # If enabled and password provided, try to enable the timer too
-    if job.enabled and password:
+    warning = ""
+    if want_enabled:
+        if not system_services.verify_password(password):
+            return jsonify({"error": "wrong password", "code": "permission"}), 403
         ok, err = backup_manager.enable_job(job.name, password=password)
         if not ok:
-            activity.log("backup.create", target=job.name, status="partial",
-                         detail=f"created but enable failed: {err}", ip=request.remote_addr or "")
-            return jsonify({"job": job.to_dict(), "warning": f"enable failed: {err}"})
+            warning = f"enable failed: {err}"
+    else:
+        warning = "created disabled; enable it from the table to start the schedule"
 
-    activity.log("backup.create", target=job.name, status="ok",
-                 detail=f"{job.type} {job.source}->{job.destination}", ip=request.remote_addr or "")
-    return jsonify({"job": job.to_dict()})
+    if warning.startswith("enable failed"):
+        activity.log("backup.create", target=job.name, status="partial",
+                     detail=warning, ip=request.remote_addr or "")
+    else:
+        activity.log("backup.create", target=job.name, status="ok",
+                     detail=f"{job.type} {job.source}->{job.destination}", ip=request.remote_addr or "")
+    fresh = backup_manager.get_job(job.name)
+    resp: dict = {"job": (fresh or job).to_dict()}
+    if warning:
+        resp["warning"] = warning
+    return jsonify(resp)
+
+
+def _verify_backup_password(password) -> bool:
+    """User timers need no sudo, but the password field must still mean
+    something: it has to be the user's actual sudo/app password."""
+    return bool(password) and system_services.verify_password(password)
 
 
 @app.route('/api/backups/<name>', methods=['DELETE'])
 def api_backups_delete(name):
-    if not backup_manager.delete_job(name):
+    ok, warning = backup_manager.delete_job(name)
+    if not ok:
         return jsonify({"error": "not_found"}), 404
-    activity.log("backup.delete", target=name, status="ok", ip=request.remote_addr or "")
-    return jsonify({"ok": True})
+    activity.log("backup.delete", target=name, status="ok",
+                 detail=warning[:200] if warning else "",
+                 ip=request.remote_addr or "")
+    resp: dict = {"ok": True}
+    if warning:
+        resp["warning"] = warning
+    return jsonify(resp)
 
 
 @app.route('/api/backups/<name>/enable', methods=['POST'])
@@ -2466,6 +2505,8 @@ def api_backups_enable(name):
     password = data.get('password', '')
     if not password:
         return jsonify({"error": "auth_required"}), 401
+    if not _verify_backup_password(password):
+        return jsonify({"error": "wrong password", "code": "permission"}), 403
     ok, err = backup_manager.enable_job(name, password=password)
     if not ok:
         activity.log("backup.enable", target=name, status="error",
@@ -2482,6 +2523,8 @@ def api_backups_disable(name):
     password = data.get('password', '')
     if not password:
         return jsonify({"error": "auth_required"}), 401
+    if not _verify_backup_password(password):
+        return jsonify({"error": "wrong password", "code": "permission"}), 403
     ok, err = backup_manager.disable_job(name, password=password)
     if not ok:
         activity.log("backup.disable", target=name, status="error",
@@ -2497,6 +2540,8 @@ def api_backups_run(name):
     password = data.get('password', '')
     if not password:
         return jsonify({"error": "auth_required"}), 401
+    if not _verify_backup_password(password):
+        return jsonify({"error": "wrong password", "code": "permission"}), 403
     ok, err = backup_manager.trigger_now(name, password=password)
     if not ok:
         activity.log("backup.run", target=name, status="error",

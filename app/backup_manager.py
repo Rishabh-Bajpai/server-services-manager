@@ -29,6 +29,8 @@ import time
 from dataclasses import dataclass, asdict
 from typing import List, Optional, Tuple
 
+from app.schedules import is_valid_schedule
+
 logger = logging.getLogger("BackupManager")
 
 _USER_DIR = os.path.expanduser("~/.config/systemd/user")
@@ -82,8 +84,19 @@ def _load_jobs() -> List[BackupJob]:
         with open(_BACKUP_JOBS_FILE) as f:
             data = json.load(f)
         return [BackupJob.from_dict(d) for d in data]
-    except (OSError, json.JSONDecodeError, KeyError) as e:
+    except (OSError, KeyError) as e:
         logger.warning(f"backups.json load failed: {e}")
+        return []
+    except json.JSONDecodeError as e:
+        # A corrupt file must never silently become [] and then get
+        # overwritten by the next create (losing every job). Move it
+        # aside for manual recovery and start empty.
+        try:
+            aside = f"{_BACKUP_JOBS_FILE}.corrupt-{int(time.time())}"
+            os.replace(_BACKUP_JOBS_FILE, aside)
+            logger.error(f"backups.json corrupt ({e}); moved to {aside}")
+        except OSError as move_err:
+            logger.error(f"backups.json corrupt ({e}); could not move aside: {move_err}")
         return []
 
 
@@ -112,11 +125,52 @@ def _validate_type(t: str) -> None:
         raise ValueError(f"invalid type: {t!r} (must be one of {VALID_TYPES})")
 
 
+def _validate_schedule(schedule: str) -> None:
+    if not schedule:
+        raise ValueError("schedule is required")
+    if "\n" in schedule or "\r" in schedule:
+        raise ValueError(f"invalid schedule: {schedule!r} (must be a single line)")
+    if not is_valid_schedule(schedule.strip()):
+        raise ValueError(
+            f"invalid schedule: {schedule!r} (must be a systemd OnCalendar "
+            f"expression like 'daily' or 'Mon..Fri 09:00:00')"
+        )
+
+
+def _validate_retention(retention: int) -> None:
+    if not isinstance(retention, int) or isinstance(retention, bool):
+        raise ValueError(f"invalid retention: {retention!r} (must be an integer 1-365)")
+    if retention < 1 or retention > 365:
+        raise ValueError("retention must be between 1 and 365")
+
+
 def _safe_path(p: str) -> str:
     """Reject shell-metacharacter-heavy values from paths."""
     if "\n" in p or "\0" in p:
         raise ValueError(f"invalid character in path: {p!r}")
     return p
+
+
+def _ensure_destination(destination: str) -> None:
+    """Create the archive directory up front so the first run doesn't
+    fail on a missing path (tar cannot create it)."""
+    try:
+        os.makedirs(os.path.expanduser(destination), exist_ok=True)
+    except OSError as e:
+        raise RuntimeError(f"cannot create destination {destination!r}: {e}")
+
+
+def _validate_layout(type_: str, source: str, destination: str) -> None:
+    """Reject layouts where tar would archive its own output."""
+    if type_ != "directory":
+        return
+    src = os.path.abspath(os.path.expanduser(source))
+    dest = os.path.abspath(os.path.expanduser(destination))
+    if dest == src or dest.startswith(src + os.sep):
+        raise ValueError(
+            f"destination {destination!r} must not be the source or inside it "
+            f"(tar would archive its own output while it grows)"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -151,12 +205,12 @@ def create_job(
         raise ValueError("source is required")
     if not destination:
         raise ValueError("destination is required")
-    if not schedule:
-        raise ValueError("schedule is required")
+    _validate_schedule(schedule)
     _safe_path(source)
     _safe_path(destination)
-    if retention < 1 or retention > 365:
-        raise ValueError("retention must be between 1 and 365")
+    _validate_layout(type_, source, destination)
+    _validate_retention(retention)
+    _ensure_destination(destination)
 
     with _LOCK:
         jobs = _load_jobs()
@@ -169,37 +223,66 @@ def create_job(
         )
         jobs.append(job)
         _save_jobs(jobs)
-    _write_units(job)
+    ok, err = _write_units(job)
+    if not ok:
+        # Don't leave a metadata job with no usable timer behind.
+        with _LOCK:
+            _save_jobs([j for j in _load_jobs() if j.name != name])
+        raise RuntimeError(f"could not write systemd units: {err}")
     return job
 
 
-def update_job(name: str, **changes) -> Optional[BackupJob]:
+def update_job(query_name: str, **changes) -> Optional[BackupJob]:
+    """Update fields of a job (including rename via ``name=``).
+
+    Renaming also drops the old systemd units so the old timer does
+    not keep running orphaned. (The first parameter is not called
+    ``name`` precisely so ``name`` can travel inside ``changes``.)
+    """
     with _LOCK:
         jobs = _load_jobs()
         for j in jobs:
-            if j.name == name:
+            if j.name == query_name:
+                old_name = j.name
                 for k, v in changes.items():
                     if hasattr(j, k):
                         setattr(j, k, v)
+                _validate_name(j.name)
                 _validate_type(j.type)
+                _validate_schedule(j.schedule)
+                _validate_retention(j.retention)
                 _safe_path(j.source)
                 _safe_path(j.destination)
+                _validate_layout(j.type, j.source, j.destination)
+                _ensure_destination(j.destination)
                 _save_jobs(jobs)
-                _write_units(j)
+                if j.name != old_name:
+                    # Renamed: drop the old units or the old timer
+                    # keeps running orphaned alongside the new one.
+                    _disable_and_remove_units(old_name)
+                ok, err = _write_units(j)
+                if not ok:
+                    raise RuntimeError(f"could not write systemd units: {err}")
                 return j
     return None
 
 
-def delete_job(name: str) -> bool:
-    """Remove a job from disk + disable its timer."""
+def delete_job(name: str) -> Tuple[bool, str]:
+    """Remove a job from metadata + disable/remove its units.
+
+    Returns (ok, warning). Unit cleanup failures are reported as a
+    warning rather than failing the delete, but they are never
+    silent — an orphaned timer the UI can no longer see is worse
+    than an error toast.
+    """
     with _LOCK:
         jobs = _load_jobs()
         new_jobs = [j for j in jobs if j.name != name]
         if len(new_jobs) == len(jobs):
-            return False
+            return False, ""
         _save_jobs(new_jobs)
-    _disable_and_remove_units(name)
-    return True
+    warning = _disable_and_remove_units(name)
+    return True, warning
 
 
 def enable_job(name: str, password: Optional[str] = None) -> Tuple[bool, str]:
@@ -239,11 +322,16 @@ def get_status(name: str) -> dict:
         ["list-timers", "--no-pager", "--no-legend", f"ssm-backup-{name}.timer"]
     )
     if rc == 0 and out.strip():
-        # Columns: NEXT LEFT UNIT ACTIVATES
+        # Columns: NEXT LEFT LAST PASSED UNIT ACTIVATES, where NEXT
+        # itself is "Dow YYYY-MM-DD HH:MM:SS TZ" (4 tokens) or "-".
         for line in out.splitlines():
             parts = line.split()
-            if len(parts) >= 1:
-                info["next_run"] = parts[0]
+            if not parts:
+                continue
+            if parts[0] == "-":
+                info["next_run"] = None
+            elif len(parts) >= 4:
+                info["next_run"] = " ".join(parts[0:4])
             break
     # Try to find the last_run via the journal for the service
     rc, out, _ = _run_systemctl_user(
@@ -262,31 +350,47 @@ def get_status(name: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def _backup_command(job: BackupJob) -> str:
-    """Return the shell command to run for a backup job."""
-    ts = time.strftime("%Y%m%d-%H%M%S")
+    """Return the shell command to run for a backup job.
+
+    The archive timestamp is a shell ``$(date ...)`` substitution so it
+    is evaluated on every run. Baking a timestamp at unit-write time
+    would make every scheduled run overwrite the same file.
+    ``$ts`` is captured once per run so the backup and its failure
+    cleanup target the same file even across a second boundary.
+    On failure the partial archive is removed so a failed run never
+    leaves a file that looks like a backup.
+    """
+    dest = os.path.expanduser(job.destination)
     if job.type == "directory":
-        src = job.source.rstrip("/")
+        src = os.path.expanduser(job.source).rstrip("/")
         base = os.path.basename(src) or "backup"
-        archive = os.path.join(job.destination, f"{base}-{ts}.tar.gz")
-        # Use --warning=no-file-changed so logs aren't noisy when files
-        # are appended during the dump.
+        dq = shlex.quote(dest)
+        bq = shlex.quote(base)
         return (
-            f"tar --warning=no-file-changed -czf {shlex.quote(archive)} "
+            "ts=$(date +%Y%m%d-%H%M%S); "
+            # Use --warning=no-file-changed so logs aren't noisy when files
+            # are appended during the dump.
+            f"tar --warning=no-file-changed -czf {dq}/{bq}-$ts.tar.gz "
             f"-C {shlex.quote(os.path.dirname(src) or '.')} {shlex.quote(os.path.basename(src))}"
-            f" && echo OK"
+            f" && echo OK || {{ rm -f {dq}/{bq}-$ts.tar.gz; exit 1; }}"
         )
     if job.type == "mysql":
-        archive = os.path.join(job.destination, f"{job.name}-{ts}.sql.gz")
-        # mysql/mariadb dump; assumes the binary is on PATH
+        # mysql/mariadb dump; assumes the binary is on PATH.
+        # pipefail: without it the pipeline status is gzip's, so a
+        # failed mysqldump (bad creds, missing binary) would still
+        # report success with an empty archive.
         return (
+            "set -o pipefail; ts=$(date +%Y%m%d-%H%M%S); "
             f"mysqldump --single-transaction --quick {shlex.quote(job.source)} "
-            f"| gzip > {shlex.quote(archive)} && echo OK"
+            f"| gzip > {shlex.quote(dest)}/{shlex.quote(job.name)}-$ts.sql.gz"
+            f" && echo OK || {{ rm -f {shlex.quote(dest)}/{shlex.quote(job.name)}-$ts.sql.gz; exit 1; }}"
         )
     if job.type == "postgres":
-        archive = os.path.join(job.destination, f"{job.name}-{ts}.sql.gz")
         return (
-            f"pg_dump {shlex.quote(job.source)} | gzip > {shlex.quote(archive)}"
-            f" && echo OK"
+            "set -o pipefail; ts=$(date +%Y%m%d-%H%M%S); "
+            f"pg_dump {shlex.quote(job.source)}"
+            f" | gzip > {shlex.quote(dest)}/{shlex.quote(job.name)}-$ts.sql.gz"
+            f" && echo OK || {{ rm -f {shlex.quote(dest)}/{shlex.quote(job.name)}-$ts.sql.gz; exit 1; }}"
         )
     raise ValueError(f"unknown backup type: {job.type}")
 
@@ -295,17 +399,20 @@ def _prune_command(job: BackupJob) -> str:
     """Return a shell command that prunes old archives beyond retention."""
     if not job.destination:
         return "true"
-    # Pattern matching the archives this job creates
+    dest = os.path.expanduser(job.destination)
+    # Pattern matching the archives this job creates. Only the fixed
+    # parts are quoted — quoting the whole glob would pass a literal
+    # "*" to ls, match nothing, and silently disable pruning.
     if job.type == "directory":
-        base = os.path.basename(job.source.rstrip("/")) or "backup"
-        glob = f"{job.destination}/{base}-*.tar.gz"
+        src = os.path.expanduser(job.source).rstrip("/")
+        base = os.path.basename(src) or "backup"
+        pattern = f"{shlex.quote(dest)}/{shlex.quote(base)}-*.tar.gz"
     else:
-        glob = f"{job.destination}/{job.name}-*.sql.gz"
-    glob_q = shlex.quote(glob)
+        pattern = f"{shlex.quote(dest)}/{shlex.quote(job.name)}-*.sql.gz"
     n = int(job.retention)
     # Keep the N newest (by mtime); delete the rest.
     return (
-        f"ls -1tr {glob_q} 2>/dev/null | head -n -{n} | xargs -r rm -f"
+        f"ls -1tr {pattern} 2>/dev/null | head -n -{n} | xargs -r rm -f"
     )
 
 
@@ -318,18 +425,35 @@ def _unit_path(name: str, kind: str) -> str:
     return os.path.join(_USER_DIR, f"ssm-backup-{safe}.{kind}")
 
 
-def _write_units(job: BackupJob) -> None:
-    """Write the .service and .timer units to disk."""
-    os.makedirs(_USER_DIR, exist_ok=True)
-    os.makedirs(_BACKUP_LOGS_DIR, exist_ok=True)
+def _escape_systemd_specifiers(cmd: str) -> str:
+    """Escape ``%`` for embedding in a unit file.
+
+    systemd performs specifier expansion (``%h``, ``%n``, ...) in
+    ``ExecStart`` before invoking the shell, so a literal ``%`` in a
+    path must be written ``%%``. Shell quoting does not protect it.
+    """
+    return cmd.replace("%", "%%")
+
+
+def _write_units(job: BackupJob) -> Tuple[bool, str]:
+    """Write the .service and .timer units to disk.
+
+    Returns (ok, error). A failure leaves no half-written pair: on a
+    partial write the created file is removed again.
+    """
+    try:
+        os.makedirs(_USER_DIR, exist_ok=True)
+        os.makedirs(_BACKUP_LOGS_DIR, exist_ok=True)
+    except OSError as e:
+        return False, f"cannot create unit directories: {e}"
     log_path = os.path.join(_BACKUP_LOGS_DIR, f"{job.name}.log")
 
     backup_cmd = _backup_command(job)
     prune_cmd = _prune_command(job)
     # Combine: run backup, then prune. Each command is a separate ExecStart
     # so systemd reports individual exit codes.
-    full_backup = backup_cmd
-    full_prune = prune_cmd
+    full_backup = _escape_systemd_specifiers(backup_cmd)
+    full_prune = _escape_systemd_specifiers(prune_cmd)
 
     service_content = (
         "[Unit]\n"
@@ -350,27 +474,55 @@ def _write_units(job: BackupJob) -> None:
         "[Install]\n"
         "WantedBy=timers.target\n"
     )
+    written = []
     try:
-        with open(_unit_path(job.name, "service"), "w") as f:
-            f.write(service_content)
-        with open(_unit_path(job.name, "timer"), "w") as f:
-            f.write(timer_content)
+        for kind, content in (("service", service_content),
+                              ("timer", timer_content)):
+            path = _unit_path(job.name, kind)
+            with open(path, "w") as f:
+                f.write(content)
+            written.append(path)
     except OSError as e:
-        logger.warning(f"write units failed: {e}")
-        return
-    _run_systemctl_user(["daemon-reload"])
+        for path in written:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        return False, f"write units failed: {e}"
+    rc, _, err = _run_systemctl_user(["daemon-reload"])
+    if rc != 0:
+        return False, f"daemon-reload failed: {(err or '').strip() or f'exit {rc}'}"
+    return True, ""
 
 
-def _disable_and_remove_units(name: str) -> None:
-    _run_systemctl_user(["disable", "--now", f"ssm-backup-{name}.timer"])
+def _disable_and_remove_units(name: str) -> str:
+    """Disable the timer and remove both unit files.
+
+    Returns a warning string ("" when everything worked). Failures
+    are collected, not raised, so delete can report them instead of
+    silently orphaning a live timer.
+    """
+    problems = []
+    # Only disable when a timer file actually exists — otherwise a
+    # delete of a job whose units were never written (or already
+    # removed) would warn spuriously.
+    if os.path.exists(_unit_path(name, "timer")):
+        rc, _, err = _run_systemctl_user(["disable", "--now", f"ssm-backup-{name}.timer"])
+        if rc != 0:
+            problems.append(f"disable timer failed: {(err or '').strip() or f'exit {rc}'}")
     for kind in ("timer", "service"):
         path = _unit_path(name, kind)
         try:
             if os.path.exists(path):
                 os.remove(path)
         except OSError as e:
-            logger.warning(f"remove {path}: {e}")
-    _run_systemctl_user(["daemon-reload"])
+            problems.append(f"remove {path}: {e}")
+    rc, _, err = _run_systemctl_user(["daemon-reload"])
+    if rc != 0:
+        problems.append(f"daemon-reload failed: {(err or '').strip() or f'exit {rc}'}")
+    if problems:
+        logger.warning(f"cleanup units for {name!r}: " + "; ".join(problems))
+    return "; ".join(problems)
 
 
 def _run_systemctl_user(args: List[str], password: Optional[str] = None) -> Tuple[int, str, str]:
@@ -422,13 +574,25 @@ def _systemctl_start(name: str, password: Optional[str] = None) -> Tuple[bool, s
 # ---------------------------------------------------------------------------
 
 def run_now_blocking(job: BackupJob, timeout: int = 1800) -> Tuple[int, str]:
-    """Execute the backup command synchronously and return (rc, output)."""
+    """Execute the backup command synchronously and return (rc, output).
+
+    Mirrors the systemd service (backup, then prune). Pruning runs
+    only when the backup succeeded — a failed run must not delete
+    older good archives while adding nothing new.
+    """
     try:
         proc = subprocess.run(
             ["/bin/sh", "-c", _backup_command(job)],
             capture_output=True, text=True, timeout=timeout,
         )
-        return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
+        out = (proc.stdout or "") + (proc.stderr or "")
+        if proc.returncode != 0:
+            return proc.returncode, out
+        prune = subprocess.run(
+            ["/bin/sh", "-c", _prune_command(job)],
+            capture_output=True, text=True, timeout=300,
+        )
+        return proc.returncode, out + (prune.stdout or "") + (prune.stderr or "")
     except subprocess.TimeoutExpired:
         return 124, "timeout"
     except Exception as e:  # noqa: BLE001

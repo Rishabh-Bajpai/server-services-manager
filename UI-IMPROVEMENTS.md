@@ -1276,6 +1276,84 @@ deleted with zero jobs and zero leftover unit files or
 backups.json entries. Full suite: 837 passed (pre-existing
 alert_log failure excluded); secrets clean.
 
+### Route 12 follow-up — LUNA review: 16 findings, all fixed  [x]
+
+External review (`codex`, gpt-5.6-luna, xhigh) of the whole
+backup stack found 1 BLOCKER + 12 BUG + 3 WARNING. Every
+item verified real; all fixed (`app/backup_manager.py`,
+`server.py`, `templates/backups.html`,
+`tests/test_backup_manager.py`):
+
+1. **[BLOCKER] Every scheduled run overwrote one archive.**
+   The timestamp was baked at unit-write time. Now a shell
+   `ts=$(date …)` evaluated per run (captured once so backup
+   and failure-cleanup share the name). Proven live: two
+   runs → two distinct archives.
+2. **Prune never ran.** The glob was fully quoted, so `ls`
+   matched nothing, forever, successfully. Only fixed parts
+   are quoted now. Proven live: 11 archives → newest 7 by
+   mtime, correct victims.
+3. **Failed dumps reported success.** Pipeline status was
+   gzip's. Added `set -o pipefail` plus partial-archive
+   removal on failure (tar too).
+4. **"Enabled" badge lied.** Jobs defaulted enabled while
+   the timer never was. Create now stores disabled unless
+   the timer is actually enabled (wrong password → 403, no
+   password → honest "created disabled" warning); the badge
+   follows live timer state with metadata fallback.
+5. **Next-run never rendered.** `list-timers` NEXT is 4
+   tokens; only the weekday was kept (`new Date("Wed")`
+   invalid). Full 4-token stamp now; proven live ("in 20h
+   35m" renders).
+6. **Schedule unvalidated + unit-file injection.** Newlines
+   would inject unit directives. Now validated with the
+   repo's own `schedules.is_valid_schedule` plus an explicit
+   newline reject (create + update).
+7. **Unit-write failure → false success.** `_write_units`
+   returns status incl. daemon-reload; create rolls metadata
+   back and raises (route: 500, not silent success).
+8. **Delete swallowed disable failures.** Now returns a
+   warning (surfaced as info toast); files/metadata still
+   removed so no unmanageable orphan hides.
+9. **`~` paths literal.** `expanduser` at command build
+   (DB names untouched — directory sources + all dests).
+10. **`%` in paths corrupted by systemd.** Specifiers
+    escaped (`%%`) at unit-write time only, so direct
+    `run_now_blocking` is unaffected.
+11. **`update_job` rename orphaned old timer** (plus an
+    API trap: `name` as first param made rename uncallable).
+    Renames now work with old-unit cleanup + full
+    validation.
+12. **`run_now_blocking` skipped prune.** Now runs
+    backup-then-prune (prune only on success).
+13. **Coercion bugs.** `retention: null` 500'd; `"false"`
+    enabled the job. Defensive parsing in the route.
+14. **Password never checked.** Any nonempty string worked.
+    Enable/disable/run/create-with-password now verify via
+    `system_services.verify_password` (proven live: wrong →
+    403, right → 200).
+15. **Silent UI failures + stale renders.** `.catch` on
+    create/toggle/run/delete; `loadSeq` guard like `/logs`.
+16. **Corrupt JSON → silent wipe.** Now moved aside to
+    `backups.json.corrupt-<ts>` for recovery.
+
+Plus two found live during verification: destination
+inside/overlapping source is rejected (tar would archive
+its own output — walked straight into it), and missing
+destinations are created at job time (fail fast with a
+clear 500 instead of failing every run).
+
+Full round trip live with real tar runs (zero JS errors,
+`node --check` clean); all artifacts removed afterwards
+(units, metadata, archives, dirs all confirmed gone).
+Full suite: 855 passed (pre-existing alert_log failure
+excluded); secrets clean. Note: one intermediate `ls`
+showed unit files moments before a later check showed
+them gone with no actor in between — a direct
+create→delete repro proves the path correct and final
+state was verified clean four ways; recorded here as an
+unexplained observation, not a defect.
+
 ### Next route: (to be picked — `/disk` is next in line)
 
 ---

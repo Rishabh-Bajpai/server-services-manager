@@ -338,6 +338,14 @@
         }
     }
 
+    // Badge and buttons follow the LIVE timer state when the status
+    // fetch succeeded; metadata is only the fallback. A job created
+    // without a password was never actually enabled, and only the
+    // live state tells the truth about drift.
+    function liveEnabled(j) {
+        if (j.timer && typeof j.timer.enabled === 'boolean') return j.timer.enabled;
+        return !!j.enabled;
+    }
     function render() {
         const tbody = document.getElementById('jobs-tbody');
         if (!jobs.length) {
@@ -346,13 +354,14 @@
             return;
         }
         tbody.innerHTML = jobs.map(j => {
-            const statusBadge = j.enabled
+            const on = liveEnabled(j);
+            const statusBadge = on
                 ? '<span class="badge badge-green">enabled</span>'
                 : '<span class="badge badge-gray">disabled</span>';
             const t = j.timer || {};
             const nextRun = t.next_run ? formatNextRun(t.next_run) : '';
             const lastRun = t.last_run ? formatLastRun(t.last_run) : '';
-            const timerInfo = j.enabled && (nextRun || lastRun)
+            const timerInfo = on && (nextRun || lastRun)
                 ? `<div class="text-[10px] text-[var(--text-muted)] mt-0.5 leading-tight">
                     ${nextRun ? `<span title="Next scheduled run">${escAttr(nextRun)}</span>` : ''}
                     ${nextRun && lastRun ? '<br>' : ''}
@@ -373,7 +382,7 @@
                     <button class="btn" style="padding:0.25rem 0.5rem" onclick="runJob('${escAttr(j.name)}')" title="Run now">
                         <i data-lucide="play" class="w-3 h-3"></i>
                     </button>
-                    ${j.enabled
+                    ${on
                         ? `<button class="btn" style="padding:0.25rem 0.5rem" onclick="toggleJob('${escAttr(j.name)}', false)" title="Disable"><i data-lucide="pause" class="w-3 h-3"></i></button>`
                         : `<button class="btn btn-success" style="padding:0.25rem 0.5rem" onclick="toggleJob('${escAttr(j.name)}', true)" title="Enable"><i data-lucide="play-circle" class="w-3 h-3"></i></button>`}
                     <button class="btn btn-danger" style="padding:0.25rem 0.5rem" onclick="confirmDelete('${escAttr(j.name)}')" title="Delete">
@@ -435,8 +444,11 @@
         if (!livePaused) load();
     }
 
+    let loadSeq = 0;
     function load() {
+        const mySeq = ++loadSeq;
         api('/api/backups').then(async ({ data }) => {
+            if (mySeq !== loadSeq) return; // superseded by a newer load
             jobs = data.jobs || [];
             // Fetch timer state for each job in parallel so the
             // table can show "Next run: in 4h 23m" / "last: 2h ago".
@@ -448,6 +460,7 @@
                     if (res.ok) j.timer = res.data.timer || {};
                 } catch (e) { /* leave j.timer undefined */ }
             }));
+            if (mySeq !== loadSeq) return;
             render();
         }).catch(err => {
             toast('failed to load backups: ' + (err && err.message ? err.message : err), 'error');
@@ -502,6 +515,7 @@
                 closeCreate();
                 load();
             })
+            .catch(err => toast('failed: ' + (err && err.message ? err.message : err), 'error'))
             .finally(() => btns.forEach(b => b.disabled = false));
     }
 
@@ -518,7 +532,8 @@
                 if (!ok) { toast(data.error || 'failed', 'error'); return; }
                 toast((enable ? 'enabled ' : 'disabled ') + name, 'success');
                 load();
-            });
+            })
+            .catch(err => toast('failed: ' + (err && err.message ? err.message : err), 'error'));
     }
     async function runJob(name) {
         const pw = await uiPromptPassword('Run backup now', `Enter your app password to run "${name}" now.`, 'Run');
@@ -527,7 +542,8 @@
             .then(({ ok, data }) => {
                 if (!ok) { toast(data.error || 'failed', 'error'); return; }
                 toast('started ' + name, 'success');
-            });
+            })
+            .catch(err => toast('failed: ' + (err && err.message ? err.message : err), 'error'));
     }
     function confirmDelete(name) {
         document.getElementById('confirm-title').textContent = 'Delete backup job?';
@@ -539,10 +555,12 @@
             api('/api/backups/' + encodeURIComponent(name), { method: 'DELETE' })
                 .then(({ ok, data }) => {
                     if (!ok) { toast(data.error || 'delete failed', 'error'); return; }
-                    toast('deleted ' + name, 'success');
+                    if (data.warning) toast('deleted ' + name + ': ' + data.warning, 'info');
+                    else toast('deleted ' + name, 'success');
                     closeConfirm();
                     load();
-                });
+                })
+                .catch(err => toast('failed: ' + (err && err.message ? err.message : err), 'error'));
         };
         showModal('confirm-modal');
     }

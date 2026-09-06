@@ -11,6 +11,7 @@ The systemd calls are mocked throughout. We exercise:
 - safe path validation
 """
 import json
+import os
 import subprocess
 from unittest.mock import MagicMock, patch
 
@@ -48,7 +49,33 @@ def isolated_backups(monkeypatch, tmp_path):
     monkeypatch.setattr(bm, "_BACKUP_JOBS_FILE", str(jobs_file))
     monkeypatch.setattr(bm, "_USER_DIR", str(user_dir))
     monkeypatch.setattr(bm, "_BACKUP_LOGS_DIR", str(logs_dir))
+    # Archive destinations are faked too: mirror absolute test paths
+    # under tmp so _ensure_destination never touches the real FS.
+    # (Real makedirs behavior is covered by dedicated tests below.)
+    def fake_ensure(dest):
+        mapped = tmp_path / "dests" / os.path.expanduser(dest).lstrip("/")
+        os.makedirs(mapped, exist_ok=True)
+    monkeypatch.setattr(bm, "_ensure_destination", fake_ensure)
     yield jobs_file, user_dir, logs_dir
+
+
+def test_ensure_destination_creates_dir(tmp_path):
+    target = tmp_path / "new" / "nested"
+    bm._ensure_destination(str(target))
+    assert target.is_dir()
+
+
+def test_ensure_destination_permission_error(tmp_path):
+    # Unwritable parent -> RuntimeError (fail fast, don't create a
+    # job whose first run is doomed).
+    parent = tmp_path / "locked"
+    parent.mkdir()
+    parent.chmod(0o500)
+    try:
+        with pytest.raises(RuntimeError):
+            bm._ensure_destination(str(parent / "child"))
+    finally:
+        parent.chmod(0o700)
 
 
 # ---------------------------------------------------------------------------
@@ -205,15 +232,31 @@ def test_delete_job(isolated_backups):
         create_job("d1", "directory", "/a", "/b", "daily")
     assert (user_dir / "ssm-backup-d1.timer").exists()
     with patch.object(bm, "_run_systemctl_user", return_value=(0, "", "")):
-        ok = delete_job("d1")
+        ok, warning = delete_job("d1")
     assert ok is True
+    assert warning == ""
     assert get_job("d1") is None
     assert not (user_dir / "ssm-backup-d1.timer").exists()
     assert not (user_dir / "ssm-backup-d1.service").exists()
 
 
 def test_delete_unknown_returns_false(isolated_backups):
-    assert delete_job("nope") is False
+    ok, warning = delete_job("nope")
+    assert ok is False
+    assert warning == ""
+
+
+def test_delete_reports_disable_failure(isolated_backups):
+    with patch.object(bm, "_run_systemctl_user", return_value=(0, "", "")):
+        create_job("w1", "directory", "/a", "/b", "daily")
+    # disable fails: files/metadata still removed, warning reported
+    # (never a silent orphaned timer).
+    with patch.object(bm, "_run_systemctl_user",
+                      return_value=(1, "", "Failed to disable")):
+        ok, warning = delete_job("w1")
+    assert ok is True
+    assert "disable timer failed" in warning
+    assert get_job("w1") is None
 
 
 # ---------------------------------------------------------------------------
@@ -349,7 +392,7 @@ def test_backup_command_quotes_path_with_space():
     # split it. We split the source into dirname/basename for tar's -C,
     # so the full path isn't in the command but its pieces are quoted.
     assert "'my data'" in cmd
-    assert "'/var/backups/my data-" in cmd
+    assert "/var/backups/'my data'-$ts.tar.gz" in cmd
 
 
 # ---------------------------------------------------------------------------
@@ -449,3 +492,163 @@ def test_missing_dir_creates_on_save(isolated_backups, tmp_path):
         with patch.object(bm, "_run_systemctl_user", return_value=(0, "", "")):
             create_job("z", "directory", "/a", "/b", "daily")
         assert new_path.exists()
+
+
+# ---------------------------------------------------------------------------
+# Codex-review fixes
+# ---------------------------------------------------------------------------
+
+def test_backup_command_timestamp_is_runtime():
+    # The timestamp must be a shell substitution evaluated on every
+    # run — never baked in at unit-write time (or every scheduled
+    # run overwrites the same archive).
+    job = BackupJob(name="www", type="directory", source="/var/www",
+                    destination="/var/backups", schedule="daily")
+    cmd = _backup_command(job)
+    assert "$(date +%Y%m%d-%H%M%S)" in cmd
+    assert "-$ts.tar.gz" in cmd
+    assert " || { rm -f " in cmd  # failed runs clean the partial file
+
+
+def test_backup_command_mysql_pipefail_and_cleanup():
+    job = BackupJob(name="db", type="mysql", source="app_db",
+                    destination="/var/backups", schedule="daily")
+    cmd = _backup_command(job)
+    assert "set -o pipefail" in cmd  # dump failure must fail the unit
+    assert "-$ts.sql.gz" in cmd
+    assert " || { rm -f " in cmd
+
+
+def test_prune_command_glob_unquoted():
+    # Quoting the whole glob passes a literal "*" to ls and silently
+    # disables pruning. Only the fixed parts may be quoted.
+    job = BackupJob(name="www", type="directory", source="/var/www",
+                    destination="/var/backups", schedule="daily", retention=7)
+    cmd = _prune_command(job)
+    assert "/var/backups/www-*.tar.gz" in cmd
+    assert "'/var/backups/www-*.tar.gz'" not in cmd
+    assert "head -n -7" in cmd
+
+
+def test_commands_expand_tilde():
+    job = BackupJob(name="h", type="directory", source="~/docs",
+                    destination="~/backups", schedule="daily")
+    cmd = _backup_command(job) + " " + _prune_command(job)
+    assert "~" not in cmd.replace("~/.", "")  # no literal ~ in paths
+    assert os.path.expanduser("~/backups") in cmd
+
+
+def test_unit_escapes_systemd_percent(tmp_path):
+    import app.backup_manager as m
+    assert m._escape_systemd_specifiers("/srv/%h-x") == "/srv/%%h-x"
+
+
+def test_create_rejects_destination_inside_source(isolated_backups):
+    with patch.object(bm, "_run_systemctl_user", return_value=(0, "", "")):
+        with pytest.raises(ValueError):
+            create_job("l1", "directory", "/srv/www", "/srv/www/backups", "daily")
+        with pytest.raises(ValueError):
+            create_job("l2", "directory", "/srv/www", "/srv/www", "daily")
+        # Source inside destination is fine (archive lands outside it).
+        create_job("l3", "directory", "/srv/www/sub", "/srv/backups", "daily")
+    assert get_job("l3") is not None
+
+
+def test_create_rejects_bad_schedule(isolated_backups):
+    with patch.object(bm, "_run_systemctl_user", return_value=(0, "", "")):
+        with pytest.raises(ValueError):
+            create_job("s1", "directory", "/a", "/b", "not a (calendar!")
+        with pytest.raises(ValueError):
+            create_job("s2", "directory", "/a", "/b", "daily\nOnCalendar=hourly")
+        with pytest.raises(ValueError):
+            create_job("s3", "directory", "/a", "/b", "daily", retention=True)
+
+
+def test_create_rolls_back_on_unit_failure(isolated_backups):
+    with patch.object(bm, "_run_systemctl_user", return_value=(0, "", "")):
+        with patch.object(bm, "_write_units", return_value=(False, "disk full")):
+            with pytest.raises(RuntimeError):
+                create_job("r1", "directory", "/a", "/b", "daily")
+    # No false metadata job left behind.
+    assert get_job("r1") is None
+    assert list_jobs() == []
+
+
+def test_update_rename_removes_old_units(isolated_backups):
+    jobs_file, user_dir, _ = isolated_backups
+    with patch.object(bm, "_run_systemctl_user", return_value=(0, "", "")):
+        create_job("old1", "directory", "/a", "/b", "daily")
+    assert (user_dir / "ssm-backup-old1.timer").exists()
+    with patch.object(bm, "_run_systemctl_user", return_value=(0, "", "")):
+        result = update_job("old1", **{"name": "new1"})
+    assert result is not None and result.name == "new1"
+    assert not (user_dir / "ssm-backup-old1.timer").exists()
+    assert (user_dir / "ssm-backup-new1.timer").exists()
+
+
+def test_update_validates_schedule(isolated_backups):
+    with patch.object(bm, "_run_systemctl_user", return_value=(0, "", "")):
+        create_job("v2", "directory", "/a", "/b", "daily")
+    with patch.object(bm, "_run_systemctl_user", return_value=(0, "", "")):
+        with pytest.raises(ValueError):
+            update_job("v2", schedule=";;;")
+
+
+def test_corrupt_json_moved_aside(isolated_backups, tmp_path):
+    jobs_file, _, _ = isolated_backups
+    jobs_file.write_text("{not valid json")
+    assert list_jobs() == []
+    aside = list(tmp_path.glob("backups.json.corrupt-*"))
+    assert len(aside) == 1
+    assert "{not valid json" in aside[0].read_text()
+
+
+def test_get_status_next_run_full_timestamp():
+    side_effects = [
+        (0, "enabled\n", ""),
+        (0, "active\n", ""),
+        (0, "Sun 2026-09-06 04:00:00 CDT  41min left  n/a  n/a  ssm-backup-x.timer  ssm-backup-x.service\n", ""),
+        (0, "", ""),
+    ]
+    with patch.object(bm, "_run_systemctl_user", side_effect=side_effects):
+        s = get_status("x")
+    assert s["next_run"] == "Sun 2026-09-06 04:00:00 CDT"
+
+
+def test_get_status_next_run_never():
+    side_effects = [
+        (0, "enabled\n", ""),
+        (1, "", "inactive"),
+        (0, "-  -  n/a  n/a  ssm-backup-x.timer  ssm-backup-x.service\n", ""),
+        (0, "", ""),
+    ]
+    with patch.object(bm, "_run_systemctl_user", side_effect=side_effects):
+        s = get_status("x")
+    assert s["next_run"] is None
+
+
+def test_run_now_blocking_prunes_on_success():
+    job = BackupJob(name="t", type="directory", source="/x",
+                    destination="/y", schedule="daily")
+    fake = MagicMock()
+    fake.returncode = 0
+    fake.stdout = "OK\n"
+    fake.stderr = ""
+    with patch.object(bm.subprocess, "run", return_value=fake) as run:
+        rc, out = run_now_blocking(job)
+    assert rc == 0
+    assert run.call_count == 2  # backup, then prune
+    assert "OK" in out
+
+
+def test_run_now_blocking_skips_prune_on_failure():
+    job = BackupJob(name="t", type="directory", source="/x",
+                    destination="/y", schedule="daily")
+    fake = MagicMock()
+    fake.returncode = 1
+    fake.stdout = ""
+    fake.stderr = "tar failed"
+    with patch.object(bm.subprocess, "run", return_value=fake) as run:
+        rc, out = run_now_blocking(job)
+    assert rc == 1
+    assert run.call_count == 1  # no prune after a failed backup
