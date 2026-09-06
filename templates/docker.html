@@ -1281,7 +1281,7 @@
     }
     async function restartDaemon() {
         if (!await uiConfirm('Restart Docker daemon?', 'All running containers stop briefly. The page may disconnect for a few seconds.', true)) return;
-        const pw = await uiPromptPassword('Restart Docker daemon', 'Enter your app password (piped to sudo for this one command).', 'Restart');
+        const pw = await uiPromptPassword('Restart Docker daemon', 'Enter your sudo password (not the app login). Used only for that one sudo call.', 'Restart');
         if (pw == null) return;
         const { ok, data } = await api('/api/docker/daemon/restart', {
             method: 'POST', body: JSON.stringify({ password: pw }),

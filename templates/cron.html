@@ -338,8 +338,8 @@
             <input type="text" id="add-user" value="root" placeholder="root" autocomplete="off">
             <div class="text-xs text-[var(--text-muted)] font-medium mb-1">Command</div>
             <input type="text" id="add-command" placeholder="/usr/bin/my-job --flag" autocomplete="off">
-            <div class="text-xs text-[var(--text-muted)] font-medium mb-1">Sudo password</div>
-            <input type="password" id="add-password" placeholder="Enter password..." autocomplete="off">
+            <div class="text-xs text-[var(--text-muted)] font-medium mb-1">Sudo password (not app login)</div>
+            <input type="password" id="add-password" placeholder="Sudo password..." autocomplete="off">
             <div class="modal-error" id="add-error" style="display:none"></div>
             <div class="modal-actions">
                 <button class="btn-cancel" onclick="closeAddModal()">Cancel</button>
@@ -351,9 +351,9 @@
     <!-- Auth modal -->
     <div class="modal-overlay" id="auth-modal">
         <div class="modal-box">
-            <h2 id="auth-title">Authentication required</h2>
-            <p id="auth-message">Enter your password to perform this action.</p>
-            <input type="password" id="auth-password" placeholder="Enter password..." autocomplete="off">
+            <h2 id="auth-title">Sudo password required</h2>
+            <p id="auth-message">Enter your sudo password (not the app login) to perform this action.</p>
+            <input type="password" id="auth-password" placeholder="Sudo password..." autocomplete="off">
             <div class="modal-error" id="auth-error" style="display:none"></div>
             <div class="modal-actions">
                 <button class="btn-cancel" onclick="closeAuth()">Cancel</button>

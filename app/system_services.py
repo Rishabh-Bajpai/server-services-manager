@@ -2,7 +2,9 @@
 
 The Flask app typically runs as a non-root user, so write operations
 (start/stop/restart/enable/disable/edit) require elevated privileges.
-We obtain them by piping the user's app password to ``sudo -S``.
+We obtain them by piping the user's sudo password to ``sudo -S`` for
+that single command. The sudo password is never assumed to equal the
+app login password — callers must collect it via a separate input.
 
 Read operations (list, status, show, cat, log) do not require sudo and
 are cached for a short window to keep the UI snappy on hosts with

@@ -1052,9 +1052,9 @@
 
         // Run a scheduled program immediately (one-shot start via the
         // systemd timer). Backend: POST /api/programs/<name>/schedule/trigger
-        // requires the app password because systemdctl runs as root.
+        // needs the sudo password (never the app login password).
         async function triggerScheduled(name) {
-            const pw = await uiPromptPassword('Trigger scheduled program', `Enter your app password to run "${name}" now.`, 'Run');
+            const pw = await uiPromptPassword('Trigger scheduled program', `Enter your sudo password (not the app login) to run "${name}" now.`, 'Run');
             if (!pw) return;
             try {
                 const res = await fetch(`/api/programs/${encodeURIComponent(name)}/schedule/trigger`, {
@@ -1240,6 +1240,7 @@
             if (clear) {
                 clear.onclick = async () => {
                     if (!await uiConfirm('Remove resource limits?', 'Remove all resource limits for this service?', true)) return;
+                    // User drop-ins (--user) never need sudo: no password.
                     const r = await fetch(`/api/programs/${encodeURIComponent(_limitsProgramName)}/limits`, {
                         method: 'DELETE',
                     });
@@ -1265,6 +1266,7 @@
             document.querySelectorAll('#limits-fields input[data-field]').forEach(inp => {
                 limits[inp.dataset.field] = inp.value.trim();
             });
+            // User drop-ins (--user) never need sudo: no password.
             try {
                 const r = await fetch(`/api/programs/${encodeURIComponent(_limitsProgramName)}/limits`, {
                     method: 'POST',
@@ -1301,7 +1303,7 @@
             checkbox.checked = !enabled;
             const password = await uiPromptPassword(
                 enabled ? 'Enable at boot' : 'Disable at boot',
-                `Enter your password to ${enabled ? 'enable' : 'disable'} "${originalName}" at boot.`,
+                `Enter your sudo password (not the app login) to ${enabled ? 'enable' : 'disable'} "${originalName}" at boot.`,
                 enabled ? 'Enable' : 'Disable'
             );
             if (!password) {
@@ -1434,7 +1436,9 @@
                     const err = await res.json();
                     toast(err.error || 'Failed to save', 'error');
                 } else {
-                    // If a schedule is set, write the systemd units too
+                    // If a schedule is set, write the systemd user units
+                    // too. User timers (--user) never need sudo, so no
+                    // password is sent here.
                     if (data.schedule) {
                         const schedRes = await fetch(`/api/programs/${data.name}/schedule`, {
                             method: 'POST',
@@ -1883,7 +1887,7 @@
                         }
                     } catch (e) { toast('Network error: ' + e.message, 'error'); }
                 } else if (run.type === 'action_with_auth') {
-                    const pw = await uiPromptPassword('Authentication required', `Enter your password for "${item.label}".`, 'Confirm');
+                    const pw = await uiPromptPassword('Authentication required', `Enter your app login password (not sudo) for "${item.label}".`, 'Confirm');
                     if (!pw) return;
                     try {
                         const body = run.body ? JSON.stringify(run.body) : null;

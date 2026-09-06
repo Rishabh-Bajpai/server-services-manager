@@ -256,8 +256,8 @@
                     <input id="rule-source" type="text" class="text-input" placeholder="192.168.1.0/24, 10.0.0.5, or leave empty">
                 </div>
                 <div>
-                    <label class="block mb-1 text-[var(--text-muted)]">App password (for sudo)</label>
-                    <input id="rule-password" type="password" class="text-input" placeholder="password">
+                    <label class="block mb-1 text-[var(--text-muted)]">Sudo password</label>
+                    <input id="rule-password" type="password" class="text-input" placeholder="sudo password (not app login)">
                 </div>
                 <div id="rule-preview" class="rounded-lg border border-[var(--border-subtle)] p-2.5 font-mono text-[11px] text-[var(--text-secondary)]">Preview will appear here.</div>
                 <div id="rule-warn" class="hidden rounded-lg border border-red-500/40 bg-red-500/10 p-2.5 text-[11px] text-[var(--accent-red)]">Warning: this would deny inbound SSH (port 22) from anywhere — you could lock yourself out. Add a source IP or use reject/limit instead.</div>
@@ -292,8 +292,8 @@
                     </select>
                 </div>
                 <div>
-                    <label class="block mb-1 text-[var(--text-muted)]">App password</label>
-                    <input id="default-password" type="password" class="text-input">
+                    <label class="block mb-1 text-[var(--text-muted)]">Sudo password</label>
+                    <input id="default-password" type="password" class="text-input" placeholder="sudo password (not app login)">
                 </div>
             </div>
             <div class="flex gap-2 justify-end mt-4">
@@ -309,8 +309,8 @@
             <h3 class="text-lg font-semibold mb-2" id="toggle-title">Toggle firewall</h3>
             <p class="text-sm text-[var(--text-secondary)] mb-4" id="toggle-body"></p>
             <div>
-                <label class="block mb-1 text-xs text-[var(--text-muted)]">App password</label>
-                <input id="toggle-password" type="password" class="text-input">
+                <label class="block mb-1 text-xs text-[var(--text-muted)]">Sudo password</label>
+                <input id="toggle-password" type="password" class="text-input" placeholder="sudo password (not app login)">
             </div>
             <div class="flex gap-2 justify-end mt-4">
                 <button class="btn" onclick="closeToggle()">Cancel</button>
@@ -324,6 +324,10 @@
     <script>
     let state = null;
     let toggleAction = null;
+    // Sudo password for the elevated status read. Kept in page memory
+    // only (never localStorage); cleared on wrong-password (403).
+    // Never assumed to equal the app login password.
+    let unlockPassword = null;
 
     function toast(message, kind) {
         kind = kind || 'info';
@@ -431,7 +435,24 @@
     }
 
     function loadStatus() {
-        api('/api/firewall/status').then(({ data }) => {
+        // POST body preferred for the sudo password (avoids it landing
+        // in access logs); GET query kept as fallback.
+        const statusReq = unlockPassword
+            ? api('/api/firewall/status', { method: 'POST', body: JSON.stringify({ password: unlockPassword }) })
+            : api('/api/firewall/status');
+        statusReq.then(({ ok, status, data }) => {
+            if (!ok) {
+                // Error body is {error, code} — not a Status — so bail
+                // out before touching state (else the dashboard gets
+                // wiped by a false "backend not available" banner).
+                if (status === 403) {
+                    unlockPassword = null;
+                    toast(data.error || 'wrong sudo password', 'error');
+                } else {
+                    toast(data.error || 'failed to load firewall status', 'error');
+                }
+                return;
+            }
             state = data;
             if (!data.available) {
                 renderUnavailable(data.reason);
@@ -439,8 +460,7 @@
             }
             if (data.reason) {
                 // Partial status (e.g. no sudo). Render what we can and
-                // surface a banner that asks the user to provide the
-                // password to unlock the full read view.
+                // offer an explicit unlock input for the sudo password.
                 document.getElementById('unavailable-banner').innerHTML = `
                     <div class="panel-card border-blue-500/30 border p-4">
                         <div class="flex items-start gap-3">
@@ -448,7 +468,8 @@
                             <div class="flex-1">
                                 <div class="font-semibold text-sm mb-1">Limited status</div>
                                 <div class="text-xs text-[var(--text-secondary)] mb-2">${escAttr(data.reason)}</div>
-                                <div class="text-xs text-[var(--text-muted)]">Provide the app password via one of the actions below to unlock the full view (the password is used only for that one sudo call).</div>
+                                <div class="text-xs text-[var(--text-muted)] mb-3">Enter your <span class="font-semibold text-[var(--text-primary)]">sudo password</span> (not the app login) to unlock the full view. It is kept only in this page's memory until refresh, never stored.</div>
+                                <button class="btn btn-primary" onclick="unlockFullView()">Unlock full view</button>
                             </div>
                         </div>
                     </div>`;
@@ -464,6 +485,13 @@
             document.getElementById('rules-tbody').innerHTML = '<tr><td colspan="6"><div class="empty-state">Could not reach the server. Click Refresh to retry.</div></td></tr>';
             setActionButtons(null);
         });
+    }
+
+    async function unlockFullView() {
+        const pw = await uiPromptPassword('Unlock full firewall view', 'Enter your sudo password (not the app login). Kept only in this page\'s memory until refresh.', 'Unlock');
+        if (!pw) return;
+        unlockPassword = pw;
+        loadStatus();
     }
 
     // NB: modals need the 'open' class as well as hidden removal:
@@ -556,7 +584,7 @@
             });
     }
     async function deleteRule(num) {
-        const pw = await uiPromptPassword('Delete firewall rule', `Enter your app password to delete rule [${num}].`, 'Delete');
+        const pw = await uiPromptPassword('Delete firewall rule', `Enter your sudo password (not the app login) to delete rule [${num}].`, 'Delete');
         if (!pw) return;
         api('/api/firewall/rules', { method: 'DELETE', body: JSON.stringify({ number: num, password: pw }) })
             .then(({ ok, data }) => {
@@ -619,7 +647,7 @@
     }
 
     async function apiReload() {
-        const pw = await uiPromptPassword('Reload firewall', 'Enter your app password to reload the firewall.', 'Reload');
+        const pw = await uiPromptPassword('Reload firewall', 'Enter your sudo password (not the app login) to reload the firewall.', 'Reload');
         if (!pw) return;
         api('/api/firewall/reload', { method: 'POST', body: JSON.stringify({ password: pw }) })
             .then(({ ok, data }) => {

@@ -472,9 +472,9 @@ def prune_images() -> dict:
 def restart_daemon(password: str) -> dict:
     """Restart the Docker daemon via ``sudo systemctl restart docker``.
 
-    The Flask process stays unprivileged — the user's app password is
-    piped to ``sudo -S`` for this one command (same pattern as
-    ``system_services`` write operations).
+    The Flask process stays unprivileged — the user's sudo password
+    (not the app login) is piped to ``sudo -S`` for this one command
+    (same pattern as ``system_services`` write operations).
     """
     import subprocess
 

@@ -623,9 +623,9 @@
     <!-- Auth modal -->
     <div class="modal-overlay" id="auth-modal" onclick="if(event.target===this) closeAuth()">
         <div class="modal-box">
-            <h2 id="auth-title">Authentication required</h2>
-            <p id="auth-message">Enter your password to perform this action.</p>
-            <input type="password" id="auth-password" placeholder="Enter password..." autocomplete="off">
+            <h2 id="auth-title">Sudo password required</h2>
+            <p id="auth-message">Enter your sudo password (not the app login) to perform this action.</p>
+            <input type="password" id="auth-password" placeholder="Sudo password..." autocomplete="off">
             <p id="auth-error" class="text-xs text-[var(--accent-red)] mb-2" style="display:none"></p>
             <div class="modal-actions">
                 <button class="btn-cancel" onclick="closeAuth()">Cancel</button>
@@ -640,7 +640,7 @@
             <h2>Edit unit drop-in</h2>
             <p class="text-xs text-[var(--text-muted)] mb-2">Saves to <code class="font-mono text-[var(--accent-purple)]" id="edit-target-path"></code></p>
             <textarea id="edit-content" class="editor" style="flex:1;min-height:200px;margin-bottom:1rem"></textarea>
-            <input type="password" id="edit-password" placeholder="Enter password to save..." autocomplete="off">
+            <input type="password" id="edit-password" placeholder="Sudo password to save..." autocomplete="off">
             <p id="edit-error" class="text-xs text-[var(--accent-red)] mb-2" style="display:none"></p>
             <div class="modal-actions">
                 <button class="btn-cancel" onclick="closeEdit()">Cancel</button>
@@ -1518,7 +1518,7 @@
                 }
             }
             $('auth-title').textContent = labels[action] || 'Confirm action';
-            $('auth-message').textContent = `Enter your password to ${action} "${pendingAction.name}".`;
+            $('auth-message').textContent = `Enter your sudo password (not the app login) to ${action} "${pendingAction.name}".`;
             $('auth-password').value = '';
             $('auth-error').style.display = 'none';
             $('auth-modal').classList.add('active');
@@ -1695,7 +1695,7 @@
                 enable: 'Enable at boot', disable: 'Disable at boot',
             };
             $('auth-title').textContent = labels[action] || 'Confirm action';
-            $('auth-message').textContent = `Enter your password to ${action} ${pendingAction.names.length} selected unit(s).`;
+            $('auth-message').textContent = `Enter your sudo password (not the app login) to ${action} ${pendingAction.names.length} selected unit(s).`;
             $('auth-password').value = '';
             $('auth-error').style.display = 'none';
             $('auth-modal').classList.add('active');

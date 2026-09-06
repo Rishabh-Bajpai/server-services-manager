@@ -303,9 +303,9 @@
     <!-- Auth Modal -->
     <div class="modal-overlay" id="auth-modal" onclick="if(event.target===this) closeAuth()">
         <div class="modal-box">
-            <h2 id="auth-title">Authentication Required</h2>
-            <p id="auth-message">Enter your password to execute this command.</p>
-            <input type="password" id="auth-password" placeholder="Enter password..." autocomplete="off">
+            <h2 id="auth-title">App password required</h2>
+            <p id="auth-message">Enter your app login password (not sudo) to execute this command.</p>
+            <input type="password" id="auth-password" placeholder="App password..." autocomplete="off">
             <div class="modal-actions">
                 <button class="btn-cancel" onclick="closeAuth()">Cancel</button>
                 <button class="btn-primary" id="auth-execute" onclick="executeAuthed()">Confirm</button>
@@ -442,7 +442,7 @@
                             pendingCommand = { id, label, passwordNeeded: true };
                             pendingLabel = label;
                             document.getElementById('auth-title').textContent = label;
-                            document.getElementById('auth-message').textContent = 'Enter your password to execute "' + label + '".';
+                            document.getElementById('auth-message').textContent = 'Enter your app login password (not sudo) to execute "' + label + '".';
                             document.getElementById('auth-password').value = '';
                             document.getElementById('auth-modal').classList.add('active');
                             setTimeout(() => document.getElementById('auth-password').focus(), 100);

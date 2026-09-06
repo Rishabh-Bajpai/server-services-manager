@@ -260,8 +260,8 @@
                     <input id="f-retention" type="number" class="text-input" value="7" min="1" max="365">
                 </div>
                 <div>
-                    <label class="block mb-1 text-[var(--text-muted)]">App password (to enable the timer now)</label>
-                    <input id="f-password" type="password" class="text-input" placeholder="optional">
+                    <label class="block mb-1 text-[var(--text-muted)]">Sudo password (to enable the timer now)</label>
+                    <input id="f-password" type="password" class="text-input" placeholder="sudo password, optional">
                 </div>
             </div>
             <div class="flex gap-2 justify-end mt-4">
@@ -277,8 +277,8 @@
             <h3 class="text-lg font-semibold mb-2" id="confirm-title">Confirm</h3>
             <p class="text-sm text-[var(--text-secondary)] mb-4" id="confirm-body"></p>
             <div id="confirm-password-wrap" class="hidden">
-                <label class="block mb-1 text-xs text-[var(--text-muted)]">App password</label>
-                <input id="confirm-password" type="password" class="text-input">
+                <label class="block mb-1 text-xs text-[var(--text-muted)]">Sudo password</label>
+                <input id="confirm-password" type="password" class="text-input" placeholder="sudo password (not app login)">
             </div>
             <div class="flex gap-2 justify-end mt-4">
                 <button class="btn" onclick="closeConfirm()">Cancel</button>
@@ -523,7 +523,7 @@
         const url = enable ? '/api/backups/' + name + '/enable' : '/api/backups/' + name + '/disable';
         const pw = await uiPromptPassword(
             (enable ? 'Enable' : 'Disable') + ' backup job',
-            `Enter your app password to ${enable ? 'enable' : 'disable'} "${name}".`,
+            `Enter your sudo password (not the app login) to ${enable ? 'enable' : 'disable'} "${name}".`,
             enable ? 'Enable' : 'Disable'
         );
         if (!pw) return;
@@ -536,7 +536,7 @@
             .catch(err => toast('failed: ' + (err && err.message ? err.message : err), 'error'));
     }
     async function runJob(name) {
-        const pw = await uiPromptPassword('Run backup now', `Enter your app password to run "${name}" now.`, 'Run');
+        const pw = await uiPromptPassword('Run backup now', `Enter your sudo password (not the app login) to run "${name}" now.`, 'Run');
         if (!pw) return;
         api('/api/backups/' + name + '/run', { method: 'POST', body: JSON.stringify({ password: pw }) })
             .then(({ ok, data }) => {

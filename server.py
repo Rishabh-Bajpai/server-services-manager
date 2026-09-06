@@ -1387,9 +1387,9 @@ def api_docker_daemon_info():
 @openapi_mod.describe(
     summary="Restart the Docker daemon",
     description=(
-        "Runs ``sudo systemctl restart docker`` with the user's app "
-        "password piped to ``sudo -S`` (same pattern as systemd unit "
-        "control). Expect a brief disconnect."
+        "Runs ``sudo systemctl restart docker`` with the user's sudo "
+        "password (not the app login) piped to ``sudo -S`` (same pattern "
+        "as systemd unit control). Expect a brief disconnect."
     ),
     tag="Docker",
 )
@@ -2220,26 +2220,45 @@ def firewall_page():
     return render_template('firewall.html')
 
 
-@app.route('/api/firewall/status')
+@app.route('/api/firewall/status', methods=['GET', 'POST'])
 @openapi_mod.describe(
     summary="Read firewall status (ufw/firewalld)",
     description=(
         "Returns the current firewall backend, enabled state, default "
-        "policies, and rule list. Optional ``?password=`` elevates the "
-        "read with sudo so the full rule list is returned."
+        "policies, and rule list. Optional sudo ``password`` (JSON body on "
+        "POST, ``?password=`` on GET) elevates the "
+        "read with sudo so the full rule list is returned. The sudo "
+        "password is never assumed to equal the app login password."
     ),
     tag="Firewall",
     parameters=[
-        {"name": "password", "in": "query", "schema": {"type": "string"}, "description": "optional app password for sudo-elevated read"},
+        {"name": "password", "in": "query", "schema": {"type": "string"}, "description": "optional sudo password for sudo-elevated read (GET)"},
     ],
+    request_body={
+        "required": False,
+        "content": {"application/json": {"schema": {
+            "type": "object",
+            "properties": {
+                "password": {"type": "string", "description": "optional sudo password for sudo-elevated read (POST, preferred — avoids access-log leak)"},
+            },
+        }}},
+    },
 )
 def api_firewall_status():
-    # Optional password query param; if provided, the read is elevated
-    # so the user can see the full rules list.
-    password = request.args.get('password', '') or None
+    # Optional sudo password; if provided, the read is elevated
+    # so the user can see the full rules list. POST body preferred
+    # (avoids password in access logs); GET query kept for compat.
+    password = None
+    if request.method == 'POST':
+        data = request.get_json(silent=True) or {}
+        password = data.get('password', '') or None
     if not password:
-        password = None
-    return jsonify(firewall_manager.get_status(password=password).to_dict())
+        password = request.args.get('password', '') or None
+    try:
+        return jsonify(firewall_manager.get_status(password=password).to_dict())
+    except firewall_manager.FirewallError as e:
+        http = 403 if e.code == "permission" else 500
+        return jsonify({"error": str(e), "code": e.code}), http
 
 
 @app.route('/api/firewall/enable', methods=['POST'])
@@ -2429,7 +2448,7 @@ def _parse_enabled_flag(value) -> bool:
                 "destination": {"type": "string"},
                 "schedule": {"type": "string", "description": "systemd OnCalendar expression"},
                 "retention": {"type": "integer", "default": 7},
-                "password": {"type": "string", "description": "optional app password to enable the timer"},
+                "password": {"type": "string", "description": "optional sudo password (not app login) to enable the timer"},
             },
         }}},
     },
@@ -2488,8 +2507,9 @@ def api_backups_create():
 
 
 def _verify_backup_password(password) -> bool:
-    """User timers need no sudo, but the password field must still mean
-    something: it has to be the user's actual sudo/app password."""
+    """User timers need no sudo exec, but the password field must still
+    mean something: it has to be the user's actual sudo password
+    (verified via ``sudo -S -v``), never the app login password."""
     return bool(password) and system_services.verify_password(password)
 
 

@@ -2,8 +2,11 @@
 
 The manager auto-detects which firewall is in use and provides a
 common API for status, rules, and rule manipulation. All write
-operations require the user's app password (piped to ``sudo -S`` for
-that single command), matching the systemd unit / cron toggle pattern.
+operations (and the elevated status read) require the user's sudo
+password (piped to ``sudo -S`` for that single command), matching
+the systemd unit / cron toggle pattern. The sudo password is never
+assumed to equal the app login password — the UI always offers a
+separate input for it.
 
 Read operations (``is_available``, ``get_status``, ``list_rules``) work
 without sudo.
@@ -225,19 +228,28 @@ def _ufw_status(password: Optional[str] = None) -> Status:
     listing (OUT rules are interleaved, app rules shown by name),
     so verbose-synthesized numbers would delete the wrong rule.
 
-    Tries sudo first (works if the user's sudo timestamp is fresh,
-    or a password is provided). If that fails, falls back to plain
-    ``ufw status`` (works for root or NOPASSWD sudo) with unknown
-    rule numbers. Returns a Status with whatever info could be read
-    on partial failure.
+    When ``password`` (the sudo password) is provided it is piped to
+    ``sudo -S``. When it is None, ``sudo -n`` is used so the probe is
+    non-interactive (works if the sudo timestamp is fresh or NOPASSWD
+    is configured, fails fast otherwise). If that fails, falls back
+    to plain ``ufw status`` (works for root) with unknown rule
+    numbers. Returns a Status with whatever info could be read on
+    partial failure.
     """
     out = ""
     reason = ""
+    if password is not None:
+        verbose_cmd = ["sudo", "-S", "ufw", "status", "verbose"]
+        numbered_cmd = ["sudo", "-S", "ufw", "status", "numbered"]
+    else:
+        # Non-interactive probe: never prompt, never hang waiting on
+        # stdin when no password was supplied.
+        verbose_cmd = ["sudo", "-n", "ufw", "status", "verbose"]
+        numbered_cmd = ["sudo", "-n", "ufw", "status", "numbered"]
     try:
         # NB: "verbose numbered" is not a valid combination — ufw
         # silently returns *unnumbered* verbose output for it.
-        out = _run(["sudo", "-S", "ufw", "status", "verbose"],
-                   password=password)
+        out = _run(verbose_cmd, password=password)
     except FirewallError:
         if password is not None:
             # Password was given but sudo didn't accept it; don't retry
@@ -281,8 +293,7 @@ def _ufw_status(password: Optional[str] = None) -> Status:
                 default_routed = parts[2].lower()
 
     try:
-        numbered_out = _run(["sudo", "-S", "ufw", "status", "numbered"],
-                            password=password)
+        numbered_out = _run(numbered_cmd, password=password)
         rules = _parse_ufw_rules(numbered_out, numbered=True)
     except FirewallError:
         # Verbose output parsed fine but numbered didn't (shouldn't
@@ -545,9 +556,10 @@ def _firewalld_delete_rule(spec: dict, password: str) -> str:
 def get_status(password: Optional[str] = None) -> Status:
     """Return the current firewall status.
 
-    If ``password`` is provided and the read operation requires sudo,
-    it is piped to sudo. ufw status is typically readable without sudo
-    for the active/inactive state, but numbered rules are not.
+    ``password`` is the sudo password. If provided and the read
+    operation requires sudo, it is piped to sudo. ufw status is
+    typically readable without sudo for the active/inactive state
+    (via ``sudo -n`` timestamp or root), but numbered rules are not.
     """
     det = is_available()
     if not det["available"]:
