@@ -109,16 +109,25 @@ def _resolve(path: str) -> str:
         raise FileExplorerError(
             "outside_home", f"path escapes $HOME: {target}",
         )
-    # For symlinks, also check the resolved target is inside
-    # the home tree. realpath() follows links; if the final
-    # destination is outside, reject the request.
-    if os.path.islink(target):
-        real = os.path.realpath(target)
-        if real != home and not real.startswith(home + os.sep):
-            raise FileExplorerError(
-                "outside_home",
-                f"symlink target escapes $HOME: {target} -> {real}",
-            )
+    # Canonicalize the nearest existing ancestor. Checking only
+    # ``os.path.islink(target)`` misses INTERMEDIATE symlinks:
+    # ``~/link -> /etc`` plus ``"link/passwd"`` passes the prefix
+    # check above while pointing at /etc/passwd. realpath() of
+    # the ancestor follows every intermediate link; nonexistent
+    # trailing components cannot be links, so the ancestor check
+    # covers mkdir/init-dest cases too.
+    probe = target
+    while not os.path.lexists(probe):
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            break
+        probe = parent
+    real = os.path.realpath(probe)
+    if real != home and not real.startswith(home + os.sep):
+        raise FileExplorerError(
+            "outside_home",
+            f"symlink target escapes $HOME: {target} -> {real}",
+        )
     return target
 
 
@@ -620,6 +629,20 @@ def make_zip(paths: List[str]) -> Tuple[bytes, str]:
                 f"selection exceeds {_ZIP_BYTE_CAP // (1024 * 1024)} MB cap; aborting",
             )
 
+    def _is_zippable(path: str) -> bool:
+        """Only regular files (or links to them) go in the zip.
+
+        FIFOs/sockets/devices report size 0 (bypassing the cap)
+        and would hang ``zf.write()`` forever reading; anything
+        else surprising is skipped rather than followed.
+        """
+        try:
+            if stat.S_ISREG(os.lstat(path).st_mode):
+                return True
+            return stat.S_ISREG(os.stat(path).st_mode)
+        except OSError:
+            return False
+
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for p in paths:
             if not isinstance(p, str) or not p.strip():
@@ -636,10 +659,12 @@ def make_zip(paths: List[str]) -> Tuple[bytes, str]:
                 for root, _dirs, files in os.walk(target):
                     for name in files:
                         full = os.path.join(root, name)
+                        if not _is_zippable(full):
+                            continue
                         rel = os.path.relpath(full, target)
                         _check_size(os.path.getsize(full))
                         zf.write(full, os.path.join(arcname, rel))
-            else:
+            elif _is_zippable(target):
                 _check_size(os.path.getsize(target))
                 zf.write(target, arcname)
     return buf.getvalue(), "selection.zip"
@@ -900,7 +925,10 @@ def _load_sidecar(session_id: str, sessions: Optional[str] = None) -> Dict[str, 
 
 def _save_sidecar(data: Dict[str, Any], sessions: Optional[str] = None) -> None:
     _, sidecar = _session_paths(data["id"], sessions)
-    tmp = sidecar + ".tmp"
+    # Pid-unique scratch name: two writers (ever, on any session)
+    # can never clobber each other's temp file; os.replace() keeps
+    # the visible sidecar update atomic.
+    tmp = f"{sidecar}.{os.getpid()}.tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f)
     os.replace(tmp, sidecar)
@@ -934,12 +962,36 @@ def sweep_stale_uploads(
             staging, _ = _session_paths(sid, root)
         except FileExplorerError:
             continue
-        for p in (staging, sidecar):
+        for p in (staging, sidecar, staging + ".lock"):
             try:
                 os.unlink(p)
             except OSError:
                 pass
         swept += 1
+    # Orphaned staging files (sidecar lost/corrupt, crash between
+    # prealloc and sidecar save) would otherwise leak disk forever:
+    # anything .part without a live .json older than max_age goes too.
+    for name in names:
+        if not name.endswith(".part"):
+            continue
+        staging = os.path.join(root, name)
+        sid = name[: -len(".part")]
+        try:
+            _, sidecar = _session_paths(sid, root)
+        except FileExplorerError:
+            continue
+        if os.path.exists(sidecar):
+            continue
+        try:
+            old = now - os.path.getmtime(staging) > max_age_secs
+        except OSError:
+            continue
+        if old:
+            try:
+                os.unlink(staging)
+                swept += 1
+            except OSError:
+                pass
     return swept
 
 
@@ -990,6 +1042,19 @@ def init_upload(
             dest_dir = os.path.join(dest_dir, part)
         if dest_dir != home_dir() and not dest_dir.startswith(home_dir() + os.sep):
             raise FileExplorerError("outside_home", f"subpath escapes $HOME: {subpath}")
+        # A pre-existing intermediate symlink (``docs -> /etc``) would
+        # redirect makedirs outside $HOME, so verify every level BEFORE
+        # creating anything — checking after is too late.
+        probe = _resolve(path)
+        for part in clean:
+            probe = os.path.join(probe, part)
+            if os.path.lexists(probe):
+                real = os.path.realpath(probe)
+                if real != home_dir() and not real.startswith(home_dir() + os.sep):
+                    raise FileExplorerError(
+                        "outside_home",
+                        f"subpath escapes $HOME via symlink: {subpath}",
+                    )
         try:
             os.makedirs(dest_dir, mode=0o755, exist_ok=True)
         except OSError as e:
@@ -1013,12 +1078,18 @@ def init_upload(
     sweep_stale_uploads(sessions)
     session_id = secrets.token_urlsafe(24)
     staging, _ = _session_paths(session_id, sessions)
-    # Preallocate sparse (instant even for 100 GB) so space is
-    # reserved up front and later chunks only fill holes.
+    # Preallocate: fallocate() reserves REAL blocks when the fs
+    # supports it (later ENOSPC becomes impossible); sparse
+    # truncate() is the instant fallback (no reservation — the
+    # free-space gate above is then only advisory, and append_chunk
+    # maps ENOSPC to a clean error instead of an unhandled 500).
     try:
         with open(staging, "wb") as f:
             if total:
-                f.truncate(total)
+                try:
+                    os.posix_fallocate(f.fileno(), 0, total)
+                except (AttributeError, OSError):
+                    f.truncate(total)
     except OSError as e:
         raise FileExplorerError("staging_failed", f"could not stage upload: {e}")
     data = {
@@ -1057,58 +1128,78 @@ def append_chunk(
     server's ``received`` so the client can re-sync and resume
     instead of restarting. Returns ``{"received", "size"}``.
     """
-    data = _load_sidecar(session_id, sessions)
     try:
         off = int(offset)
     except (TypeError, ValueError):
         raise FileExplorerError("bad_offset", "offset must be a number")
-    received = int(data.get("received", 0))
-    total = int(data.get("size", 0))
-    if off != received:
-        err = FileExplorerError(
-            "offset_mismatch",
-            f"server is at {received}, client sent {off}",
-        )
-        err.received = received  # type: ignore[attr-defined]
-        raise err
-    if off >= total and total > 0:
-        return {"id": session_id, "received": received, "size": total}
-    remaining = total - received
     try:
         limit = int(max_bytes)
     except (TypeError, ValueError):
         limit = _RESUMABLE_PUT_MAX
-    budget = max(0, min(limit, remaining, _RESUMABLE_PUT_MAX))
     staging, _ = _session_paths(session_id, sessions)
-    written = 0
+    # Serialize the whole read-modify-write on a per-session lock
+    # file: the offset check, the byte write, AND the sidecar save
+    # happen under one exclusive lock, so two concurrent chunk PUTs
+    # can't interleave (stale offset accept) or clobber the shared
+    # ``.tmp`` sidecar scratch file.
+    lock_path = staging + ".lock"
     try:
-        fh = open(staging, "r+b")
+        lock_fh = open(lock_path, "w")
     except OSError as e:
         raise FileExplorerError("staging_failed", f"lost staging file: {e}")
-    with fh:
+    with lock_fh:
         try:
             import fcntl
-            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            fcntl.flock(lock_fh.fileno(), fcntl.LOCK_EX)
         except (ImportError, OSError):
-            pass  # Windows / odd fs: offsets still serialize via sidecar
-        fh.seek(off)
-        while written < budget:
-            block = stream.read(min(_RESUMABLE_BLOCK, budget - written))
-            if not block:
-                break
-            if isinstance(block, str):
-                block = block.encode("utf-8", errors="replace")
-            fh.write(block)
-            written += len(block)
-        fh.flush()
+            pass  # Windows / odd fs: best effort only
+        data = _load_sidecar(session_id, sessions)
+        received = int(data.get("received", 0))
+        total = int(data.get("size", 0))
+        if off != received:
+            err = FileExplorerError(
+                "offset_mismatch",
+                f"server is at {received}, client sent {off}",
+            )
+            err.received = received  # type: ignore[attr-defined]
+            raise err
+        if off >= total and total > 0:
+            return {"id": session_id, "received": received, "size": total}
+        remaining = total - received
+        budget = max(0, min(limit, remaining, _RESUMABLE_PUT_MAX))
+        written = 0
         try:
-            os.fsync(fh.fileno())
-        except OSError:
-            pass
-    received += written
-    data["received"] = received
-    data["updated"] = time.time()
-    _save_sidecar(data, sessions)
+            fh = open(staging, "r+b")
+        except OSError as e:
+            raise FileExplorerError("staging_failed", f"lost staging file: {e}")
+        with fh:
+            fh.seek(off)
+            try:
+                while written < budget:
+                    block = stream.read(min(_RESUMABLE_BLOCK, budget - written))
+                    if not block:
+                        break
+                    if isinstance(block, str):
+                        block = block.encode("utf-8", errors="replace")
+                    fh.write(block)
+                    written += len(block)
+                fh.flush()
+                try:
+                    os.fsync(fh.fileno())
+                except OSError:
+                    pass
+            except OSError as e:
+                import errno
+                if e.errno == errno.ENOSPC:
+                    raise FileExplorerError(
+                        "not_enough_space",
+                        "disk filled up mid-upload; free space and resume",
+                    )
+                raise FileExplorerError("staging_failed", f"chunk write failed: {e}")
+        received += written
+        data["received"] = received
+        data["updated"] = time.time()
+        _save_sidecar(data, sessions)
     return {"id": session_id, "received": received, "size": total}
 
 
@@ -1165,7 +1256,7 @@ def complete_upload(
         except OSError as e:
             raise FileExplorerError("staging_failed", f"lost staging file: {e}")
         if actual != want:
-            for p in (staging, sidecar):
+            for p in (staging, sidecar, staging + ".lock"):
                 try:
                     os.unlink(p)
                 except OSError:
@@ -1179,13 +1270,26 @@ def complete_upload(
         raise FileExplorerError("exists", "destination appeared during upload")
     try:
         os.makedirs(os.path.dirname(dest), mode=0o755, exist_ok=True)
-        os.replace(staging, dest)
+        try:
+            os.replace(staging, dest)
+        except OSError as e:
+            import errno
+            if e.errno != errno.EXDEV:
+                raise
+            # Staging dir and destination on different mounts:
+            # streamed copy + unlink (constant memory).
+            shutil.copyfile(staging, dest)
+            shutil.copystat(staging, dest)
+            os.unlink(staging)
+    except FileExplorerError:
+        raise
     except OSError as e:
         raise FileExplorerError("complete_failed", f"could not finalize: {e}")
-    try:
-        os.unlink(sidecar)
-    except OSError:
-        pass
+    for p in (sidecar, staging + ".lock"):
+        try:
+            os.unlink(p)
+        except OSError:
+            pass
     try:
         size = os.path.getsize(dest)
     except OSError:
@@ -1201,7 +1305,7 @@ def cancel_upload(
         staging, sidecar = _session_paths(session_id, sessions)
     except FileExplorerError:
         return {"cancelled": True}
-    for p in (staging, sidecar):
+    for p in (staging, sidecar, staging + ".lock"):
         try:
             os.unlink(p)
         except OSError:

@@ -580,18 +580,19 @@
             return String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
         }
 
-        // Escaper for values placed inside a double-quoted HTML
-        // attribute as a single-quoted JS string
-        // (onclick="fn('…')"). Escaping only quotes is NOT enough:
-        // an unescaped `"` breaks out of the attribute entirely
-        // (stored XSS via a crafted filename).
+        // Escaper for double-quoted HTML attributes (data-*,
+        // title). Rows are wired via addEventListener, so no JS
+        // string-escaping is needed — a plain entity keeps
+        // `dataset.*` and tooltips byte-identical to the filename
+        // (backslash-escaping here would corrupt markTreeCurrent()
+        // comparisons for names with apostrophes).
         function escapeAttr(s) {
             return String(s)
                 .replace(/&/g, '&amp;')
                 .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;')
                 .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/'/g, "\\'");
+                .replace(/>/g, '&gt;');
         }
 
         function humanizeSize(bytes) {
@@ -726,10 +727,12 @@
             });
         }
 
+        let fetchInflight = {};  // path -> Promise (dedups concurrent expands)
         // Fetch direct child DIRECTORIES of a path (files filtered out here).
         function fetchKids(path) {
             if (treeChildren[path]) return Promise.resolve(treeChildren[path]);
-            return fetch('/api/files?path=' + encodeURIComponent(path), { credentials: 'same-origin' })
+            if (fetchInflight[path]) return fetchInflight[path];
+            fetchInflight[path] = fetch('/api/files?path=' + encodeURIComponent(path), { credentials: 'same-origin' })
                 .then(r => r.json().then(j => ({ status: r.status, data: j })))
                 .then(({ status, data }) => {
                     if (status >= 400) throw new Error((data && data.error) || ('HTTP ' + status));
@@ -739,7 +742,9 @@
                         .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
                     treeChildren[path] = kids;
                     return kids;
-                });
+                })
+                .finally(() => { delete fetchInflight[path]; });
+            return fetchInflight[path];
         }
 
         function renderTree() {
@@ -959,8 +964,12 @@
                 if (e.target.matches('input[type=checkbox]')) return;  // handled below
                 const path = items[i].path;
                 if (e.shiftKey && lastClickedIndex >= 0) {
-                    const [a, b] = [Math.min(lastClickedIndex, i), Math.max(lastClickedIndex, i)];
-                    for (let k = a; k <= b; k++) selected.add(items[k].path);
+                    // Clamp: the list may have shrunk (filter/sort)
+                    // since lastClickedIndex was recorded — never
+                    // index past the end (was a TypeError crash).
+                    const lo = Math.max(0, Math.min(lastClickedIndex, items.length - 1));
+                    const [a, b] = [Math.min(lo, i), Math.max(lo, i)];
+                    for (let k = a; k <= b; k++) { if (items[k]) selected.add(items[k].path); }
                 } else if (e.ctrlKey || e.metaKey) {
                     selected.has(path) ? selected.delete(path) : selected.add(path);
                     lastClickedIndex = i;
@@ -1021,16 +1030,19 @@
                 : key === 'size' ? 'size-desc'
                 : key === 'modified' ? 'modified-desc' : 'type-asc';
             document.getElementById('sort-select').value = sortSpec;
+            lastClickedIndex = -1;
             renderCenter();
         }
 
         function setSort(spec) {
             sortSpec = spec;
+            lastClickedIndex = -1;
             renderCenter();
         }
 
         function onFilterInput(v) {
             filterText = v.trim();
+            lastClickedIndex = -1;  // stale index would range-select wrong rows
             renderCenter();
         }
 
@@ -1621,6 +1633,7 @@
                     sessionId: null, received: 0, size: file.size,
                     state: 'queued',   // queued|active|paused|done|failed|cancelled
                     error: null, retries: 0, startedAt: null,
+                    gen: 0,            // bumped on pause/cancel; stale workers exit
                 });
             }
             document.getElementById('upload-panel').style.display = 'flex';
@@ -1671,6 +1684,7 @@
             if (!j) return;
             if (act === 'pause' && (j.state === 'active' || j.state === 'queued')) {
                 j.state = 'paused';
+                j.gen = (j.gen || 0) + 1;  // orphan any in-flight chunk loop
                 renderUploads();
             } else if (act === 'resume' && (j.state === 'paused' || j.state === 'failed')) {
                 j.state = 'queued'; j.error = null; j.retries = 0;
@@ -1678,6 +1692,7 @@
                 pumpUploads();
             } else if (act === 'cancel' && !['done', 'cancelled'].includes(j.state)) {
                 j.state = 'cancelled';
+                j.gen = (j.gen || 0) + 1;
                 if (j.sessionId) fetch('/api/files/uploads/' + j.sessionId, { method: 'DELETE', credentials: 'same-origin' }).catch(() => {});
                 dropSessionId(j.fp);
                 renderUploads();
@@ -1721,6 +1736,12 @@
         }
 
         async function runJob(j) {
+            // Generation token: pause/cancel bumps j.gen, so a worker
+            // whose chunk PUT resolves AFTER the user paused (then
+            // resumed, spawning a second worker) exits instead of
+            // double-driving the session into 409 clashes.
+            const gen = j.gen || 0;
+            const alive = () => j.state === 'active' && (j.gen || 0) === gen;
             try {
                 if (!j.sessionId) {
                     // Cross-reload resume: a previous session for the same
@@ -1735,11 +1756,12 @@
                     }
                 }
                 if (!j.sessionId) {
-                    if (j.state !== 'active') return;
+                    if (!alive()) return;
                     const init = await api('/api/files/uploads', {
                         method: 'POST',
                         body: JSON.stringify({ name: j.file.name, size: j.size, path: j.destDir, subpath: j.subpath || undefined }),
                     });
+                    if (!alive()) return;
                     if (!init.ok) throw new Error(init.data.error || ('HTTP ' + init.status));
                     j.sessionId = init.data.id;
                     j.received = init.data.received || 0;
@@ -1752,7 +1774,7 @@
                 }
                 renderUploads();
                 while (j.received < j.size) {
-                    if (j.state !== 'active') return;  // paused / cancelled
+                    if (!alive()) return;  // paused / cancelled / superseded
                     const end = Math.min(j.received + UPLOAD_CHUNK, j.size);
                     const blob = j.file.slice(j.received, end);
                     let r;
@@ -1763,6 +1785,7 @@
                     } catch (netErr) {
                         throw new Error('network error — will retry');
                     }
+                    if (!alive()) return;
                     if (r.status === 409) {
                         // Server is authoritative: re-sync and continue,
                         // never restart.
@@ -1781,28 +1804,30 @@
                     j.retries = 0;
                     renderUploads();
                 }
-                if (j.state !== 'active') return;
+                if (!alive()) return;
                 const fin = await api('/api/files/uploads/' + j.sessionId + '/complete', { method: 'POST', body: '{}' });
+                if (!alive()) return;
                 if (!fin.ok) throw new Error(fin.data.error || ('HTTP ' + fin.status));
                 j.state = 'done';
                 dropSessionId(j.fp);
                 toast('Uploaded ' + j.display, 'success');
             } catch (e) {
-                if (j.state !== 'active') return;  // paused/cancelled mid-flight
+                if (!alive()) return;  // paused/cancelled/superseded mid-flight
                 j.retries++;
                 if (j.retries > UPLOAD_RETRIES) {
                     j.state = 'failed';
                     j.error = e.message || 'upload failed';
                     toast(`Failed ${j.display}: ${j.error}`, 'error');
                 } else {
-                    // Back off, re-sync the offset, keep going.
+                    // Back off, re-sync the offset, keep going. Every
+                    // failure counts (no decrement) so a permanently
+                    // broken upload fails instead of retrying forever.
                     await new Promise(res => setTimeout(res, 1000 * Math.pow(2, j.retries - 1)));
-                    if (j.state !== 'active') return;
+                    if (!alive()) return;
                     try {
                         const st = await api('/api/files/uploads/' + j.sessionId);
                         if (st.ok) j.received = st.data.received;
                     } catch (syncErr) { /* next loop iteration retries */ }
-                    j.retries--;  // sync succeeded — this round doesn't count
                     return runJob(j);
                 }
             }

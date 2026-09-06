@@ -262,6 +262,187 @@ def test_route_file_ops(tmp_path, monkeypatch):
     assert r.get_json()["failed"] == 1
 
 
+def test_intermediate_symlink_escape_blocked(home):
+    """agy blocker: ~/link -> /outside + 'link/secret' must not escape."""
+    import tempfile
+
+    _home, sessions = home
+    outside = tempfile.mkdtemp()
+    with open(os.path.join(outside, "secret.txt"), "w") as f:
+        f.write("top secret")
+    os.symlink(outside, os.path.join(_home, "link"))
+    # Leaf and intermediate traversal all rejected.
+    for bad in ("link/secret.txt", "link/../link/secret.txt"):
+        with pytest.raises(fe.FileExplorerError) as exc:
+            fe.preview(bad)
+        assert exc.value.code == "outside_home"
+    with pytest.raises(fe.FileExplorerError):
+        fe.init_upload("x.txt", 3, "link", sessions=sessions)
+    with pytest.raises(fe.FileExplorerError):
+        fe.init_upload("x.txt", 3, ".", subpath="link/evil", sessions=sessions)
+    with pytest.raises(fe.FileExplorerError):
+        fe.mkdir("link", "newdir")
+    # A leaf symlink pointing outside is still rejected too.
+    os.symlink(os.path.join(outside, "secret.txt"), os.path.join(_home, "leak"))
+    with pytest.raises(fe.FileExplorerError):
+        fe.preview("leak")
+    # ...while a symlink staying inside $HOME keeps working.
+    os.mkdir(os.path.join(_home, "real"))
+    open(os.path.join(_home, "real", "ok.txt"), "w").write("fine")
+    os.symlink(os.path.join(_home, "real"), os.path.join(_home, "inner"))
+    assert fe.preview("inner/ok.txt")["kind"] == "text"
+
+
+def test_complete_cross_device_fallback(home, monkeypatch):
+    """agy: EXDEV on os.replace falls back to streamed copy + unlink."""
+    import errno
+
+    _home, sessions = home
+    real_replace = os.replace
+
+    def _exdev(src, dst):
+        if src.endswith(".part"):
+            raise OSError(errno.EXDEV, "Invalid cross-device link")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr("os.replace", _exdev)
+    s = fe.init_upload("xd.bin", 4, ".", sessions=sessions)
+    fe.append_chunk(s["id"], 0, _chunk(b"data"), sessions=sessions)
+    out = fe.complete_upload(s["id"], sessions=sessions)
+    assert out["path"] == "xd.bin"
+    assert open(os.path.join(_home, "xd.bin"), "rb").read() == b"data"
+
+
+def test_orphan_part_swept(home):
+    _home, sessions = home
+    os.makedirs(sessions, exist_ok=True)
+    stale = os.path.join(sessions, "aaa" + "b" * 20 + ".part")
+    with open(stale, "wb") as f:
+        f.write(b"orphan")
+    old = time.time() - 200000
+    os.utime(stale, (old, old))
+    fresh = os.path.join(sessions, "fresh" + "c" * 20 + ".part")
+    with open(fresh, "wb") as f:
+        f.write(b"keep")
+    n = fe.sweep_stale_uploads(sessions)
+    assert n >= 1
+    assert not os.path.exists(stale)
+    assert os.path.exists(fresh)
+
+
+def test_concurrent_same_offset_serialized(home):
+    """agy: two racing chunks at one offset → one wins, no corruption."""
+    import threading
+
+    _home, sessions = home
+    s = fe.init_upload("race.bin", 6, ".", sessions=sessions)
+    results = []
+
+    def _try(payload):
+        try:
+            r = fe.append_chunk(s["id"], 0, _chunk(payload), sessions=sessions)
+            results.append(("ok", r["received"]))
+        except fe.FileExplorerError as e:
+            results.append(("err", e.code))
+
+    t1 = threading.Thread(target=_try, args=(b"AAAAAA",))
+    t2 = threading.Thread(target=_try, args=(b"BBBBBB",))
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+    oks = [r for r in results if r[0] == "ok"]
+    errs = [r for r in results if r[0] == "err"]
+    assert len(oks) == 1 and len(errs) == 1 and errs[0][1] == "offset_mismatch"
+    st = fe.upload_status(s["id"], sessions=sessions)
+    assert st["received"] == 6
+    fe.append_chunk(s["id"], 6, _chunk(b""), sessions=sessions)
+    fe.complete_upload(s["id"], sessions=sessions)
+    content = open(os.path.join(_home, "race.bin"), "rb").read()
+    assert content in (b"AAAAAA", b"BBBBBB")
+
+
+def test_enospc_mapped(home, monkeypatch):
+    """agy: disk-full mid-chunk becomes not_enough_space, not a 500."""
+    import errno
+
+    _home, sessions = home
+    s = fe.init_upload("full.bin", 10, ".", sessions=sessions)
+    real_open = open
+
+    class _FullWriter:
+        def __init__(self, fh):
+            self._fh = fh
+
+        def write(self, b):
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+        def __getattr__(self, name):
+            return getattr(self._fh, name)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return self._fh.__exit__(*args)
+
+    def _fake_open(path, mode="r", *args, **kwargs):
+        fh = real_open(path, mode, *args, **kwargs)
+        return _FullWriter(fh) if "r+b" in mode else fh
+
+    monkeypatch.setattr(fe, "open", _fake_open, raising=False)
+    with pytest.raises(fe.FileExplorerError) as exc:
+        fe.append_chunk(s["id"], 0, _chunk(b"abc"), sessions=sessions)
+    assert exc.value.code == "not_enough_space"
+    # Counter untouched — the client can resume after freeing space.
+    monkeypatch.undo()
+    assert fe.upload_status(s["id"], sessions=sessions)["received"] == 0
+
+
+def test_special_char_names(home):
+    _home, _sessions = home
+    out = fe.mkdir(".", "sp ace 'q' üñî")
+    assert os.path.isdir(os.path.join(_home, "sp ace 'q' üñî"))
+    r = fe.rename(out["path"], "renamed \"dq\".txt")
+    assert r["name"] == 'renamed "dq".txt'
+    fe.mkdir(".", "sub")
+    m = fe.move([r["path"]], "sub")
+    assert m["moved"] == 1
+    assert os.path.lexists(os.path.join(_home, "sub", 'renamed "dq".txt'))
+    c = fe.copy(["sub/renamed \"dq\".txt"], ".")
+    assert c["copied"] == 1
+
+
+def test_zip_skips_fifo(home):
+    _home, _sessions = home
+    os.mkdir(os.path.join(_home, "zf"))
+    open(os.path.join(_home, "zf", "a.txt"), "w").write("a")
+    try:
+        os.mkfifo(os.path.join(_home, "zf", "pipe"))
+    except (AttributeError, OSError):
+        pytest.skip("no fifo support")
+    data, _name = fe.make_zip(["zf"])
+    assert len(data) > 0  # returned instead of hanging on the fifo
+
+
+def test_unauthenticated_upload_status_rejected(tmp_path, monkeypatch):
+    import server
+
+    fake_home = str(tmp_path)
+
+    def _expand(p):
+        if p == "~":
+            return fake_home
+        if p.startswith("~/"):
+            return os.path.join(fake_home, p[2:])
+        return p
+
+    monkeypatch.setattr("os.path.expanduser", _expand)
+    client = server.app.test_client()  # no logged_in session
+    r = client.get("/api/files/uploads/whatever")
+    assert r.status_code in (302, 401, 403, 404)
+
+
 def test_move_copy(home):
     _home, _sessions = home
     os.mkdir(os.path.join(_home, "src"))

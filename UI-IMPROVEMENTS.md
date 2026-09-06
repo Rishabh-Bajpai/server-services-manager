@@ -1557,6 +1557,45 @@ Backend: `app/file_explorer.py` (`init_upload`,
 **Verified live** (zero JS errors, `node --check` clean).
 Full suite: 871 passed; secrets clean.
 
+### Route 16c — agy review fixes (11 findings)  [x]
+
+`agy --model gemini-3.8-flash-medium` reviewed `a6fcec0`;
+all findings addressed:
+
+- **[Blocker] Intermediate-symlink chroot escape.** `_resolve`
+  only checked the leaf, so `~/link -> /etc` + `"link/x"`
+  escaped on every op. Now canonicalizes the nearest
+  existing ancestor (`realpath`); `subpath` levels verified
+  before `makedirs`. Proven live: preview/list/search/
+  mkdir/upload-init through a planted link all rejected.
+- **EXDEV finalize.** `complete_upload` falls back to
+  streamed copy + unlink across mounts.
+- **Chunk-write races.** Per-session `.lock` held across
+  sidecar-load → offset-check → write → sidecar-save;
+  pid-unique sidecar tmp; lock cleaned on complete/cancel/
+  sweep; ENOSPC maps to `not_enough_space` (was an
+  unhandled 500); `fallocate` preallocates real blocks
+  where supported; orphan `.part` files swept.
+- **Zip FIFO hang.** Only regular files (or links to them)
+  are zipped now (pre-existing code, adjacent fix).
+- **Shift-range TypeError.** Stale index clamped + reset
+  on filter/sort.
+- **Duplicate upload workers.** Generation token: pause/
+  cancel orphans in-flight loops; stale workers exit.
+- **Infinite retry.** Every failure counts (decrement
+  removed) — broken uploads fail after 5 backoffs.
+- **`escapeAttr` backslashes.** `&#39;` now (no inline
+  `onclick` remains); tooltips + tree-current exact again.
+- **Double tree fetch.** In-flight dedup map (verified:
+  one request per expand).
+
+8 new regression tests (escape, EXDEV, orphan sweep,
+concurrent-offset race, ENOSPC, special-char names, FIFO
+zip, unauthenticated route).
+
+**Verified live** (zero JS errors, `node --check` clean).
+Full suite: 879 passed; secrets clean.
+
 ### Next route: (to be picked — `/plugins` is next in line)
 
 ---
