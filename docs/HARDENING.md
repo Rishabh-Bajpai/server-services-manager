@@ -47,17 +47,7 @@ sudo ufw enable
 Never add a `deny 22` rule without a source restriction; the
 `/firewall` page now warns on this via `build_rule_spec()`.
 
-## 4. Enable sysstat history (optional)
-
-History page `/history` degrades gracefully when missing:
-
-```bash
-sudo apt install sysstat
-sudo sed -i 's/ENABLED="false"/ENABLED="true"/' /etc/default/sysstat
-sudo systemctl enable --now sysstat
-```
-
-## 5. Service upgrades
+## 4. Service upgrades
 
 - Keep `SECRET_KEY` and `PASSWORD` in `.env` (gitignored), never in docs.
 - Run `python tools/check-secrets.py --staged` before every commit.

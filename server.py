@@ -27,7 +27,6 @@ from app import backup_manager
 from app import cluster_manager
 from app import disk_manager
 from app import file_explorer
-from app import history_manager
 from app import monitor_prefs
 from app import service_overview
 from app import ssh_manager
@@ -2594,76 +2593,6 @@ def api_disk_breadcrumb():
     except disk_manager.DiskError as e:
         return jsonify({"error": str(e), "code": e.code}), 403
     return jsonify({"breadcrumb": crumbs})
-
-
-# Historic stats via sysstat/sar (borrowed from Laranode SarHistory).
-# Optional: returns available=False with install hint when sar or
-# /var/log/sysstat/saNN files are missing, so the UI degrades gracefully.
-@app.route('/history')
-def history_page():
-    return render_template('history.html')
-
-
-@app.route('/api/history/status', methods=['GET'])
-@openapi_mod.describe(
-    summary="Check whether sar history is available",
-    description=(
-        "Probes for the sar binary and /var/log/sysstat/saNN files. "
-        "Returns available=False with a human-readable reason when "
-        "sysstat is not installed or collection is disabled."
-    ),
-    tag="History",
-)
-def api_history_status():
-    return jsonify(history_manager.is_available())
-
-
-@app.route('/api/history/reports', methods=['GET'])
-@openapi_mod.describe(
-    summary="List available sar reports",
-    description="Returns saNN report ids newest-first with mtimes.",
-    tag="History",
-)
-def api_history_reports():
-    try:
-        return jsonify({"reports": history_manager.list_reports()})
-    except Exception as e:  # noqa: BLE001
-        return jsonify({"error": str(e), "code": "internal"}), 500
-
-
-@app.route('/api/history/<metric>', methods=['GET'])
-@openapi_mod.describe(
-    summary="Historic CPU/memory/network metrics from sar",
-    description=(
-        "metric is cpu|memory|network. Optional ?report=saNN selects "
-        "a specific day; defaults to newest. Returns time-series "
-        "metrics parsed in-process from sar output."
-    ),
-    tag="History",
-)
-def api_history_metric(metric):
-    report = request.args.get("report")
-    try:
-        limit = int(request.args.get("limit", "500"))
-    except (TypeError, ValueError):
-        limit = 500
-    limit = max(10, min(limit, 2000))
-    try:
-        if metric == "cpu":
-            return jsonify(history_manager.get_cpu_history(report, limit=limit))
-        if metric == "memory":
-            return jsonify(history_manager.get_memory_history(report, limit=limit))
-        if metric == "network":
-            return jsonify(history_manager.get_network_history(report, limit=limit * 2))
-        return jsonify({"error": f"unknown metric: {metric}", "code": "invalid"}), 400
-    except history_manager.HistoryError as e:
-        http = 404 if e.code in ("not_found", "no_reports") else 400
-        if e.code in ("missing_tool", "sar_failed", "timeout"):
-            http = 503
-        return jsonify({"error": str(e), "code": e.code}), http
-    except Exception as e:  # noqa: BLE001
-        logger.exception("history metric failed")
-        return jsonify({"error": str(e), "code": "internal"}), 500
 
 
 @app.route('/api/monitor/services', methods=['GET'])

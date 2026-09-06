@@ -502,7 +502,7 @@
         </div>
         <div id="ui-nav-bar" class="hidden xl:flex items-center gap-1.5 flex-1 justify-center mx-4">
             {{ _ui_nav_primary(current) }}
-            {% set more_active = current in ['/control','/cron','/notifications','/history','/disk','/cluster','/plugins','/config','/alerts','/packages','/backups','/firewall','/logs'] %}
+            {% set more_active = current in ['/control','/cron','/notifications','/disk','/cluster','/plugins','/config','/alerts','/packages','/backups','/firewall','/logs'] %}
             <div id="ui-nav-more" class="relative shrink-0">
                 <div id="ui-nav-more-pill" class="ui-nav-pill cursor-pointer select-none {{ 'active' if more_active else '' }}" onclick="uiToggleMore()" title="More pages">
                     <i data-lucide="chevron-down" class="w-4 h-4"></i>
@@ -620,7 +620,6 @@
     ('/control', 'gamepad-2', 'Control'),
     ('/cron', 'calendar-clock', 'Cron'),
     ('/notifications', 'bell-ring', 'Health & Notifications'),
-    ('/history', 'chart-line', 'History'),
     ('/disk', 'pie-chart', 'Disk'),
     ('/cluster', 'network', 'Cluster'),
     ('/plugins', 'plug', 'Plugins'),

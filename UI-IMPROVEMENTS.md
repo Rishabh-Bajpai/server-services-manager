@@ -912,7 +912,20 @@ rows, plus healthy-state → 0 rows with "0 / 3 events".
    hint. Verified centered, unclipped, and hidden once rows
    arrive.
 
-### Next route: (to be picked — `/notifications` done)
+### Removed route — History (`/history`)  [x]
+
+Removed entirely at the user's request (it didn't earn its
+place): deleted `app/history_manager.py`,
+`tests/test_history_manager.py`, `templates/history.html`,
+the `/history` page route plus all three `/api/history/*`
+routes and the import in `server.py`, the nav entry and
+`more_active` match in `templates/_macros.html`, and the
+sysstat section in `docs/HARDENING.md`. No palette entry or
+other references existed. Verified live after restart: page
+and all API endpoints 404, no nav/palette traces, dashboard
+fine. Suite: 812 passed (12 history tests removed with it).
+
+### Next route: (to be picked — `/activity` is next in line)
 
 ---
 
