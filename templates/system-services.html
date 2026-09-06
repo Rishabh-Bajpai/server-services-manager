@@ -163,7 +163,7 @@
         }
         .units-table tbody tr:last-child td { border-bottom: none; }
 
-        .table-scroll { max-height: min(560px, calc(100dvh - 260px)); min-height: 240px; overflow-y: auto; overflow-x: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+        .table-scroll { max-height: calc(100dvh - 250px); min-height: 240px; overflow-y: auto; overflow-x: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
         @media (max-width: 640px) { .table-scroll { max-height: calc(100dvh - 300px); } }
 
         .side-panel {
@@ -392,12 +392,12 @@
                     <thead>
                         <tr>
                             <th style="width:32px"></th>
-                            <th style="width:32%">Name</th>
+                            <th style="width:26%">Name</th>
                             <th style="width:110px">State</th>
                             <th>Description</th>
                             <th style="width:80px" class="hidden sm:table-cell">PID</th>
                             <th style="width:110px" class="hidden md:table-cell">Enabled</th>
-                            <th style="width:130px" class="text-right">Actions</th>
+                            <th style="width:142px" class="text-right">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="units-tbody"></tbody>

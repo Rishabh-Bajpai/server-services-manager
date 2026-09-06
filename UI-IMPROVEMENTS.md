@@ -619,6 +619,24 @@ backend changes).
 - `-.mount` → panel stays open showing "Unit not found" with a
   working Retry button (retry keeps the panel open).
 
+3. **Name column too wide, Actions needed horizontal scroll.**
+   Measured live: the table overflowed by 8px (`scrollWidth`
+   1110 vs 1102). Per-cell measurement pinned it down — not the
+   Name column itself, but the Actions cell content (4 icon
+   buttons) overflowing its 130px column by exactly 8px. Fixed
+   with two changes: Name `32%` → `26%` (353→287px, still
+   truncates long names with a tooltip) and Actions `130px` →
+   `142px`. Verified: no horizontal scrollbar, last action
+   button's right edge inside the visible area.
+
+4. **Table height capped, wasting page space.** `.table-scroll`
+   had `max-height: min(560px, calc(100dvh - 250px))`, so on tall
+   screens the table stopped at 560px with empty space below.
+   Dropped the 560px cap → `max-height: calc(100dvh - 250px)`,
+   so the scrollable table region extends to near the bottom of
+   any viewport (min-height 240px kept for short/filtered
+   lists).
+
 ### Next route: (to be picked — `/system-services` done)
 
 ---
