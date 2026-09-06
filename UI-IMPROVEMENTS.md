@@ -723,6 +723,16 @@ changes).
 containers): width 90%, view-tab highlight stable, stats bars
 render for running and stopped containers, zero JS errors.
 
+6. **Table squeezed by the phantom detail track.** With the
+   detail panel closed, the table still rendered at ~64% width
+   (measured 704/1102px, 400px wasted). Cause: the grid kept
+   `lg:grid-cols-[1fr_24rem]` even when the aside was
+   `display:none` — the empty 24rem track still reserves space.
+   The two-column layout now applies via a `.with-detail` class
+   only while the panel is open. Verified: 1104/1104px (100%)
+   closed, clean 704+384+16 split open, full width restored on
+   close.
+
 ### Next route: (to be picked — `/docker` done)
 
 ---
