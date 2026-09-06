@@ -925,7 +925,31 @@ other references existed. Verified live after restart: page
 and all API endpoints 404, no nav/palette traces, dashboard
 fine. Suite: 812 passed (12 history tests removed with it).
 
-### Next route: (to be picked — `/activity` is next in line)
+### Route 8 — Activity (`/activity`)  [x]
+
+Files: `templates/activity.html` (only file changed; no
+backend changes).
+
+1. **Content width.** Same narrow `max-w-7xl` wrapper; now
+   `w-[90%]` capped at 1760px. Measured live: 90%.
+2. **Table height cap.** Dropped the 560px `.table-scroll`
+   cap so the list extends to near the viewport bottom.
+3. **Pause-live replaces Refresh.** The 5s re-render wiped
+   text selections mid-copy. Live/Pause toggle skips the
+   tick; resuming re-fetches. Verified: rows byte-identical
+   across 6s while paused (175 rows live).
+4. **Empty-state flash.** The "no activity" div rendered
+   visibly alongside the skeleton rows on every load. Now
+   hidden until confirmed empty.
+5. **Action colors for newer prefixes.** `docker.*` cyan,
+   `firewall.*` orange, `backup.*` blue, `ssh.*` purple
+   (previously all gray); added the missing cyan/orange badge
+   classes.
+
+**Verified live** (Playwright, zero JS errors, `node --check`
+clean).
+
+### Next route: (to be picked — `/packages` is next in line)
 
 ---
 

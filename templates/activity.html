@@ -55,6 +55,8 @@
         .badge-yellow { background: rgba(245,158,11,0.12); color: var(--accent-yellow); border: 1px solid rgba(245,158,11,0.25); }
         .badge-gray { background: rgba(100,116,139,0.12); color: var(--text-secondary); border: 1px solid rgba(100,116,139,0.25); }
         .badge-purple { background: rgba(139,92,246,0.12); color: var(--accent-purple); border: 1px solid rgba(139,92,246,0.25); }
+        .badge-cyan { background: rgba(6,182,212,0.12); color: var(--accent-cyan); border: 1px solid rgba(6,182,212,0.25); }
+        .badge-orange { background: rgba(249,115,22,0.12); color: var(--accent-orange); border: 1px solid rgba(249,115,22,0.25); }
 
         .filter-tab {
             padding: 0.5rem 0.875rem; border-radius: 0.5rem;
@@ -100,7 +102,7 @@
         }
         .events-table tbody tr:last-child td { border-bottom: none; }
         .table-scroll {
-    max-height: min(560px, calc(100dvh - 280px));
+    max-height: calc(100dvh - 280px);
     min-height: 200px;
     overflow-y: auto;
     overflow-x: auto;
@@ -180,13 +182,13 @@
             <i data-lucide="download" class="w-3.5 h-3.5"></i>
             <span class="hidden sm:inline">CSV</span>
         </a>
-        <button id="refresh-btn" class="refresh-btn">
-            <i data-lucide="refresh-cw" class="w-3.5 h-3.5 icon"></i>
-            <span class="hidden sm:inline">Refresh</span>
+        <button id="live-btn" class="refresh-btn" title="Pause live auto-refresh (freezes rows so text can be copied)">
+            <i data-lucide="pause" class="w-3.5 h-3.5 icon"></i>
+            <span class="hidden sm:inline" id="live-btn-label">Live</span>
         </button>
     {% endset %}
     {{ ui.subheader(subheader) }}
-<main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+<main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6">
         <!-- Summary cards -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6 animate-fade-in" id="summary"></div>
 
@@ -213,7 +215,7 @@
                     </tbody>
                 </table>
             </div>
-            <div id="events-empty" class="empty">
+            <div id="events-empty" class="empty" style="display:none">
                 <i data-lucide="inbox" class="w-10 h-10 opacity-40"></i>
                 <p class="text-sm">No activity recorded yet. Action: try adding a service or starting/stopping one.</p>
             </div>
@@ -243,6 +245,10 @@
             if (action.startsWith('systemd.')) return 'badge-purple';
             if (action.startsWith('cron.')) return 'badge-yellow';
             if (action.startsWith('autostart.')) return 'badge-green';
+            if (action.startsWith('docker.')) return 'badge-cyan';
+            if (action.startsWith('firewall.')) return 'badge-orange';
+            if (action.startsWith('backup.')) return 'badge-blue';
+            if (action.startsWith('ssh.')) return 'badge-purple';
             return 'badge-gray';
         }
 
@@ -286,9 +292,15 @@
             `;
         }
 
+        let livePaused = false;
+        $('live-btn').onclick = () => {
+            livePaused = !livePaused;
+            $('live-btn-label').textContent = livePaused ? 'Paused' : 'Live';
+            $('live-btn').title = livePaused ? 'Resume live auto-refresh' : 'Pause live auto-refresh (freezes rows so text can be copied)';
+            if (!livePaused) loadEntries();
+        };
+
         async function loadEntries() {
-            const btn = $('refresh-btn');
-            btn.classList.add('loading');
             try {
                 const params = new URLSearchParams();
                 if (filters.action) params.set('action', filters.action);
@@ -308,8 +320,6 @@
                 lucide.createIcons();
             } catch (e) {
                 console.error('load failed:', e);
-            } finally {
-                btn.classList.remove('loading');
             }
         }
 
@@ -336,10 +346,8 @@
             filters.since = e.target.value;
             loadEntries();
         });
-        $('refresh-btn').onclick = loadEntries;
-
         loadEntries();
-        setInterval(loadEntries, 5000);
+        setInterval(() => { if (!livePaused) loadEntries(); }, 5000);
     </script>
 </body>
 </html>
