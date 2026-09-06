@@ -192,7 +192,7 @@
 
         .table-wrap {
             overflow-x: auto; overflow-y: auto;
-            max-height: min(520px, calc(100dvh - 280px));
+            max-height: calc(100dvh - 280px);
             min-height: 160px;
             overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
             border-radius: 0.75rem;
@@ -288,7 +288,7 @@
     {% endset %}
     {{ ui.subheader(subheader) }}
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+    <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6">
         <div id="availability-banner"></div>
 
         <div id="view-containers" class="grid grid-cols-1 lg:grid-cols-[1fr_24rem] gap-4">
@@ -756,7 +756,11 @@
     }
     function switchTab(tab) {
         activeTab = tab;
-        document.querySelectorAll('.tab-button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        // Scope to the detail panel: the subheader view switcher
+        // (Containers/Images) also uses .tab-button, and the old
+        // document-wide selector cleared its highlight whenever a
+        // detail tab was clicked.
+        document.querySelectorAll('#detail-panel [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
         document.getElementById('tab-details').classList.toggle('hidden', tab !== 'details');
         document.getElementById('tab-stats').classList.toggle('hidden', tab !== 'stats');
         document.getElementById('tab-logs').classList.toggle('hidden', tab !== 'logs');
@@ -785,15 +789,19 @@
         if (statsTimer) { clearInterval(statsTimer); statsTimer = null; }
     }
     function renderStats(s) {
+        // Stopped containers can report nulls — coerce before toFixed
+        // or the whole stats update throws and polling goes silent.
+        const cpu = Number(s.cpu_percent) || 0;
+        const memPct = Number(s.memory_percent) || 0;
         const el = document.getElementById('tab-stats');
         el.innerHTML = `
             <div>
-                <div class="flex justify-between mb-1"><span>CPU</span><span class="font-mono">${s.cpu_percent.toFixed(1)}%</span></div>
-                <div class="stat-bar"><div class="stat-bar-fill" style="width:${Math.min(100, s.cpu_percent)}%;background:var(--accent-cyan)"></div></div>
+                <div class="flex justify-between mb-1"><span>CPU</span><span class="font-mono">${cpu.toFixed(1)}%</span></div>
+                <div class="stat-bar"><div class="stat-bar-fill" style="width:${Math.min(100, cpu)}%;background:var(--accent-cyan)"></div></div>
             </div>
             <div>
-                <div class="flex justify-between mb-1"><span>Memory</span><span class="font-mono">${fmtBytes(s.memory_usage)} / ${fmtBytes(s.memory_limit)} (${s.memory_percent.toFixed(1)}%)</span></div>
-                <div class="stat-bar"><div class="stat-bar-fill" style="width:${Math.min(100, s.memory_percent)}%;background:var(--accent-purple)"></div></div>
+                <div class="flex justify-between mb-1"><span>Memory</span><span class="font-mono">${fmtBytes(s.memory_usage)} / ${fmtBytes(s.memory_limit)} (${memPct.toFixed(1)}%)</span></div>
+                <div class="stat-bar"><div class="stat-bar-fill" style="width:${Math.min(100, memPct)}%;background:var(--accent-purple)"></div></div>
             </div>
             <div class="grid grid-cols-2 gap-3 mt-2">
                 <div class="panel-card p-2.5">
@@ -847,6 +855,11 @@
                     el.className = 'log-line new';
                     el.textContent = payload.line;
                     out.appendChild(el);
+                    // Cap DOM growth on long streams (matches the
+                    // system-services log viewer's 5000-line trim).
+                    while (out.children.length > 5000) {
+                        out.removeChild(out.firstChild);
+                    }
                     setTimeout(() => el.classList.remove('new'), 1200);
                     follow();
                 }

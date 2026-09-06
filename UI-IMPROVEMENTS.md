@@ -687,7 +687,43 @@ backend changes).
     so chip visibility itself was verified by code path; the
     Failed tab shows "0 units".)
 
-### Next route: (to be picked — `/system-services` done)
+### Route 5 — Docker (`/docker`)  [x]
+
+Files: `templates/docker.html` (only file changed; no backend
+changes).
+
+1. **Content width.** Same narrow `max-w-7xl` wrapper; now
+   `w-[90%]` capped at 1760px. Measured live: 90%.
+
+2. **Detail tabs cleared the view-switcher highlight (real
+   bug).** `switchTab()` ran `document.querySelectorAll(
+   '.tab-button')`, which also matches the subheader
+   Containers/Images switcher (same class, no `data-tab`), so
+   clicking Details/Stats/Logs un-highlighted the Containers
+   tab. Scoped to `#detail-panel [data-tab]`. Verified live
+   with 59 containers: `containers:true` survives Stats and
+   Logs tab switches.
+
+3. **Table height cap.** `.table-wrap` had `max-height:
+   min(520px, …)`; dropped the 520px cap so the list extends to
+   near the viewport bottom like system-services.
+
+4. **Stats crash on stopped containers.** `renderStats()` called
+   `.toFixed(1)` directly on `cpu_percent`/`memory_percent`,
+   which can be null for stopped containers — throwing inside
+   the poll callback and silencing further updates. Both are
+   now coerced (`Number(x) || 0`). Verified live against a
+   real stopped container: bars render, no errors.
+
+5. **Unbounded log DOM.** The Logs tab appended streamed lines
+   forever. Now trims to 5000 lines like the system-services
+   viewer.
+
+**Verified live** (Playwright against the running server, 59
+containers): width 90%, view-tab highlight stable, stats bars
+render for running and stopped containers, zero JS errors.
+
+### Next route: (to be picked — `/docker` done)
 
 ---
 
