@@ -98,13 +98,19 @@ def list_updates() -> List[Update]:
     return list(s.updates) if s else []
 
 
-def refresh(manager: Optional[str] = None) -> UpdateState:
+class SudoAuthError(Exception):
+    """Raised when sudo rejects the provided password."""
+
+
+def refresh(manager: Optional[str] = None, password: Optional[str] = None) -> UpdateState:
     """Run ``apt update`` (or distro equivalent) and re-parse the upgrade list.
 
     Returns the new state. The result is cached and exposed via
     :func:`get_state`. If the cache-refresh step can't run (e.g. sudo
-    needs a password and the user is non-root), the existing cache is
-    used and a warning is included in the state.
+    needs a password and none was given), the existing cache is
+    used and a warning is included in the state. When ``password`` is
+    given it is piped to ``sudo -S`` for that single command and never
+    stored.
     """
     global _STATE
     mngr = manager or detect_manager()
@@ -113,7 +119,7 @@ def refresh(manager: Optional[str] = None) -> UpdateState:
 
     try:
         if mngr == "apt":
-            refreshed = _run_apt_update()
+            refreshed = _run_apt_update(password=password)
             if not refreshed:
                 error = "could not refresh apt cache (sudo password required); showing last known list"
             updates = _parse_apt_upgradable()
@@ -125,6 +131,8 @@ def refresh(manager: Optional[str] = None) -> UpdateState:
             updates = _parse_yum_check_update()
         else:
             error = f"unsupported package manager: {mngr}"
+    except SudoAuthError as e:
+        error = str(e)
     except subprocess.TimeoutExpired:
         error = "package update timed out"
     except subprocess.CalledProcessError as e:
@@ -144,11 +152,30 @@ def refresh(manager: Optional[str] = None) -> UpdateState:
 # apt backend
 # ---------------------------------------------------------------------------
 
-def _run_apt_update() -> bool:
+def _run_apt_update(password: Optional[str] = None) -> bool:
     """Try to refresh the apt cache. Returns True on success, False if
     the call was attempted but couldn't run (e.g. sudo needs a password).
-    Raises on other failures.
+    Raises :class:`SudoAuthError` when an explicitly provided password is
+    rejected, and raises on other failures.
     """
+    if password:
+        # -p '' suppresses sudo's "[sudo] password for ..." prompt on
+        # stderr, so the word "password" below can only come from an
+        # actual auth rejection ("Sorry, try again.").
+        proc = subprocess.run(
+            ["sudo", "-S", "-p", "", "apt-get", "update"],
+            input=password + "\n",
+            capture_output=True, text=True, timeout=60,
+        )
+        if proc.returncode == 0:
+            return True
+        err = (proc.stderr or "").lower()
+        if "sorry" in err:
+            raise SudoAuthError("sudo rejected the password; showing last known list")
+        raise subprocess.CalledProcessError(
+            proc.returncode, proc.args,
+            output=proc.stdout, stderr=proc.stderr,
+        )
     proc = subprocess.run(
         ["sudo", "-n", "apt-get", "update"],
         capture_output=True, text=True, timeout=60,
@@ -321,11 +348,14 @@ _JOBS: dict = {}
 
 
 def install_packages(packages: List[str], manager: Optional[str] = None,
+                     password: Optional[str] = None,
                      on_done: Optional[Callable[[str, bool, str], None]] = None) -> str:
     """Start an install in the background. Returns a job id.
 
     The job's progress is exposed via :func:`get_job`. When done, the
-    ``on_done(job_id, success, output)`` callback is invoked.
+    ``on_done(job_id, success, output)`` callback is invoked. When
+    ``password`` is given it is piped to ``sudo -S`` for the install
+    command only; it is never stored on the job dict or in any log.
     """
     mngr = manager or detect_manager()
     job_id = f"job-{int(time.time() * 1000)}-{uuid.uuid4().hex[:8]}"
@@ -343,7 +373,7 @@ def install_packages(packages: List[str], manager: Optional[str] = None,
     with _JOBS_LOCK:
         _JOBS[job_id] = job
     t = threading.Thread(
-        target=_run_install, args=(job, on_done), daemon=True,
+        target=_run_install, args=(job, on_done, password), daemon=True,
         name=f"pkg-install-{job_id}",
     )
     t.start()
@@ -392,7 +422,8 @@ def list_jobs(limit: int = 20) -> List[dict]:
     return out
 
 
-def _run_install(job: dict, on_done: Optional[Callable]) -> None:
+def _run_install(job: dict, on_done: Optional[Callable],
+                 password: Optional[str] = None) -> None:
     mngr = job["manager"]
     packages = job["packages"]
     log_path = job["log_path"]
@@ -404,33 +435,58 @@ def _run_install(job: dict, on_done: Optional[Callable]) -> None:
                 job["ended_at"] = time.time()
                 job["success"] = False
             return
-        if mngr == "apt":
-            cmd = ["sudo", "-n", "apt-get", "install", "-y"] + packages
-            # Probe whether sudo will work without a password; if it needs
-            # one, fail fast with a clear message rather than hanging.
-            probe = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-            if probe.returncode != 0 and "password" in (probe.stderr or "").lower():
-                _append_log(log_path, "sudo requires a password; cannot install unattended.\n")
+        use_stdin_password = False
+        if password:
+            # Validate the password up front with a non-destructive
+            # `sudo -v` so a wrong password fails fast with a clear
+            # message instead of a misleading apt error mid-install.
+            # -p '' suppresses the prompt on stderr (see _run_apt_update).
+            probe = subprocess.run(
+                ["sudo", "-S", "-p", "", "-v"],
+                input=password + "\n",
+                capture_output=True, text=True, timeout=15,
+            )
+            if probe.returncode != 0:
+                _append_log(log_path, "sudo rejected the password; install aborted.\n")
                 with _JOBS_LOCK:
                     job["ended_at"] = time.time()
                     job["success"] = False
                 return
-            if probe.returncode == 0:
-                # Probe may have actually installed (e.g. packages already
-                # up to date) — but typically it just exited because it
-                # saw a "Do you want to continue?" prompt. Re-run with
-                # DEBIAN_FRONTEND=noninteractive and -y to actually install.
-                cmd = ["sudo", "-n", "apt-get", "install", "-y",
-                       "-o", "Dpkg::Options::=--force-confdef",
-                       "-o", "Dpkg::Options::=--force-confold"] + packages
+            use_stdin_password = True
+        elif mngr == "apt":
+            # Non-destructive probe: can we sudo without a password?
+            # (Never probe with `apt-get install` itself — it would
+            # actually install, and a timeout could leave a dpkg lock.)
+            probe = subprocess.run(["sudo", "-n", "-v"],
+                                   capture_output=True, text=True, timeout=10)
+            if probe.returncode != 0:
+                _append_log(log_path, "sudo requires a password; enter it in the dashboard to install.\n")
+                with _JOBS_LOCK:
+                    job["ended_at"] = time.time()
+                    job["success"] = False
+                return
+        if mngr == "apt":
+            # DEBIAN_FRONTEND is passed on the sudo command line (sudo
+            # would strip it from the environment) so debconf never
+            # blocks on stdin, which sudo already consumed (EOF).
+            sudo = ["sudo", "-S", "-p", ""] if use_stdin_password else ["sudo", "-n"]
+            cmd = sudo + ["DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y",
+                          "-o", "Dpkg::Options::=--force-confdef",
+                          "-o", "Dpkg::Options::=--force-confold", "--"] + packages
         elif mngr in ("dnf", "yum"):
-            cmd = [mngr, "install", "-y"] + packages
+            sudo = ["sudo", "-S", "-p", ""] if use_stdin_password else []
+            cmd = sudo + [mngr, "install", "-y", "--"] + packages
         else:
             _append_log(log_path, f"unsupported manager: {mngr}\n")
             return
         with open(log_path, "w") as logf:
-            proc = subprocess.Popen(cmd, stdout=logf, stderr=subprocess.STDOUT, text=True)
-            proc.wait()
+            if use_stdin_password:
+                proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,
+                                        stdout=logf, stderr=subprocess.STDOUT, text=True)
+                proc.communicate((password or "") + "\n")
+            else:
+                proc = subprocess.Popen(cmd, stdout=logf, stderr=subprocess.STDOUT, text=True)
+                proc.wait()
             success = proc.returncode == 0
         with _JOBS_LOCK:
             job["ended_at"] = time.time()
@@ -518,3 +574,5 @@ def _append_log(path: str, line: str) -> None:
             f.write(line)
     except OSError:
         pass
+
+

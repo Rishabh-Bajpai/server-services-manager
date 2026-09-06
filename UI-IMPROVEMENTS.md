@@ -987,6 +987,58 @@ clean). Full suite: 816 passed + 5 new; the single failure
 (`test_fanout_with_logging_runs_in_parallel`) also fails on
 the clean tree — pre-existing, unrelated.
 
+### Route 9 follow-up — sudo password + auto-refresh  [x]
+
+User report: installs need a sudo password but the UI had no
+way to provide one (backend used `sudo -n` fail-fast only),
+and the page showed 0/0 until Refresh was clicked manually.
+Both confirmed in code.
+
+Files: `app/package_manager.py`, `server.py`,
+`templates/packages.html`, `tests/test_package_manager.py`.
+
+1. **Password modal.** Install always prompts (same pattern
+   as system-services write actions); refresh tries
+   passwordless first and prompts only on the sudo error;
+   lookup-tab quick-install routes through the same modal.
+   Password is piped to `sudo -S` for one command, never
+   stored/logged (verified: job dicts, activity log, job
+   logs, cmdline all clean).
+2. **Auto-refresh on stale load.** `loadState()` honors the
+   backend's `needs_refresh` flag and triggers one refresh,
+   so counts populate on open instead of 0/0/"never".
+3. **External review** (`agy`, gemini-3.8-flash-medium)
+   found 2 blockers + 8 warnings, all addressed:
+   - `sudo -S -p ''` suppresses the prompt on stderr so a
+     wrong password is detected via "sorry" only (a bare
+     `"password" in stderr` check matched every failure and
+     would loop the modal forever); frontend re-prompts
+     only on the specific `sudo password required` /
+     `sudo rejected` strings.
+   - Package-name flag injection: names must now start
+     alphanumeric (server regex + lookup route) and `--`
+     precedes package lists in apt/dnf/yum commands.
+   - `sudo -n -v` pre-validation (non-destructive) replaces
+     the old probe that actually ran `apt-get install -y`
+     with a 5s timeout; no-password installs fail fast with
+     "enter it in the dashboard".
+   - `DEBIAN_FRONTEND=noninteractive` passed on the sudo
+     command line (sudo strips the environment); password
+     validated as single-line string server-side (400
+     otherwise); modal wipes the input on submit/close.
+4. **Tests:** 10 new (sudo paths, rejection, probe,
+   flag-injection-safe commands, auth-error reporting).
+
+**Verified live:** auto-refresh fired on open and opened the
+modal with the sudo reason; correct password completed
+`apt-get update` (7 updates, no banners); install flow with
+modal ran a real upgrade (containerd.io 2.3.4-2, SUCCESS,
+selection auto-cleared); follow-up refresh shows 6, fully
+consistent. Note: with a cached sudo timestamp any modal
+input is accepted — standard sudo semantics, not a bug.
+Full suite: 826 passed (pre-existing alert_log failure
+excluded); secrets clean.
+
 ### Next route: (to be picked — `/logs` is next in line)
 
 ---

@@ -222,6 +222,31 @@
         .toast.info { border-left: 3px solid var(--accent-blue); }
         @keyframes sk { 0%,100%{opacity:.4} 50%{opacity:.8} }
         .sk { display:inline-block; height:14px; border-radius:4px; background:var(--border-subtle); animation:sk 1.5s ease-in-out infinite; }
+
+        .modal-overlay {
+            display: none; position: fixed; inset: 0; z-index: 50;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(2px);
+            align-items: center; justify-content: center; padding: 1rem;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-box {
+            background: var(--bg-card); border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem; padding: 1.25rem;
+            width: 100%; max-width: 24rem;
+            box-shadow: 0 20px 60px -12px rgba(0,0,0,0.5);
+            animation: fadeIn 0.2s ease-out;
+        }
+        .modal-box h2 { font-size: 1rem; font-weight: 700; margin-bottom: 0.5rem; }
+        .modal-box p { font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 1rem; }
+        .modal-box input[type="password"] {
+            width: 100%; background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle); border-radius: 0.5rem;
+            padding: 0.625rem 0.875rem; font-size: 0.875rem;
+            color: var(--text-primary); outline: none; margin-bottom: 0.5rem;
+        }
+        .modal-box input[type="password"]:focus { border-color: var(--accent-green); }
+        .modal-actions { display: flex; gap: 0.75rem; margin-top: 0.75rem; }
+        .modal-actions .btn { flex: 1; justify-content: center; }
     </style>
 </head>
 <body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
@@ -377,6 +402,21 @@
         </section>
     </main>
 
+    <!-- Sudo password modal -->
+    <div class="modal-overlay" id="auth-modal" onclick="if(event.target===this) closeAuth()">
+        <div class="modal-box">
+            <h2>Sudo password required</h2>
+            <p id="auth-message">Enter your sudo password to continue.</p>
+            <input type="password" id="auth-password" placeholder="Sudo password..." autocomplete="off"
+                   onkeydown="if(event.key==='Enter') submitAuth()">
+            <p id="auth-error" class="text-xs text-[var(--accent-red)]" style="display:none"></p>
+            <div class="modal-actions">
+                <button class="btn" onclick="closeAuth()">Cancel</button>
+                <button class="btn btn-primary" id="auth-confirm" onclick="submitAuth()">Confirm</button>
+            </div>
+        </div>
+    </div>
+
     <div id="toasts" class="toast-container"></div>
 
     <script>
@@ -499,6 +539,49 @@
         lucide.createIcons();
     }
 
+    // Sudo password modal. Installs always need root; refresh tries
+    // without a password first and only prompts when sudo demands one.
+    let pendingAuth = null; // 'install' | 'refresh'
+    let pendingInstallPkgs = [];
+    function openAuth(mode, message) {
+        pendingAuth = mode;
+        document.getElementById('auth-message').textContent = message ||
+            (mode === 'install'
+                ? 'Enter your sudo password to install the selected packages.'
+                : 'apt needs your sudo password to refresh the package list.');
+        const err = document.getElementById('auth-error');
+        err.style.display = 'none';
+        err.textContent = '';
+        document.getElementById('auth-password').value = '';
+        document.getElementById('auth-modal').classList.add('active');
+        setTimeout(() => document.getElementById('auth-password').focus(), 100);
+    }
+    function closeAuth() {
+        document.getElementById('auth-modal').classList.remove('active');
+        document.getElementById('auth-password').value = '';
+        pendingAuth = null;
+        pendingInstallPkgs = [];
+    }
+    function submitAuth() {
+        const password = document.getElementById('auth-password').value;
+        document.getElementById('auth-password').value = '';
+        if (!password) {
+            const err = document.getElementById('auth-error');
+            err.textContent = 'Password cannot be empty.';
+            err.style.display = 'block';
+            return;
+        }
+        const mode = pendingAuth;
+        const pkgs = pendingInstallPkgs.slice();
+        closeAuth();
+        if (mode === 'install') startInstall(pkgs, password);
+        else if (mode === 'refresh') doRefreshWithPassword(password);
+    }
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && document.getElementById('auth-modal').classList.contains('active')) closeAuth();
+    });
+
+    let autoRefreshStarted = false;
     function loadState() {
         api('/api/packages/updates').then(({ data }) => {
             allUpdates = data.updates || [];
@@ -506,6 +589,12 @@
             renderBanners(data);
             renderSummary(data);
             renderRows();
+            // Populate the list on first open instead of showing 0/0:
+            // a stale or never-fetched cache triggers one refresh.
+            if (data.needs_refresh && !autoRefreshStarted) {
+                autoRefreshStarted = true;
+                doRefresh();
+            }
         });
     }
 
@@ -514,12 +603,41 @@
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner"></span> <span>Refreshing…</span>';
         api('/api/packages/refresh', { method: 'POST' }).then(({ data }) => {
-            if (data.last_error) {
+            if (data.last_error && data.last_error.includes('sudo password required')) {
+                // Refresh needs root: prompt once, then retry with it.
+                // (Other failures, e.g. broken mirrors, just toast —
+                // never re-prompt for a password that already works.)
+                loadState();
+                openAuth('refresh', 'refresh: ' + data.last_error);
+            } else if (data.last_error) {
                 toast('refresh: ' + data.last_error, 'error');
+                loadState();
             } else {
                 toast('refreshed: ' + data.count + ' updates', 'success');
+                loadState();
             }
-            loadState();
+        }).finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">Refresh</span>';
+            lucide.createIcons();
+        });
+    }
+
+    function doRefreshWithPassword(password) {
+        const btn = document.getElementById('btn-refresh');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> <span>Refreshing…</span>';
+        api('/api/packages/refresh', { method: 'POST', body: JSON.stringify({ password }) }).then(({ data }) => {
+            if (data.last_error && data.last_error.includes('sudo rejected')) {
+                loadState();
+                openAuth('refresh', 'refresh: ' + data.last_error);
+            } else if (data.last_error) {
+                toast('refresh: ' + data.last_error, 'error');
+                loadState();
+            } else {
+                toast('refreshed: ' + data.count + ' updates', 'success');
+                loadState();
+            }
         }).finally(() => {
             btn.disabled = false;
             btn.innerHTML = '<i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">Refresh</span>';
@@ -529,8 +647,15 @@
 
     function doInstall() {
         if (selected.size === 0) return;
-        const pkgs = Array.from(selected);
-        api('/api/packages/install', { method: 'POST', body: JSON.stringify({ packages: pkgs }) })
+        pendingInstallPkgs = Array.from(selected);
+        openAuth('install');
+    }
+
+    function startInstall(pkgs, password) {
+        if (!pkgs.length) return;
+        const body = { packages: pkgs };
+        if (password) body.password = password;
+        api('/api/packages/install', { method: 'POST', body: JSON.stringify(body) })
             .then(({ ok, data }) => {
                 if (!ok) { toast(data.error || 'install failed', 'error'); return; }
                 activeJobId = data.job_id;
@@ -622,20 +747,8 @@
     }
     function quickInstall() {
         if (!_lookupPackage || !_lookupPackage.available_upgrade) return;
-        api('/api/packages/install', { method: 'POST', body: JSON.stringify({ packages: [_lookupPackage.name] }) })
-            .then(({ ok, data }) => {
-                if (!ok) { toast(data.error || 'install failed', 'error'); return; }
-                toast('install started for ' + _lookupPackage.name, 'success');
-                activeJobId = data.job_id;
-                document.getElementById('jobs-section').classList.remove('hidden');
-                document.getElementById('job-id').textContent = data.job_id;
-                document.getElementById('job-packages').textContent = data.packages.join(', ');
-                document.getElementById('job-log').textContent = '';
-                document.getElementById('job-spinner').classList.remove('hidden');
-                document.getElementById('job-status').textContent = '';
-                document.getElementById('jobs-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                pollJob();
-            });
+        pendingInstallPkgs = [_lookupPackage.name];
+        openAuth('install', 'Enter your sudo password to install the upgrade for ' + _lookupPackage.name + '.');
     }
 
     // Install job history

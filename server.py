@@ -3122,14 +3122,25 @@ def api_packages_updates_list():
     return jsonify(d)
 
 
+def _packages_password(data):
+    """Extract and validate the optional sudo password from a JSON body."""
+    password = data.get('password')
+    if password is None:
+        return None
+    if not isinstance(password, str) or not password or '\n' in password or '\r' in password:
+        return "INVALID"
+    return password
+
+
 @app.route('/api/packages/refresh', methods=['POST'])
 @openapi_mod.describe(
     summary="Refresh the package-upgrade cache",
     description=(
         "Runs the distro-specific cache refresh (`apt update` / "
         "`dnf check-update`) and re-parses the upgrade list. If sudo "
-        "needs a password, the existing cache is used and a warning "
-        "is included in the response."
+        "needs a password, pass it as `password` (piped to `sudo -S` "
+        "for that single command); otherwise the existing cache is "
+        "used and a warning is included in the response."
     ),
     tag="Packages",
     responses={
@@ -3137,7 +3148,11 @@ def api_packages_updates_list():
     },
 )
 def api_packages_refresh():
-    state = package_manager.refresh()
+    data = request.get_json(silent=True) or {}
+    password = _packages_password(data)
+    if password == "INVALID":
+        return jsonify({"error": "invalid password"}), 400
+    state = package_manager.refresh(password=password)
     activity.log("packages.refresh", target=state.manager, status="ok" if not state.last_error else "error",
                  detail=state.last_error[:200] if state.last_error else "",
                  ip=request.remote_addr or "")
@@ -3150,14 +3165,18 @@ def api_packages_install():
     packages = data.get('packages', [])
     if not isinstance(packages, list) or not packages:
         return jsonify({"error": "no packages specified"}), 400
-    # Sanitize package names: only [A-Za-z0-9._+:\-]
+    # Sanitize package names: must start with an alphanumeric so a name
+    # can never be parsed as an apt/dnf flag (e.g. "--purge").
     import re
     safe = []
     for p in packages:
-        if not isinstance(p, str) or not re.match(r'^[A-Za-z0-9._+:\-]+$', p):
+        if not isinstance(p, str) or not re.match(r'^[A-Za-z0-9][A-Za-z0-9._+:\-]*$', p):
             return jsonify({"error": f"invalid package name: {p!r}"}), 400
         safe.append(p)
-    job_id = package_manager.install_packages(safe)
+    password = _packages_password(data)
+    if password == "INVALID":
+        return jsonify({"error": "invalid password"}), 400
+    job_id = package_manager.install_packages(safe, password=password)
     activity.log("packages.install", target=job_id, status="ok",
                  detail=",".join(safe), ip=request.remote_addr or "")
     return jsonify({"job_id": job_id, "packages": safe})
@@ -3178,9 +3197,12 @@ def api_packages_jobs_list():
 
 @app.route('/api/packages/lookup', methods=['GET'])
 def api_packages_lookup():
+    import re
     q = request.args.get('q', '').strip()
     if not q:
         return jsonify({"error": "no package name specified"}), 400
+    if not re.match(r'^[A-Za-z0-9][A-Za-z0-9._+:\-]*$', q):
+        return jsonify({"name": q, "error": "invalid package name"}), 400
     result = package_manager.lookup_package(q)
     return jsonify(result)
 

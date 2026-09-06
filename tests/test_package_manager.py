@@ -186,7 +186,7 @@ vim.x86_64  9.0  base
 
 def test_refresh_apt(monkeypatch):
     monkeypatch.setattr(pm, "detect_manager", lambda: "apt")
-    monkeypatch.setattr(pm, "_run_apt_update", lambda: True)
+    monkeypatch.setattr(pm, "_run_apt_update", lambda **kw: True)
     monkeypatch.setattr(pm, "_parse_apt_upgradable", lambda: [
         Update(name="vim", current_version="1", new_version="2"),
     ])
@@ -201,7 +201,7 @@ def test_refresh_apt_cache_refresh_failed(monkeypatch):
     last known upgrade list with a warning message.
     """
     monkeypatch.setattr(pm, "detect_manager", lambda: "apt")
-    monkeypatch.setattr(pm, "_run_apt_update", lambda: False)
+    monkeypatch.setattr(pm, "_run_apt_update", lambda **kw: False)
     monkeypatch.setattr(pm, "_parse_apt_upgradable", lambda: [
         Update(name="vim", current_version="1", new_version="2"),
     ])
@@ -234,7 +234,7 @@ def test_refresh_swallows_apt_update_failure(monkeypatch):
 def test_refresh_swallows_timeout(monkeypatch):
     import subprocess
     monkeypatch.setattr(pm, "detect_manager", lambda: "apt")
-    def timeout():
+    def timeout(**kw):
         raise subprocess.TimeoutExpired("apt-get", 60)
     monkeypatch.setattr(pm, "_run_apt_update", timeout)
     state = refresh()
@@ -398,3 +398,156 @@ def test_lookup_package_unsupported_manager(monkeypatch):
     monkeypatch.setattr(pm, "detect_manager", lambda: "unknown")
     result = pm.lookup_package("bash")
     assert "unsupported" in result["error"]
+
+
+# ---------------------------------------------------------------------------
+# sudo password paths
+# ---------------------------------------------------------------------------
+
+def test_run_apt_update_with_password_success():
+    fake = MagicMock()
+    fake.returncode = 0
+    with patch.object(pm.subprocess, "run", return_value=fake) as run:
+        assert pm._run_apt_update(password="secret") is True
+    args, kwargs = run.call_args
+    assert "-S" in args[0]
+    assert kwargs["input"] == "secret\n"
+
+
+def test_run_apt_update_with_password_rejected():
+    fake = MagicMock()
+    fake.returncode = 1
+    fake.stderr = "[sudo] password for user: Sorry, try again.\n"
+    with patch.object(pm.subprocess, "run", return_value=fake):
+        with pytest.raises(pm.SudoAuthError):
+            pm._run_apt_update(password="wrong")
+
+
+def test_refresh_with_password_threads_through(monkeypatch):
+    monkeypatch.setattr(pm, "detect_manager", lambda: "apt")
+    seen = {}
+    def fake_update(password=None):
+        seen["password"] = password
+        return True
+    monkeypatch.setattr(pm, "_run_apt_update", fake_update)
+    monkeypatch.setattr(pm, "_parse_apt_upgradable", lambda: [])
+    state = pm.refresh(password="secret")
+    assert seen["password"] == "secret"
+    assert state.last_error == ""
+
+
+def _make_job(tmp_path, job_id="job-1"):
+    log_path = str(tmp_path / f"{job_id}.log")
+    return {"id": job_id, "manager": "apt", "packages": ["vim"],
+            "started_at": 0.0, "ended_at": 0.0, "success": False,
+            "log_path": log_path, "tail": ""}
+
+
+def test_run_install_with_password_uses_sudo_S(tmp_path):
+    job = _make_job(tmp_path)
+    validator = MagicMock()
+    validator.returncode = 0
+    proc = MagicMock()
+    proc.returncode = 0
+    with patch.object(pm.subprocess, "run", return_value=validator) as run, \
+         patch.object(pm.subprocess, "Popen", return_value=proc) as popen:
+        pm._run_install(job, None, password="secret")
+    # Non-destructive `sudo -v` pre-check first ...
+    run_args, run_kwargs = run.call_args
+    assert run_args[0][:4] == ["sudo", "-S", "-p", ""]
+    assert run_args[0][4] == "-v"
+    assert run_kwargs["input"] == "secret\n"
+    # ... then the install with end-of-options delimiter ...
+    popen_args, popen_kwargs = popen.call_args
+    assert "-S" in popen_args[0]
+    assert "-n" not in popen_args[0]
+    assert "--" in popen_args[0]
+    assert "DEBIAN_FRONTEND=noninteractive" in popen_args[0]
+    assert popen_kwargs["stdin"] == pm.subprocess.PIPE
+    proc.communicate.assert_called_once_with("secret\n")
+    assert job["success"] is True
+
+
+def test_run_install_with_wrong_password_fails_fast(tmp_path):
+    job = _make_job(tmp_path, "job-2")
+    validator = MagicMock()
+    validator.returncode = 1
+    validator.stderr = "Sorry, try again.\n"
+    with patch.object(pm.subprocess, "run", return_value=validator), \
+         patch.object(pm.subprocess, "Popen") as popen:
+        pm._run_install(job, None, password="wrong")
+    popen.assert_not_called()
+    assert job["success"] is False
+    assert job["ended_at"] != 0
+    with open(job["log_path"]) as f:
+        assert "sudo rejected the password" in f.read()
+
+
+def test_run_install_without_password_probes_sudo_n_v(tmp_path):
+    job = _make_job(tmp_path, "job-3")
+    probe = MagicMock()
+    probe.returncode = 0
+    proc = MagicMock()
+    proc.returncode = 0
+    with patch.object(pm.subprocess, "run", return_value=probe) as run, \
+         patch.object(pm.subprocess, "Popen", return_value=proc) as popen:
+        pm._run_install(job, None)
+    # Non-destructive probe, never `apt-get install` via run().
+    run_args, _ = run.call_args
+    assert run_args[0] == ["sudo", "-n", "-v"]
+    popen_args, _ = popen.call_args
+    assert "install" in popen_args[0]
+    assert "--" in popen_args[0]
+    assert job["success"] is True
+
+
+def test_run_install_without_password_probe_failed(tmp_path):
+    job = _make_job(tmp_path, "job-4")
+    probe = MagicMock()
+    probe.returncode = 1
+    with patch.object(pm.subprocess, "run", return_value=probe), \
+         patch.object(pm.subprocess, "Popen") as popen:
+        pm._run_install(job, None)
+    popen.assert_not_called()
+    assert job["success"] is False
+    with open(job["log_path"]) as f:
+        assert "sudo requires a password" in f.read()
+
+
+def test_run_apt_update_apt_failure_is_not_auth_error():
+    # Correct password but broken mirror: must raise, not SudoAuthError.
+    import subprocess
+    fake = MagicMock()
+    fake.returncode = 100
+    fake.stdout = ""
+    fake.stderr = "Err:1 http://mirror/ noble Release\n  404 Not Found\n"
+    with patch.object(pm.subprocess, "run", return_value=fake):
+        with pytest.raises(subprocess.CalledProcessError):
+            pm._run_apt_update(password="correct")
+
+
+def test_refresh_reports_rejected_password(monkeypatch):
+    monkeypatch.setattr(pm, "detect_manager", lambda: "apt")
+    def fail(password=None):
+        raise pm.SudoAuthError("sudo rejected the password; showing last known list")
+    monkeypatch.setattr(pm, "_run_apt_update", fail)
+    monkeypatch.setattr(pm, "_parse_apt_upgradable", lambda: [])
+    state = pm.refresh(password="wrong")
+    assert "sudo rejected" in state.last_error
+
+
+def test_install_packages_passes_password_to_worker(monkeypatch):
+    monkeypatch.setattr(pm, "detect_manager", lambda: "apt")
+    seen = {}
+    def fake_run(job, on_done, password=None):
+        seen["password"] = password
+        with pm._JOBS_LOCK:
+            job["ended_at"] = 1.0
+            job["success"] = True
+    monkeypatch.setattr(pm, "_run_install", fake_run)
+    pm.install_packages(["vim"], password="secret")
+    for _ in range(100):
+        if seen.get("password"):
+            break
+        time.sleep(0.05)
+    assert seen.get("password") == "secret"
