@@ -1354,7 +1354,44 @@ create→delete repro proves the path correct and final
 state was verified clean four ways; recorded here as an
 unexplained observation, not a defect.
 
-### Next route: (to be picked — `/disk` is next in line)
+### Route 13 — Disk (`/disk`)  [x]
+
+Files: `templates/disk.html` (only file changed; backend
+chroot/depth/timeout hardening already sound).
+
+1. **Stored XSS via filenames (fixed).** `escapeAttr()`
+   escaped only `'`, but the value sits in a
+   double-quoted `onclick` — a file named `"><img …>`
+   broke out of the attribute. Now fully
+   entity/quote-escaped with an explanatory comment.
+   Proven live with a planted
+   `probe-'"><img src=x onerror=alert(1)>.txt`: zero
+   `<img>` elements, renders as inert text (file removed
+   afterwards).
+2. **Content width.** `w-[90%]` capped at 1760px, measured
+   90%. Table 560px cap dropped (lists keep internal
+   scroll; the treemap above means page-fit isn't the goal
+   here).
+3. **Scanning feedback that lied.** `showScanning(false)`
+   never cleared, so errors/timeouts left a permanent
+   spinner; and the success path has been reordered so
+   `renderTreemap()`'s real summary isn't wiped. Refresh
+   button now disables with its own Scanning state
+   (verified mid-flight and restored).
+4. **Overlapping-scan race.** Rapid breadcrumb/refresh
+   clicks fired parallel `du` runs with last-write-wins.
+   `loadSeq` guard added (same pattern as `/logs`).
+5. **Dead code revived.** `navigateUp()` existed with no
+   caller — now an Up button beside the breadcrumb.
+   Verified round trip (. → Downloads → .), crumbs update.
+   Depth buttons got tooltips.
+
+**Verified live** (292 items, treemap cap message honest
+at "60 of 292 shown", zero JS errors, `node --check`
+clean). Full suite: 855 passed (pre-existing alert_log
+failure excluded); secrets clean.
+
+### Next route: (to be picked — `/ssh` is next in line)
 
 ---
 
