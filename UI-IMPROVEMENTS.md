@@ -551,6 +551,20 @@ Files: `templates/monitor.html` (only file changed; no backend changes).
 - After ~20s: `labelsLen 60`, mem/net data length 60 with 11
   real points, x scale `min 0 / max 59`.
 
+4. **Draggable column widths.** Each of the 5 header cells has a
+   `col-resize` grip on its right edge (blue highlight on hover);
+   dragging adjusts the `<colgroup>` width (min 56px) and the
+   choice persists in `localStorage` (`ssm-proc-colwidths`) across
+   reloads. Verified live: Name column dragged 676→776px, prefs
+   saved as `[72,776,92,92,128]`.
+
+5. **Pause / Resume live processes.** A Pause button in the Top
+   Processes header freezes table updates (charts and bars keep
+   updating) so rows can be selected and copied; it turns yellow
+   and reads Resume while paused. Verified live: table HTML
+   byte-identical across 4.5s while paused, updating again after
+   Resume.
+
 ### Next route: (to be picked — `/monitor` done)
 
 ---
