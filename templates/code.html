@@ -88,6 +88,16 @@
             flex: 1 1 auto;
             min-height: 0;
         }
+        /* Level 2 (wide): only the main header remains — the page
+           subheader is hidden and content goes full-bleed. */
+        .code-wide .ui-subheader { display: none; }
+        /* Level 3 (browser fullscreen) targets the card, so the app
+           header is excluded automatically by the Fullscreen API. */
+        #code-card:fullscreen { margin: 0; border-radius: 0; height: 100dvh; }
+        .lvl-btn { padding: 0.375rem 0.625rem; font-size: 0.75rem; font-weight: 600; }
+        .lvl-on { background: var(--accent-blue) !important; color: #fff !important; }
+        .lvl-off { background: var(--bg-secondary); color: var(--text-secondary); }
+        .lvl-off:hover { color: var(--text-primary); }
     </style>
 </head>
 <body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
@@ -125,6 +135,11 @@
                 <span class="hidden sm:inline">Open</span>
             </button>
             <span class="flex-1"></span>
+            <div class="inline-flex rounded-lg border border-[var(--border-subtle)] overflow-hidden flex-shrink-0" title="View level: normal / wide (header only) / browser fullscreen">
+                <button class="lvl-btn lvl-on" id="lvl-1" onclick="setLevel(1)" title="Normal: VS Code inside the page">Normal</button>
+                <button class="lvl-btn lvl-off" id="lvl-2" onclick="setLevel(2)" title="Wide: VS Code fills the app under the main header">Wide</button>
+                <button class="lvl-btn lvl-off" id="lvl-3" onclick="setLevel(3)" title="Fullscreen: VS Code covers the whole browser (Esc to exit)">Full</button>
+            </div>
             <a class="btn" id="code-popout" href="#" target="_blank" rel="noopener" title="Open VS Code in a new tab">
                 <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
                 <span class="hidden sm:inline">Pop out</span>
@@ -140,7 +155,7 @@
             </div>
             <iframe id="code-frame" title="VS Code" style="display:none"></iframe>
         </section>
-        <p class="text-[11px] text-[var(--text-muted)] mt-2">
+        <p class="text-[11px] text-[var(--text-muted)] mt-2" id="code-note">
             Full VS Code (code-server) with the Office Viewer extension for
             <span class="font-mono">.docx / .xlsx / .pptx</span>. First visit asks for the
             code-server password (synced from the app password by
@@ -250,10 +265,60 @@
             if (e.key === 'Enter') openFolderInput();
         });
 
+        // ---- view levels: 1 normal / 2 wide / 3 browser fullscreen ----
+        let level = 1;
+        let preFullLevel = 1;
+        const MAIN_ORIG = document.querySelector('main').className;
+
+        function paintLevels() {
+            for (const n of [1, 2, 3]) {
+                const b = document.getElementById('lvl-' + n);
+                b.classList.toggle('lvl-on', n === level);
+                b.classList.toggle('lvl-off', n !== level);
+            }
+        }
+
+        function setLevel(n) {
+            if (n === 3) {
+                // Fullscreen API needs the user gesture — this click is it.
+                preFullLevel = level >= 3 ? 1 : level;
+                const card = document.getElementById('code-card');
+                try {
+                    const p = (card.requestFullscreen || card.webkitRequestFullscreen || (() => Promise.reject())).call(card);
+                    if (p && p.catch) p.catch(() => setLevel(2));
+                } catch (e) { setLevel(2); return; }
+            } else if (document.fullscreenElement) {
+                document.exitFullscreen().catch(() => {});
+            }
+            level = n;
+            try { localStorage.setItem('ssm-code-level', String(n === 3 ? preFullLevel : n)); } catch (e) {}
+            document.body.classList.toggle('code-wide', n >= 2);
+            const main = document.querySelector('main');
+            const note = document.getElementById('code-note');
+            if (n >= 2) {
+                main.className = 'w-full px-2 py-2';
+                if (note) note.style.display = 'none';
+            } else {
+                main.className = MAIN_ORIG;
+                if (note) note.style.display = '';
+            }
+            paintLevels();
+            fitFrame();
+        }
+
+        // Esc (or any native exit) drops back to the pre-fullscreen level.
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement && level === 3) setLevel(preFullLevel);
+        });
+
         // This page is same-origin safe to embed: code-server sends no
         // X-Frame-Options / frame-ancestors, and same-site (same host,
         // different port) keeps its password cookie working in-frame.
         lucide.createIcons();
+        try {
+            const saved = parseInt(localStorage.getItem('ssm-code-level') || '1', 10);
+            if (saved === 2) setLevel(2);  // 3 needs a fresh gesture; 2 is the closest
+        } catch (e) {}
         refreshStatus();
     </script>
 </body>

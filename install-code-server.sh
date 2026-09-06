@@ -81,6 +81,23 @@ printf 'bind-addr: %s\nauth: password\npassword: %s\ncert: false\n' \
 chmod 600 "$CS_CFG"
 echo "wrote $CS_CFG (bind ${BIND_ADDR}, password synced from app .env)"
 
+# --- 2b. default theme: Dark+ (merged, other settings preserved) -----------
+python3 - <<'EOF'
+import json
+import os
+p = os.path.expanduser("~/.local/share/code-server/User/settings.json")
+s = {}
+if os.path.exists(p):
+    try:
+        s = json.load(open(p))
+    except ValueError:
+        s = {}
+s["workbench.colorTheme"] = "Default Dark+"
+os.makedirs(os.path.dirname(p), exist_ok=True)
+json.dump(s, open(p, "w"), indent=4)
+print("theme: Default Dark+")
+EOF
+
 # --- 3. Office Viewer extension --------------------------------------------
 if "$BIN" --list-extensions 2>/dev/null | grep -qi '^cweijan.vscode-office'; then
     echo "extension already installed: cweijan.vscode-office"

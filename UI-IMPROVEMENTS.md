@@ -1660,6 +1660,14 @@ program entry appended to `config.yaml`).
   upstream check, not a blocker.
 - **Edit proof:** delete+save round-tripped to disk
   (file emptied on disk after in-IDE save).
+- **Theme + view levels:** default theme pinned to
+  `Default Dark+` (`User/settings.json`, merged by the
+  installer, hot-reloaded). Three levels on a segmented
+  control (persisted): Normal (in-page) → Wide (subheader
+  + margins + note hidden, header only: 544px → 627px
+  measured) → Full (Fullscreen API on the card, Esc
+  returns to the previous level). Verified live incl.
+  native exit path.
 - **Remote-access fix:** loopback-only bind broke non-localhost
   access (`Firefox can't connect to 100.77.255.82:8600` over
   Tailscale). code-server now binds `0.0.0.0:8600` with password
