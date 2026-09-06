@@ -428,6 +428,86 @@ def remove_image(id_or_name: str, force: bool = False) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Daemon info, image prune, daemon restart
+# ---------------------------------------------------------------------------
+
+def daemon_info() -> dict:
+    """Return a small subset of ``docker info`` for the Daemon view."""
+    client = _client()
+    try:
+        info = client.info()
+    except Exception as e:  # noqa: BLE001
+        raise DockerError(_format_error(e), code=_classify(e))
+    return {
+        "server_version": info.get("ServerVersion", ""),
+        "os": info.get("OperatingSystem", ""),
+        "kernel": info.get("KernelVersion", ""),
+        "arch": info.get("Architecture", ""),
+        "cpus": info.get("NCPU", 0),
+        "memory_total": info.get("MemTotal", 0),
+        "storage_driver": info.get("Driver", ""),
+        "containers_running": info.get("ContainersRunning", 0),
+        "containers_paused": info.get("ContainersPaused", 0),
+        "containers_stopped": info.get("ContainersStopped", 0),
+        "images": info.get("Images", 0),
+    }
+
+
+def prune_images() -> dict:
+    """Delete dangling images; report count + reclaimed bytes."""
+    client = _client(timeout=60)
+    try:
+        result = client.images.prune() or {}
+    except Exception as e:  # noqa: BLE001
+        raise DockerError(_format_error(e), code=_classify(e))
+    deleted = result.get("ImagesDeleted") or []
+    return {
+        "ok": True,
+        "deleted": len(deleted),
+        "space_reclaimed": result.get("SpaceReclaimed", 0),
+        "output": f"pruned {len(deleted)} image(s), reclaimed {result.get('SpaceReclaimed', 0)} bytes",
+    }
+
+
+def restart_daemon(password: str) -> dict:
+    """Restart the Docker daemon via ``sudo systemctl restart docker``.
+
+    The Flask process stays unprivileged — the user's app password is
+    piped to ``sudo -S`` for this one command (same pattern as
+    ``system_services`` write operations).
+    """
+    import subprocess
+
+    if not password:
+        raise DockerError("password required", code="permission")
+    try:
+        proc = subprocess.run(
+            ["sudo", "-S", "systemctl", "restart", "docker"],
+            input=password + "\n",
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except subprocess.TimeoutExpired:
+        raise DockerError("timed out restarting docker", code="timeout")
+    except FileNotFoundError as e:
+        raise DockerError(str(e), code="missing_tool")
+    if proc.returncode != 0:
+        raw = ((proc.stderr or "") + "\n" + (proc.stdout or "")).strip()
+        first = next(
+            (ln.strip() for ln in raw.splitlines()
+             if ln.strip() and "password for" not in ln),
+            "failed to restart docker",
+        )
+        lower = raw.lower()
+        if ("password" in lower or "authentication" in lower
+                or "permission" in lower or "not in the sudoers" in lower):
+            raise DockerError(first, code="permission")
+        raise DockerError(first, code="error")
+    return {"ok": True, "output": "docker daemon restart requested"}
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 

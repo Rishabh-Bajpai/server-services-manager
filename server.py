@@ -1363,6 +1363,62 @@ def api_docker_image_remove(id_or_name):
         return jsonify({"error": str(e), "code": e.code}), 500
 
 
+@app.route('/api/docker/daemon', methods=['GET'])
+@openapi_mod.describe(
+    summary="Docker daemon info",
+    description="Small subset of ``docker info`` for the Daemon view.",
+    tag="Docker",
+)
+def api_docker_daemon_info():
+    try:
+        return jsonify(docker_manager.daemon_info())
+    except docker_manager.DockerError as e:
+        return jsonify({"error": str(e), "code": e.code}), 500
+
+
+@app.route('/api/docker/daemon/restart', methods=['POST'])
+@openapi_mod.describe(
+    summary="Restart the Docker daemon",
+    description=(
+        "Runs ``sudo systemctl restart docker`` with the user's app "
+        "password piped to ``sudo -S`` (same pattern as systemd unit "
+        "control). Expect a brief disconnect."
+    ),
+    tag="Docker",
+)
+def api_docker_daemon_restart():
+    data = request.get_json(silent=True) or {}
+    password = data.get("password") or ""
+    try:
+        result = docker_manager.restart_daemon(password)
+        activity.log("docker.daemon.restart", status="ok",
+                     detail=result.get("output", ""), ip=request.remote_addr or "")
+        return jsonify(result)
+    except docker_manager.DockerError as e:
+        activity.log("docker.daemon.restart", status="error",
+                     detail=f"{e.code}: {e}", ip=request.remote_addr or "")
+        http = 403 if e.code == "permission" else 500
+        return jsonify({"error": str(e), "code": e.code}), http
+
+
+@app.route('/api/docker/images/prune', methods=['POST'])
+@openapi_mod.describe(
+    summary="Prune dangling Docker images",
+    description="Deletes dangling images; reports deleted count and reclaimed bytes.",
+    tag="Docker",
+)
+def api_docker_images_prune():
+    try:
+        result = docker_manager.prune_images()
+        activity.log("docker.image.prune", status="ok",
+                     detail=result.get("output", ""), ip=request.remote_addr or "")
+        return jsonify(result)
+    except docker_manager.DockerError as e:
+        activity.log("docker.image.prune", status="error",
+                     detail=f"{e.code}: {e}", ip=request.remote_addr or "")
+        return jsonify({"error": str(e), "code": e.code}), 500
+
+
 # Cron management
 @app.route('/cron')
 def cron_page():

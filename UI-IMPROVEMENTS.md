@@ -733,6 +733,61 @@ render for running and stopped containers, zero JS errors.
    closed, clean 704+384+16 split open, full width restored on
    close.
 
+### Route 5b — Docker round 2: fixes + stacks/daemon/prune  [x]
+
+Backend: `app/docker_manager.py` gained `daemon_info()` (subset
+of `docker info`), `prune_images()` (`images.prune()` → deleted
+count + reclaimed bytes), and `restart_daemon(password)` (`sudo
+systemctl restart docker` with the app password piped to
+`sudo -S`, same pattern as systemd unit control). Routes in
+`server.py`: `GET /api/docker/daemon`, `POST
+/api/docker/daemon/restart`, `POST /api/docker/images/prune`
+(all with activity logging). Tests: +7 in
+`tests/test_docker_manager.py` (info subset/error, prune
+ok/error, restart requires-password/ok-sudo-argv/bad-password).
+
+Frontend (`templates/docker.html` only):
+
+1. **Pause-live.** Refresh button replaced with a Live/Pause
+   toggle; the 15s tick is skipped while paused.
+2. **Bulk actions.** Checkbox column + select-all + "N selected"
+   bar (Start/Stop/Restart) with `uiConfirm` and a per-container
+   summary toast. Selection survives re-renders.
+3. **Detail panel refresh.** Each tick re-fetches the open
+   container, but only on the Details tab (never disturbs Logs
+   streaming or Stats polling).
+4. **Stats trend chart.** Chart.js (same CDN/pinning as
+   `/monitor`) + 60-point null-prefilled CPU/memory histories
+   with `spanGaps:false`; window restarts empty per container.
+5. **Images prune.** "X reclaimable (N dangling)" line +
+   Prune button (`uiConfirm` → POST → toast with reclaimed
+   bytes → reload).
+6. **Clickable ports.** Published tcp ports render as
+   `http://host:port` links (current hostname, new tab);
+   unpublished/other formats stay plain text.
+7. **State filter tabs.** All / Running / Stopped
+   (exited+dead+created) / Paused / Restarting, client-side.
+8. **Remove modal shows the name** ("pensive_rubin") instead of
+   the 64-char ID hash.
+9. **Daemon view.** New tab: Version / Containers / Images /
+   Storage cards + OS/kernel/arch/CPUs/memory/paused details +
+   Restart Docker button (`uiConfirm` → `uiPromptPassword` →
+   POST → reconnect poll after 5s).
+10. **Stacks view.** New tab grouping by `compose_project`
+    (+ a standalone group): per-stack running x/y counts,
+    container rows with state, Start/Stop/Restart-all buttons
+    with confirm and per-stack summary toast.
+
+**Verified live** (Playwright, 59 containers, 52 images, zero
+JS errors): Running filter "53 / 59", bulk "2 selected", 24
+port links, trend chart visible and accumulating, 18 stacks,
+prune line "2.0 GB reclaimable (4 dangling)", daemon cards
+with real host data. Bulk/stack/prune/restart *execution*
+was intentionally not fired on the live host; code paths
+mirror already-tested single-action calls. (One syntax slip
+— a dropped `});` in `loadImages` — was caught by the
+console-error check and fixed before verification.)
+
 ### Next route: (to be picked — `/docker` done)
 
 ---

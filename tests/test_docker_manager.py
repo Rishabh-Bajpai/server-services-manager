@@ -610,3 +610,93 @@ def test_remove_image_not_found(monkeypatch):
         with pytest.raises(DockerError) as exc_info:
             docker_manager.remove_image("gone")
     assert exc_info.value.code == "not_found"
+
+
+# ---------------------------------------------------------------------------
+# daemon_info / prune_images / restart_daemon
+# ---------------------------------------------------------------------------
+
+def test_daemon_info_subset(monkeypatch):
+    client = MagicMock()
+    client.info.return_value = {
+        "ServerVersion": "24.0.7",
+        "OperatingSystem": "Ubuntu 22.04",
+        "KernelVersion": "5.15.0",
+        "Architecture": "x86_64",
+        "NCPU": 4,
+        "MemTotal": 8 * 1024 ** 3,
+        "Driver": "overlay2",
+        "ContainersRunning": 3,
+        "ContainersPaused": 1,
+        "ContainersStopped": 2,
+        "Images": 10,
+    }
+    with patch.object(docker_manager, "_client", return_value=client):
+        out = docker_manager.daemon_info()
+    assert out["server_version"] == "24.0.7"
+    assert out["cpus"] == 4
+    assert out["storage_driver"] == "overlay2"
+    assert out["containers_running"] == 3
+    assert out["images"] == 10
+
+
+def test_daemon_info_error(monkeypatch):
+    client = MagicMock()
+    client.info.side_effect = Exception("Cannot connect to the Docker daemon")
+    with patch.object(docker_manager, "_client", return_value=client):
+        with pytest.raises(DockerError):
+            docker_manager.daemon_info()
+
+
+def test_prune_images_ok(monkeypatch):
+    client = MagicMock()
+    client.images.prune.return_value = {
+        "ImagesDeleted": [{"Deleted": "sha256:abc"}, {"Deleted": "sha256:def"}],
+        "SpaceReclaimed": 123456,
+    }
+    with patch.object(docker_manager, "_client", return_value=client):
+        out = docker_manager.prune_images()
+    assert out["ok"] is True
+    assert out["deleted"] == 2
+    assert out["space_reclaimed"] == 123456
+
+
+def test_prune_images_error(monkeypatch):
+    client = MagicMock()
+    client.images.prune.side_effect = Exception("permission denied")
+    with patch.object(docker_manager, "_client", return_value=client):
+        with pytest.raises(DockerError) as exc_info:
+            docker_manager.prune_images()
+    assert exc_info.value.code == "permission"
+
+
+def test_restart_daemon_requires_password():
+    with pytest.raises(DockerError) as exc_info:
+        docker_manager.restart_daemon("")
+    assert exc_info.value.code == "permission"
+
+
+def test_restart_daemon_ok(monkeypatch):
+    import subprocess as _sp
+    proc = MagicMock()
+    proc.returncode = 0
+    proc.stdout = ""
+    proc.stderr = ""
+    with patch.object(_sp, "run", return_value=proc) as mock_run:
+        out = docker_manager.restart_daemon("secret")
+    assert out["ok"] is True
+    cmd = mock_run.call_args[0][0]
+    assert cmd[:3] == ["sudo", "-S", "systemctl"]
+    assert mock_run.call_args[1]["input"] == "secret\n"
+
+
+def test_restart_daemon_bad_password(monkeypatch):
+    import subprocess as _sp
+    proc = MagicMock()
+    proc.returncode = 1
+    proc.stdout = ""
+    proc.stderr = "Sorry, try again.\n[sudo] password for user:"
+    with patch.object(_sp, "run", return_value=proc):
+        with pytest.raises(DockerError) as exc_info:
+            docker_manager.restart_daemon("wrong")
+    assert exc_info.value.code == "permission"
