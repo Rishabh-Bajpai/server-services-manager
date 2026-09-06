@@ -4,6 +4,7 @@
 ```bash
 pip install -r requirements.txt
 echo "PASSWORD=your_secure_password" > .env   # also supports SECRET_KEY, CORS_ORIGIN
+bash install-code-server.sh                   # optional: VS Code on /code (user-level, no root; syncs password from .env, pre-installs Office Viewer ext, registers autostart program)
 ./start.sh                                     # starts on port 8881, logs to server.log
 ./stop.sh                                      # uses .server.pid
 
@@ -14,7 +15,7 @@ journalctl --user -u server-services-manager -f
 
 ## Architecture
 - **Entrypoint:** `server.py` — single Flask app with SocketIO, eventlet monkey-patch at line 4-5
-- **Routes** (`server.py`): `/` dashboard, `/monitor` system monitor, `/system-services` systemd units, `/docker` docker containers, `/cron` system cron jobs, `/notifications` health-check dashboard, `/alerts` notification delivery log, `/packages` package updates, `/logs` log search, `/firewall` firewall manager, `/backups` backup scheduler, `/disk` disk usage analyzer, `/ssh` SSH key manager, `/cluster` multi-host cluster, `/files` full file explorer, `/activity` activity log, `/control` whitelisted system commands, `/programs/*` CRUD, `/api/files/*` file manager, `/api/system-services/*`, `/api/docker/*`, `/api/packages/*`, `/api/firewall/*`, `/api/backups/*`, `/api/disk/*`, `/api/ssh/*`, `/api/cluster/*`, `/api/programs/<name>/{autostart,schedule,limits}`, `/api/programs/<name>/logs/search`, `/api/system-services/<name>/logs/search`, `/api/palette/search`, `/api/alerts/*`, `/api/plugins`, `/openapi.json`, `/docs/` (Swagger UI), `/login`, `/logout`, `/health` (no auth)
+- **Routes** (`server.py`): `/` dashboard, `/monitor` system monitor, `/system-services` systemd units, `/docker` docker containers, `/cron` system cron jobs, `/notifications` health-check dashboard, `/alerts` notification delivery log, `/packages` package updates, `/logs` log search, `/firewall` firewall manager, `/backups` backup scheduler, `/disk` disk usage analyzer, `/ssh` SSH key manager, `/cluster` multi-host cluster, `/files` full file explorer, `/code` VS Code Server (code-server iframe), `/activity` activity log, `/control` whitelisted system commands, `/programs/*` CRUD, `/api/files/*` file manager, `/api/system-services/*`, `/api/docker/*`, `/api/packages/*`, `/api/firewall/*`, `/api/backups/*`, `/api/disk/*`, `/api/ssh/*`, `/api/cluster/*`, `/api/programs/<name>/{autostart,schedule,limits}`, `/api/programs/<name>/logs/search`, `/api/system-services/<name>/logs/search`, `/api/palette/search`, `/api/alerts/*`, `/api/plugins`, `/openapi.json`, `/docs/` (Swagger UI), `/login`, `/logout`, `/health` (no auth)
 - **WebSocket events:** `update` (program cards, 1s interval), `system_stats` (monitor, 2s), `terminal_*`, `service_event` (state-change toasts), `health_event`
 - **Backend modules:**
   - `app/process_manager.py` — Program, ProcessManager, ProgramConfig (name/command/cwd/autostart/schedule/environment), `on_state_change` hook fired on every transition

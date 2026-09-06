@@ -2813,6 +2813,76 @@ def files_page():
     return render_template('files.html')
 
 
+# VS Code in an iframe (code-server, Phase 29). The IDE runs as the
+# `code-server` managed program (see install-code-server.sh) bound to
+# localhost; the browser reaches it directly on its port (same-site,
+# so the password cookie works inside the iframe). Our resumable
+# uploads, viewers, and editor stay: code-server's drag/drop upload
+# corrupts 90 MB+ files (coder/code-server#2803) and VS Code chokes
+# on multi-GB files, so /files remains the heavy-lifting path.
+CODE_SERVER_HOST = os.getenv("CODE_SERVER_HOST", "127.0.0.1")
+CODE_SERVER_PORT = int(os.getenv("CODE_SERVER_PORT", "8600") or 8600)
+
+
+def _code_server_binary() -> str:
+    return os.path.expanduser("~/.local/bin/code-server")
+
+
+@app.route('/code')
+def code_page():
+    return render_template('code.html')
+
+
+@app.route('/api/code/status', methods=['GET'])
+@openapi_mod.describe(
+    summary="VS Code Server status for the /code page",
+    description=(
+        "Returns whether the code-server binary is installed, whether "
+        "the `code-server` managed program is running, and the "
+        "browser-reachable host/port (derived from the Host header so "
+        "LAN access works, not just localhost). With `?path=` "
+        "(home-relative file/dir) it also returns an absolute "
+        "`folder` + `file` for the `?folder=` deep link."
+    ),
+    tag="Code",
+)
+def api_code_status():
+    import shutil
+
+    binary = _code_server_binary()
+    installed = os.path.isfile(binary) and os.access(binary, os.X_OK)
+    running = False
+    try:
+        program = pm.get_program("code-server")
+        if program is not None:
+            running = program.status.value in ("running", "starting")
+    except Exception:  # noqa: BLE001
+        running = False
+    # Browser-reachable host: the hostname the user used to reach us
+    # (Host header), since code-server binds localhost on this box and
+    # the browser resolves the same machine via our address.
+    host = (request.host or "").split(":")[0] or "127.0.0.1"
+    out = {
+        "installed": installed,
+        "running": running,
+        "program": "code-server",
+        "host": CODE_SERVER_HOST if CODE_SERVER_HOST not in ("127.0.0.1", "localhost") else host,
+        "port": CODE_SERVER_PORT,
+    }
+    rel = (request.args.get("path") or "").strip()
+    if rel:
+        try:
+            target = file_explorer.resolve_api_path(rel)
+            if os.path.isdir(target) and not os.path.islink(target):
+                out["folder"] = target
+            else:
+                out["folder"] = os.path.dirname(target)
+                out["file"] = target
+        except file_explorer.FileExplorerError as e:
+            return jsonify({"error": str(e), "code": e.code}), 403
+    return jsonify(out)
+
+
 @app.route('/api/files/tree', methods=['GET'])
 @openapi_mod.describe(
     summary="Recursive directory tree",

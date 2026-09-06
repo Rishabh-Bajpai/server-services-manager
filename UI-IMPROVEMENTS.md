@@ -1623,6 +1623,49 @@ hid by default, and there was no editor at all. Fixed:
 3 new tests (save round-trip + mode, guards, route).
 Full suite: 882 passed; secrets clean.
 
+### Route 17 — VS Code Server (`/code`)  [x]
+
+Full VS Code (code-server 4.135.0 / Code 1.135.0) embedded
+as an iframe on a new `/code` page, run as the
+`code-server` managed program (autostart, localhost:8600).
+`bash install-code-server.sh` does the user-level install
+(no root: standalone tarball, password synced from the
+app `.env`, Office Viewer extension pre-installed,
+program entry appended to `config.yaml`).
+
+- **Why it works:** code-server sends no `X-Frame-Options`
+  / `frame-ancestors`, and same host + different port is
+  same-site, so the password cookie works in-frame.
+  Password login once, workbench loads — proven live with
+  scripted login.
+- **Deep links:** `/code?path=<home-relative>` resolves
+  server-side to `?folder=<abs>`; "Open in VS Code" context
+  items in `/files` (file → its path, multi → cwd).
+  Proven live: folder opened, tabs for csv/xlsx/docx.
+- **Status + control:** badge + Start/Stop/Restart wired
+  to the existing program API; offline panel with Start
+  when stopped, install hint when the binary is missing;
+  iframe height measured from the viewport (no fixed caps).
+- **Kept intact (code-server gaps, researched):**
+  resumable uploads (code-server drag/drop corrupts 90 MB+
+  files, coder/code-server#2803), in-page viewers/editor
+  (VS Code chokes on multi-GB files), properties/chmod/
+  zip/download — `/files` unchanged, nothing removed.
+- **Honest nuance:** the Office Viewer extension is
+  installed + activated (ext-host log), but xlsx/docx do
+  NOT auto-takeover in code-server the way they do on
+  desktop (binary promo instead) — open via "Reopen
+  Editor With… → Office Viewer". Likely a
+  `vscode-remote:`-scheme selector quirk; worth one
+  upstream check, not a blocker.
+- **Edit proof:** delete+save round-tripped to disk
+  (file emptied on disk after in-IDE save).
+
+**Verified live** (app page zero JS errors; the 3 console
+errors are code-server's own asset noise: missing vsda
+wasm + iframe autofocus block).
+Full suite: 882 passed; secrets clean.
+
 ### Next route: (to be picked — `/plugins` is next in line)
 
 ---

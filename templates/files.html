@@ -1180,6 +1180,17 @@
                 });
         }
 
+        // Deep-link into the /code page (full VS Code). Single
+        // selection opens that path; otherwise the current dir.
+        // /files stays for heavy lifting: code-server's drag/drop
+        // upload corrupts 90 MB+ files and VS Code chokes on
+        // multi-GB files, so uploads/viewers/editor live here.
+        function openInVSCode() {
+            const dest = selected.size === 1 ? [...selected][0]
+                : (viewMode === 'dir' ? currentPath : '.');
+            window.open('/code?path=' + encodeURIComponent(dest), '_blank');
+        }
+
         function copyPath() {
             if (selected.size !== 1) return;
             const p = [...selected][0];
@@ -1384,6 +1395,7 @@
                     h += ctxItem('download', singleFile ? 'Download' : 'Zip download', '', singleFile ? 'ctxDownload' : 'ctxZip');
                 if (singleFile)
                     h += ctxItem('pencil', 'Edit', '', 'ctxEdit');
+                h += ctxItem('code', 'Open in VS Code', '', 'ctxCode');
                 h += `<div class="ctx-sep"></div>`;
                 h += ctxItem('pencil', 'Rename', 'F2', 'ctxRename', false, n !== 1);
                 h += ctxItem('copy', 'Copy', 'Ctrl+C', 'ctxCopy', false, n === 0);
@@ -1398,6 +1410,7 @@
                 h += `<div class="ctx-sep"></div>`;
                 h += ctxItem('trash-2', `Delete${n > 1 ? ` (${n})` : ''}`, 'Del', 'ctxDelete', true, n === 0);
             } else {
+                h += ctxItem('code', 'Open in VS Code', '', 'ctxCode');
                 h += ctxItem('folder-plus', 'New folder', '', 'ctxMkdir');
                 h += ctxItem('upload', 'Upload files here', '', 'ctxUpload');
                 h += ctxItem('folder-up', 'Upload folder here', '', 'ctxUploadFolder');
@@ -1423,6 +1436,7 @@
             if (a === 'ctxOpen' && it && it.is_dir) navigateTo(it.path);
             else if (a === 'ctxViewer' && it && !it.is_dir) openViewer(it.path, it.name);
             else if (a === 'ctxEdit' && it && !it.is_dir) openEditor(it.path);
+            else if (a === 'ctxCode') openInVSCode();
             else if (a === 'ctxDownload') downloadSelected();
             else if (a === 'ctxRename') promptRename();
             else if (a === 'ctxCopy') copySelected();
