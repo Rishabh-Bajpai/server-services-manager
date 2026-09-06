@@ -242,7 +242,7 @@
             actions=actions,
             current='/control',
         ) }}
-<main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+<main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6">
         <!-- Power Section -->
         <div class="flex items-center gap-3 mb-4 section-label animate-fade-in" style="animation-delay:0.05s">
             <span class="line"></span>
@@ -351,7 +351,7 @@
                 const container = document.getElementById(g + '-group');
                 container.innerHTML = COMMANDS[g].map(cmd => {
                     const auth = cmd.id === 'suspend' || cmd.id === 'hibernate' || cmd.id === 'reboot' || cmd.id === 'shutdown';
-                    return `<div class="cmd-btn ${g}" onclick="handleCommand('${cmd.id}', '${cmd.label}', ${auth})" title="${cmd.label}">
+                    return `<div class="cmd-btn ${g}" onclick="handleCommand(event, '${cmd.id}', '${cmd.label}', ${auth})" title="${cmd.label}">
                         <i data-lucide="${cmd.icon}" class="btn-icon"></i>
                         <span class="btn-label">${cmd.label}</span>
                         <div class="spinner"></div>
@@ -368,7 +368,7 @@
                 customContainer.innerHTML = CUSTOM_COMMANDS.map(cmd => {
                     const icon = cmd.icon || 'terminal';
                     const auth = cmd.auth || false;
-                    return `<div class="cmd-btn custom" onclick="handleCommand('${cmd.id}', '${cmd.name}', ${auth})" title="${cmd.name}">
+                    return `<div class="cmd-btn custom" onclick="handleCommand(event, '${cmd.id}', '${cmd.name}', ${auth})" title="${cmd.name}">
                         <i data-lucide="${icon}" class="btn-icon"></i>
                         <span class="btn-label">${cmd.name}</span>
                         <div class="spinner"></div>
@@ -425,8 +425,8 @@
             }
         }
 
-        function handleCommand(id, label, needsAuth) {
-            const btn = event.currentTarget;
+        function handleCommand(ev, id, label, needsAuth) {
+            const btn = ev && ev.currentTarget ? ev.currentTarget : null;
             const run = (password) => {
                 setExecuting(btn, true);
                 fetch('/api/control/run', {
@@ -482,7 +482,7 @@
             closeConfirm();
             const { id, label } = pendingCommand;
             pendingCommand = null;
-            handleCommand(id, label, false);
+            handleCommand(null, id, label, false);
         }
 
         function executeAuthed() {
@@ -518,10 +518,14 @@
 
 document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
+    // These modals toggle `.active` (not `.hidden`), so check that —
+    // otherwise Escape always hits the auth branch and the confirm
+    // modal can never be closed with Escape.
     const am = document.getElementById('auth-modal');
     const cm = document.getElementById('confirm-modal');
-    if (am && !am.classList.contains('hidden')) { if(typeof closeAuth==='function') closeAuth(); return; }
-    if (cm && !cm.classList.contains('hidden')) { if(typeof closeConfirm==='function') closeConfirm(); return; }
+    if (am && am.classList.contains('active')) { if(typeof closeAuth==='function') closeAuth(); return; }
+    if (cm && cm.classList.contains('active')) { if(typeof closeConfirm==='function') closeConfirm(); return; }
+    if (typeof closeOutput === 'function') closeOutput();
 });
 
 </script>

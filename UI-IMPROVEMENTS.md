@@ -565,7 +565,36 @@ Files: `templates/monitor.html` (only file changed; no backend changes).
    byte-identical across 4.5s while paused, updating again after
    Resume.
 
-### Next route: (to be picked — `/monitor` done)
+### Route 3 — Control (`/control`)  [x]
+
+Files: `templates/control.html` (only file changed; no backend changes).
+
+1. **Content width.** Same `max-w-7xl` narrowness as the monitor
+   had; now `w-[90%]` capped at 1760px. Measured live: 90%.
+
+2. **Escape never closed the confirm modal.** The keydown handler
+   checked for absence of a `hidden` class, but both modals
+   toggle `.active` (and never carry `hidden`), so Escape always
+   took the auth branch — a no-op when auth was shut — and
+   returned before reaching the confirm branch. Now checks
+   `.active`, and as a bonus Escape also closes the output
+   drawer when no modal is open.
+
+3. **Explicit click event.** `handleCommand()` read the implicit
+   global `event`, which breaks in strict contexts and on
+   programmatic calls. Both call sites now pass `event`
+   explicitly (`handleCommand(event, …)`); `executeConfirmed()`
+   passes `null`, and the button lookup guards against it
+   (`setExecuting` already no-ops on null).
+
+**Verified live** (Playwright against the running server):
+- 11 command tiles render; width ratio 90%.
+- Reboot → confirm opens → Escape closes it.
+- Disk Usage click → spinner runs → output drawer opens with
+  real command output → spinner clears (explicit-event path).
+- Escape closes the output drawer.
+
+### Next route: (to be picked — `/control` done)
 
 ---
 
