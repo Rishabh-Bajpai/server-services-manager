@@ -1429,9 +1429,17 @@ def cron_page():
 def api_cron_list():
     try:
         jobs = cron_manager.list_all()
+        out = []
+        for j in jobs:
+            d = j.to_dict()
+            try:
+                d["next_run"] = cron_manager.next_run(j.schedule) if j.enabled else None
+            except Exception:
+                d["next_run"] = None
+            out.append(d)
         return jsonify({
-            "jobs": [j.to_dict() for j in jobs],
-            "count": len(jobs),
+            "jobs": out,
+            "count": len(out),
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1467,6 +1475,37 @@ def api_cron_toggle():
                     status="error", detail=f"{e.code}: {e}",
                     ip=request.remote_addr or "")
         http = 403 if e.code == "permission" else 400 if e.code in ("invalid", "auth_required") else 500
+        return jsonify({"error": str(e), "code": e.code}), http
+
+
+@app.route('/api/cron/jobs', methods=['POST'])
+@openapi_mod.describe(
+    summary="Add a cron job",
+    description=(
+        "Appends ``schedule user command`` to a file in ``/etc/cron.d/`` "
+        "(created with a manager header when missing) via ``sudo cp`` "
+        "of a tempfile, using the user's sudo password."
+    ),
+    tag="Cron",
+)
+def api_cron_add():
+    data = request.get_json(silent=True) or {}
+    try:
+        result = cron_manager.add_job(
+            data.get("filename") or "manager",
+            (data.get("schedule") or "").strip(),
+            (data.get("user") or "").strip(),
+            data.get("command") or "",
+            data.get("password", ""),
+        )
+        activity.log("cron.add", target=result.get("source", ""),
+                     status="ok", detail=(data.get("schedule") or ""),
+                     ip=request.remote_addr or "")
+        return jsonify(result)
+    except cron_manager.CronError as e:
+        activity.log("cron.add", status="error", detail=f"{e.code}: {e}",
+                     ip=request.remote_addr or "")
+        http = 403 if e.code in ("permission", "auth_required") else 400 if e.code == "invalid" else 500
         return jsonify({"error": str(e), "code": e.code}), http
 
 

@@ -5,7 +5,7 @@ import pytest
 from app.cron_manager import (
     CronError, parse_line, validate_expression,
     list_system_crontab, list_cron_d, list_user_crontab, list_all,
-    toggle_system_job, describe_schedule,
+    toggle_system_job, describe_schedule, next_run, add_job,
 )
 
 
@@ -35,7 +35,9 @@ class TestValidateExpression:
         assert validate_expression("* 24 * * *") is not None
         assert validate_expression("* * 32 * *") is not None
         assert validate_expression("* * * 13 *") is not None
-        assert validate_expression("* * * * 7") is not None
+        assert validate_expression("* * * * 8") is not None
+        # Standard cron accepts 7 as Sunday (0 and 7 both mean Sunday)
+        assert validate_expression("* * * * 7") is None
 
     def test_invalid_syntax(self):
         assert validate_expression("bad * * * *") is not None
@@ -200,3 +202,140 @@ class TestToggleSystemJob:
             toggle_system_job(
                 "/etc/passwd", 1, enabled=False, password="hunter2"
             )
+
+
+class TestNextRun:
+    def test_every_minute(self):
+        from datetime import datetime
+        now = datetime(2026, 3, 4, 10, 30, 45)
+        assert next_run("* * * * *", now) == "2026-03-04T10:31:00"
+
+    def test_daily_midnight(self):
+        from datetime import datetime
+        now = datetime(2026, 3, 4, 10, 30)
+        assert next_run("0 0 * * *", now) == "2026-03-05T00:00:00"
+        # Just before midnight the same night still matches
+        assert next_run("0 0 * * *", datetime(2026, 3, 4, 23, 59)) == "2026-03-05T00:00:00"
+
+    def test_weekly_monday(self):
+        from datetime import datetime
+        # 2026-03-04 is a Wednesday; next Monday 09:00 is 2026-03-09
+        assert next_run("0 9 * * 1", datetime(2026, 3, 4, 10, 30)) == "2026-03-09T09:00:00"
+
+    def test_dom_and_dow_either(self):
+        from datetime import datetime
+        # 13th or Friday: 2026-03-06 is a Friday
+        assert next_run("0 0 13 * 5", datetime(2026, 3, 4, 10, 30)) == "2026-03-06T00:00:00"
+
+    def test_step_and_specific_time(self):
+        from datetime import datetime
+        assert next_run("*/15 8 * * *", datetime(2026, 3, 4, 8, 7)) == "2026-03-04T08:15:00"
+
+    def test_invalid_returns_none(self):
+        assert next_run("60 * * * *") is None
+        assert next_run("not a schedule") is None
+
+    def test_dow_seven_is_sunday(self):
+        from datetime import datetime
+        # 2026-03-04 is a Wednesday; "7" must behave like Sunday
+        assert next_run("0 0 * * 7", datetime(2026, 3, 4, 10, 30)) == "2026-03-08T00:00:00"
+
+    def test_bare_step_means_from_value(self):
+        from datetime import datetime
+        # 5/10 in minutes = 5,15,25,35,45,55
+        assert next_run("5/10 8 * * *", datetime(2026, 3, 4, 8, 7)) == "2026-03-04T08:15:00"
+
+    def test_feb_29_leap(self):
+        from datetime import datetime
+        assert next_run("0 0 29 2 *", datetime(2025, 3, 1, 0, 0)) == "2028-02-29T00:00:00"
+
+
+class TestAddJob:
+    def test_appends_to_existing_file(self):
+        original = "0 7 * * * root /usr/bin/backup\n"
+        with patch("builtins.open", mock_open(read_data=original)):
+            with patch("subprocess.run") as mock_run:
+                mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
+                out = add_job("test", "*/5 * * * *", "root",
+                              "/usr/bin/check", password="hunter2")
+                assert out["ok"] is True
+                assert out["source"] == "/etc/cron.d/test"
+                args = mock_run.call_args[0][0]
+                assert args == ["sudo", "-S", "cp", mock_run.call_args[0][0][3], "/etc/cron.d/test"]
+                assert mock_run.call_args[1]["input"] == "hunter2\n"
+
+    def test_rejects_bad_schedule(self):
+        with pytest.raises(CronError, match="invalid schedule"):
+            add_job("test", "60 * * * *", "root", "/bin/true", password="hunter2")
+
+    def test_rejects_bad_user(self):
+        with pytest.raises(CronError, match="invalid user"):
+            add_job("test", "* * * * *", "not a user!", "/bin/true", password="hunter2")
+
+    def test_rejects_multiline_command(self):
+        with pytest.raises(CronError, match="single line"):
+            add_job("test", "* * * * *", "root", "/bin/true\nrm -rf /", password="hunter2")
+
+    def test_rejects_bad_filename(self):
+        with pytest.raises(CronError, match="invalid file name"):
+            add_job("../../etc/evil", "* * * * *", "root", "/bin/true", password="hunter2")
+
+    def test_rejects_no_password(self):
+        with pytest.raises(CronError, match="password"):
+            add_job("test", "* * * * *", "root", "/bin/true", password="")
+
+    def test_creates_new_file_with_header(self):
+        written = {}
+
+        class FakeTmp:
+            name = "/tmp/fake.cron"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def writelines(self, lines):
+                written["lines"] = list(lines)
+
+        def fake_open(path, *a, **k):
+            raise FileNotFoundError(path)
+
+        with patch("os.path.exists", return_value=False):
+            with patch("builtins.open", fake_open):
+                with patch("tempfile.NamedTemporaryFile", return_value=FakeTmp()):
+                    with patch("subprocess.run") as mock_run:
+                        mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
+                        out = add_job("fresh", "* * * * *", "root",
+                                      "/bin/true", password="hunter2")
+        assert out["source"] == "/etc/cron.d/fresh"
+        assert written["lines"][0].startswith("#")
+        assert written["lines"][-1] == "* * * * * root /bin/true\n"
+
+    def test_refuses_unreadable_existing_file(self):
+        with patch("os.path.exists", return_value=True):
+            def fake_open(path, *a, **k):
+                raise PermissionError("denied")
+
+            with patch("builtins.open", fake_open):
+                with patch("subprocess.run") as mock_run:
+                    with pytest.raises(CronError, match="cannot read"):
+                        add_job("locked", "* * * * *", "root",
+                                "/bin/true", password="hunter2")
+                    mock_run.assert_not_called()
+
+    def test_add_route_validation(self):
+        import server
+
+        app = server.app
+        app.config["TESTING"] = True
+        with app.test_client() as client:
+            with client.session_transaction() as sess:
+                sess["logged_in"] = True
+            bad = client.post("/api/cron/jobs", json={
+                "filename": "t", "schedule": "60 * * * *",
+                "user": "root", "command": "/bin/true", "password": "x",
+            })
+            assert bad.status_code == 400
+            assert bad.get_json()["code"] == "invalid"

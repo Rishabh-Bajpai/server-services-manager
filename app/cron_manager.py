@@ -32,7 +32,8 @@ _FIELD_RANGES = {
     "hour": (0, 23),
     "dom": (1, 31),
     "month": (1, 12),
-    "dow": (0, 6),
+    # Standard cron accepts 7 as Sunday (0 and 7 both mean Sunday).
+    "dow": (0, 7),
 }
 
 
@@ -77,7 +78,7 @@ def _validate_field(value: str, name: str) -> Optional[str]:
     low, high = _FIELD_RANGES[name]
     # Parse comma-separated values and ranges
     for part in value.split(","):
-        # Check step values
+        # Check step values (a bare "5/10" means 5-high/10)
         step_part = part
         if "/" in part:
             head, _, step_str = part.partition("/")
@@ -297,6 +298,162 @@ def toggle_system_job(source: str, line_number: int, enabled: bool, password: st
             pass
 
     return {"ok": True, "output": f"updated {source}:{line_number}"}
+
+
+def _expand_values(field: str, low: int, high: int) -> set:
+    """Expand one cron field to its matching integer set."""
+    values = set()
+    for part in field.split(","):
+        step = 1
+        stepped = False
+        if "/" in part:
+            head, _, step_s = part.partition("/")
+            step = int(step_s)
+            part = head
+            stepped = True
+        if part == "*":
+            lo, hi = low, high
+        elif "-" in part:
+            a, _, b = part.partition("-")
+            lo, hi = int(a), int(b)
+        elif stepped:
+            # Bare "5/10" means 5-high/10, not just {5}.
+            lo, hi = int(part), high
+        else:
+            lo = hi = int(part)
+        values.update(range(lo, hi + 1, step))
+    # Standard cron accepts 7 as Sunday too; normalize to 0.
+    if low == 0 and high == 7 and 7 in values:
+        values.discard(7)
+        values.add(0)
+    return values
+
+
+def next_run(expr: str, now=None) -> Optional[str]:
+    """Return the next run time as an ISO string, or None.
+
+    Days are scanned (up to ~4 years, so Feb 29 works) with
+    standard cron day semantics: if both dom and dow are
+    restricted, a day matching *either* runs.
+    """
+    from datetime import datetime, timedelta
+
+    if validate_expression(expr) is not None:
+        return None
+    base = now or datetime.now()
+    base = base.replace(second=0, microsecond=0) + timedelta(minutes=1)
+    fields = expr.split()
+    minutes = sorted(_expand_values(fields[0], 0, 59))
+    hours = sorted(_expand_values(fields[1], 0, 23))
+    dom_raw, mon_raw, dow_raw = fields[2], fields[3], fields[4]
+    doms = _expand_values(dom_raw, 1, 31)
+    months = _expand_values(mon_raw, 1, 12)
+    dows = _expand_values(dow_raw, 0, 7)
+    dom_star = dom_raw == "*"
+    dow_star = dow_raw == "*"
+
+    def day_matches(day) -> bool:
+        if day.month not in months:
+            return False
+        dom_ok = day.day in doms
+        # Python Monday=0..Sunday=6; cron Sunday=0.
+        dow_ok = ((day.weekday() + 1) % 7) in dows
+        if dom_star and dow_star:
+            return True
+        if dom_star:
+            return dow_ok
+        if dow_star:
+            return dom_ok
+        return dom_ok or dow_ok
+
+    for offset in range(0, 366 * 4 + 31):
+        day = (base + timedelta(days=offset)).replace(hour=0, minute=0)
+        if not day_matches(day):
+            continue
+        for hour in hours:
+            if offset == 0 and hour < base.hour:
+                continue
+            for minute in minutes:
+                if offset == 0 and hour == base.hour and minute < base.minute:
+                    continue
+                try:
+                    return day.replace(hour=hour, minute=minute).isoformat()
+                except ValueError:
+                    continue
+    return None
+
+
+# No dots: Debian/Ubuntu cron silently ignores /etc/cron.d files
+# containing a "." (run-parts namespace rules).
+_FILENAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+_USER_RE = re.compile(r"^[a-z_][a-z0-9_-]*$")
+
+
+def add_job(filename: str, schedule: str, user: str, command: str, password: str) -> dict:
+    """Append a new job to a file in ``/etc/cron.d/`` (sudo write).
+
+    ``filename`` is a bare file name (no directories); the file is
+    created with a manager header comment when it doesn't exist yet.
+    """
+    err = validate_expression((schedule or "").strip())
+    if err:
+        raise CronError(f"invalid schedule: {err}", code="invalid")
+    user = (user or "").strip()
+    if not _USER_RE.match(user):
+        raise CronError(f"invalid user: {user!r}", code="invalid")
+    command = (command or "").strip()
+    if not command:
+        raise CronError("command is required", code="invalid")
+    if "\n" in command or "\r" in command:
+        raise CronError("command must be a single line", code="invalid")
+    filename = (filename or "manager").strip()
+    if not _FILENAME_RE.match(filename) or filename.startswith("."):
+        raise CronError(f"invalid file name: {filename!r}", code="invalid")
+    if not password:
+        raise CronError("password required", code="auth_required")
+
+    path = f"/etc/cron.d/{filename}"
+    if os.path.exists(path):
+        # The file exists: we must read it before appending. A read
+        # failure (e.g. restrictive permissions) is a hard error —
+        # starting from a blank header would silently destroy every
+        # existing job in that file on sudo cp.
+        try:
+            with open(path) as f:
+                lines = f.readlines()
+        except (OSError, PermissionError) as e:
+            raise CronError(f"cannot read {path}: {e}", code="not_found")
+        if lines and not lines[-1].endswith("\n"):
+            lines[-1] += "\n"
+    else:
+        lines = ["# Managed by server-services-manager\n"]
+
+    lines.append(f"{schedule.strip()} {user} {command}\n")
+
+    # Keep the tempfile at its default 0600: the job command may
+    # contain secrets, and root can read it for sudo cp regardless.
+    with tempfile.NamedTemporaryFile("w", delete=False, suffix=".cron") as tmp:
+        tmp.writelines(lines)
+        tmp_path = tmp.name
+    try:
+        proc = subprocess.run(
+            ["sudo", "-S", "cp", tmp_path, path],
+            input=password + "\n", capture_output=True, text=True, timeout=10,
+        )
+        if proc.returncode != 0:
+            stderr = (proc.stderr or "").strip().splitlines()
+            msg = next((ln for ln in stderr if ln.strip() and "password for" not in ln), "write failed")
+            lower = (proc.stderr or "").lower()
+            if "password" in lower or "permission" in lower:
+                raise CronError(msg, code="permission")
+            raise CronError(msg, code="error")
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+    return {"ok": True, "output": f"added job to {path}", "source": path}
 
 
 def describe_schedule(expr: str) -> str:

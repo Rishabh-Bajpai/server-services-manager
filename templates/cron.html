@@ -232,6 +232,10 @@
         .schedule-input:focus { border-color: var(--accent-yellow); }
         .schedule-input.invalid { border-color: var(--accent-red); }
         .schedule-input.valid { border-color: var(--accent-green); }
+
+        .row-check { accent-color: var(--accent-yellow); width: 0.875rem; height: 0.875rem; cursor: pointer; vertical-align: middle; }
+        .detail-row td { background: rgba(255,255,255,0.02); font-size: 0.75rem; }
+        tr.job-row { cursor: pointer; }
     </style>
 </head>
 <body class="bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-screen">
@@ -257,6 +261,10 @@
             <input id="search-input" type="text" placeholder="Search by command…" class="search-input" autocomplete="off">
         </div>
         <span id="count-display" class="text-xs text-[var(--text-muted)] font-medium whitespace-nowrap px-2"></span>
+        <button id="add-btn" class="refresh-btn" title="Add a new cron job" onclick="openAddModal()" style="border-color:rgba(245,158,11,0.4);color:var(--accent-yellow)">
+            <i data-lucide="plus" class="w-3.5 h-3.5 icon"></i>
+            <span class="hidden sm:inline">Add job</span>
+        </button>
         <button id="refresh-btn" class="refresh-btn" title="Refresh">
             <i data-lucide="refresh-cw" class="w-3.5 h-3.5 icon"></i>
             <span class="hidden sm:inline">Refresh</span>
@@ -272,22 +280,37 @@
                     <div class="flex items-center gap-2">
                         <input id="schedule-input" type="text" class="schedule-input flex-1" placeholder="* * * * *" autocomplete="off">
                         <span id="schedule-validation" class="text-xs whitespace-nowrap"></span>
+                        <button id="schedule-use-btn" class="refresh-btn" style="display:none;border-color:rgba(245,158,11,0.4);color:var(--accent-yellow)" title="Open the Add-job dialog with this expression">
+                            <i data-lucide="plus" class="w-3.5 h-3.5 icon"></i>
+                            <span class="hidden sm:inline">New job</span>
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
 
+        <!-- Bulk action bar (visible when rows are selected) -->
+        <div id="bulk-bar" class="animate-fade-in" style="display:none;align-items:center;gap:0.5rem;margin-bottom:0.75rem;padding:0.625rem 0.875rem;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:0.75rem;font-size:0.8125rem">
+            <span id="bulk-count" class="font-semibold text-[var(--accent-yellow)] whitespace-nowrap">0 selected</span>
+            <span class="text-xs text-[var(--text-muted)]">system jobs only (user crontabs can't change)</span>
+            <span style="flex:1"></span>
+            <button class="refresh-btn" onclick="bulkToggle(true)" title="Enable selected"><i data-lucide="check" class="w-3.5 h-3.5 icon"></i><span>Enable</span></button>
+            <button class="refresh-btn" onclick="bulkToggle(false)" title="Disable selected"><i data-lucide="x" class="w-3.5 h-3.5 icon"></i><span>Disable</span></button>
+            <button class="refresh-btn" onclick="clearSelection()" title="Clear selection"><i data-lucide="eraser" class="w-3.5 h-3.5 icon"></i></button>
+        </div>
         <!-- Table -->
         <div class="table-wrap animate-fade-in">
             <div class="table-scroll">
                 <table class="jobs-table">
                     <thead>
                         <tr>
+                            <th style="width:36px"><input type="checkbox" id="select-all" class="row-check" title="Select all visible system jobs"></th>
                             <th style="width:60px">Enabled</th>
-                            <th style="width:200px">Schedule</th>
+                            <th style="width:140px">Schedule</th>
+                            <th style="width:130px">Next run</th>
                             <th>Command</th>
                             <th style="width:90px" class="hidden sm:table-cell">User</th>
-                            <th style="width:160px" class="hidden md:table-cell">Source</th>
+                            <th style="width:140px" class="hidden md:table-cell">Source</th>
                         </tr>
                     </thead>
                     <tbody id="jobs-tbody"></tbody>
@@ -300,6 +323,30 @@
             </div>
         </div>
     </main>
+
+    <!-- Add-job modal -->
+    <div class="modal-overlay" id="add-modal" onclick="if(event.target===this) closeAddModal()">
+        <div class="modal-box">
+            <h2>Add cron job</h2>
+            <p>Appends <span class="font-mono">schedule user command</span> to a file in <span class="font-mono">/etc/cron.d/</span>.</p>
+            <div class="text-xs text-[var(--text-muted)] font-medium mb-1">File in /etc/cron.d/</div>
+            <input type="text" id="add-file" value="manager" placeholder="manager" autocomplete="off">
+            <div class="text-xs text-[var(--text-muted)] font-medium mb-1">Schedule (5 fields)</div>
+            <input type="text" id="add-schedule" placeholder="*/5 * * * *" autocomplete="off">
+            <div id="add-validation" class="modal-error" style="display:none"></div>
+            <div class="text-xs text-[var(--text-muted)] font-medium mb-1">User</div>
+            <input type="text" id="add-user" value="root" placeholder="root" autocomplete="off">
+            <div class="text-xs text-[var(--text-muted)] font-medium mb-1">Command</div>
+            <input type="text" id="add-command" placeholder="/usr/bin/my-job --flag" autocomplete="off">
+            <div class="text-xs text-[var(--text-muted)] font-medium mb-1">Sudo password</div>
+            <input type="password" id="add-password" placeholder="Enter password..." autocomplete="off">
+            <div class="modal-error" id="add-error" style="display:none"></div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeAddModal()">Cancel</button>
+                <button class="btn-primary" id="add-create">Create</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Auth modal -->
     <div class="modal-overlay" id="auth-modal">
@@ -323,6 +370,7 @@
         const filters = { source: 'all', search: '' };
         let allJobs = [];
         let pendingToggle = null;
+        let pendingBulk = null;
 
         function $(id) { return document.getElementById(id); }
         function escapeHtml(s) {
@@ -378,29 +426,111 @@
 
             const frag = document.createDocumentFragment();
             for (const j of rows) {
+                const key = `${j.source}:${j.line_number}`;
                 const tr = document.createElement('tr');
+                tr.className = 'job-row';
                 const userEditable = j.source.startsWith('/etc/');
                 tr.innerHTML = `
-                    <td>
+                    <td onclick="event.stopPropagation()"><input type="checkbox" class="row-check row-select" data-key="${escapeHtml(key)}" ${selectedJobs.has(key) ? 'checked' : ''} ${userEditable ? '' : 'disabled'} title="${userEditable ? 'Select for bulk enable/disable' : 'Per-user crontab; not editable from UI'}" onchange="toggleSelect(this.dataset.key, this)"></td>
+                    <td onclick="event.stopPropagation()">
                         <label class="toggle" title="${userEditable ? 'Toggle' : 'Per-user crontab; not editable from UI'}">
                             <input type="checkbox" ${j.enabled ? 'checked' : ''} ${userEditable ? '' : 'disabled'} data-source="${escapeHtml(j.source)}" data-line="${j.line_number}">
                             <span class="slider"></span>
                         </label>
                     </td>
                     <td><code class="font-mono text-[var(--accent-yellow)] font-semibold">${escapeHtml(j.schedule)}</code></td>
+                    <td class="font-mono text-xs text-[var(--text-secondary)] whitespace-nowrap" title="${escapeHtml(j.next_run || '')}">${fmtNextRun(j.next_run, j.enabled)}</td>
                     <td><span class="text-[var(--text-secondary)] break-all">${escapeHtml(j.command)}</span></td>
                     <td class="hidden sm:table-cell text-[var(--text-muted)] font-mono text-xs">${escapeHtml(j.user || '—')}</td>
                     <td class="hidden md:table-cell text-[var(--text-muted)] font-mono text-xs truncate" title="${escapeHtml(j.source)}">${escapeHtml(sourceLabel(j.source))}</td>
                 `;
+                tr.onclick = () => toggleDetail(tr, j);
                 frag.appendChild(tr);
             }
             tbody.innerHTML = '';
             tbody.appendChild(frag);
-            // Wire up toggle handlers
-            tbody.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+            // Wire up toggle handlers (skip the bulk-select boxes)
+            tbody.querySelectorAll('td:nth-child(2) input[type="checkbox"]').forEach(cb => {
                 if (cb.disabled) return;
                 cb.addEventListener('change', onToggle);
             });
+            syncBulkBar();
+            const all = $('select-all');
+            if (all && !all.dataset.wired) {
+                all.dataset.wired = '1';
+                all.onchange = () => {
+                    document.querySelectorAll('.row-select').forEach(b => {
+                        if (b.disabled) return;
+                        b.checked = all.checked;
+                        if (all.checked) selectedJobs.add(b.dataset.key);
+                        else selectedJobs.delete(b.dataset.key);
+                    });
+                    syncBulkBar();
+                };
+            }
+        }
+
+        function fmtNextRun(iso, enabled) {
+            if (!iso) return enabled ? '—' : '<span class="text-[var(--text-muted)]">paused</span>';
+            const ms = new Date(iso).getTime() - Date.now();
+            if (isNaN(ms)) return '—';
+            if (ms < 0) return 'due';
+            const m = Math.floor(ms / 60000);
+            if (m < 1) return 'in &lt;1m';
+            if (m < 60) return `in ${m}m`;
+            const h = Math.floor(m / 60);
+            if (h < 48) return `in ${h}h${m % 60 ? ` ${m % 60}m` : ''}`;
+            return `in ${Math.floor(h / 24)}d`;
+        }
+
+        // Row expander: raw line + source, with a crontab -e hint for
+        // per-user rows that the UI can't edit.
+        function toggleDetail(tr, j) {
+            const next = tr.nextSibling;
+            if (next && next.classList && next.classList.contains('detail-row')) {
+                next.remove();
+                return;
+            }
+            const cols = tr.children.length;
+            const dr = document.createElement('tr');
+            dr.className = 'detail-row';
+            const userRow = !j.source.startsWith('/etc/');
+            dr.innerHTML = `<td colspan="${cols}">
+                <div class="font-mono text-[var(--text-muted)] break-all">${escapeHtml(j.raw || '')}</div>
+                <div class="mt-1 text-[var(--text-muted)]">${escapeHtml(j.source)}${userRow ? ' · read-only here — run <span class="font-mono">crontab -e</span> on the host to edit' : ''}</div>
+            </td>`;
+            tr.after(dr);
+        }
+
+        // Bulk enable/disable (system jobs only).
+        const selectedJobs = new Set();
+        function toggleSelect(key, box) {
+            if (box.checked) selectedJobs.add(key);
+            else selectedJobs.delete(key);
+            syncBulkBar();
+        }
+        function clearSelection() {
+            selectedJobs.clear();
+            document.querySelectorAll('.row-select').forEach(b => { b.checked = false; });
+            syncBulkBar();
+        }
+        function syncBulkBar() {
+            const bar = $('bulk-bar');
+            const n = selectedJobs.size;
+            bar.style.display = n > 0 ? 'flex' : 'none';
+            $('bulk-count').textContent = `${n} selected`;
+            const visible = [...document.querySelectorAll('.row-select')].filter(b => !b.disabled);
+            const all = $('select-all');
+            if (all) all.checked = visible.length > 0 && visible.every(b => b.checked);
+        }
+        function bulkToggle(enabled) {
+            const items = [...selectedJobs].map(key => {
+                const i = key.lastIndexOf(':');
+                return { source: key.slice(0, i), line_number: parseInt(key.slice(i + 1), 10) };
+            }).filter(x => x.source.startsWith('/etc/') && Number.isFinite(x.line_number));
+            if (!items.length) { toast('No system jobs selected', 'error'); return; }
+            pendingBulk = { items, enabled };
+            openAuth((enabled ? 'Enable' : 'Disable') + ` ${items.length} cron job(s)`);
         }
 
         async function loadJobs() {
@@ -460,15 +590,103 @@
                     input.classList.add('valid');
                     input.classList.remove('invalid');
                     el.innerHTML = `<span class="text-[var(--accent-green)] font-medium">✓ ${escapeHtml(data.description)}</span>`;
+                    $('schedule-use-btn').style.display = '';
                 } else {
                     input.classList.add('invalid');
                     input.classList.remove('valid');
                     el.innerHTML = `<span class="text-[var(--accent-red)] font-medium">✗ ${escapeHtml(data.error)}</span>`;
+                    $('schedule-use-btn').style.display = 'none';
                 }
             } catch (e) {
                 el.textContent = '';
             }
         });
+
+        // ----- Add job -----
+        function openAddModal(presetSchedule) {
+            $('add-error').style.display = 'none';
+            $('add-validation').style.display = 'none';
+            if (presetSchedule) $('add-schedule').value = presetSchedule;
+            $('add-modal').classList.add('active');
+            setTimeout(() => $('add-command').focus(), 100);
+            validateAddSchedule();
+        }
+        function closeAddModal() {
+            $('add-modal').classList.remove('active');
+        }
+        async function validateAddSchedule() {
+            const expr = $('add-schedule').value.trim();
+            const el = $('add-validation');
+            if (!expr) { el.style.display = 'none'; return false; }
+            try {
+                const r = await fetch('/api/cron/validate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ expression: expr }),
+                });
+                const data = await r.json();
+                if (data.valid) {
+                    el.style.display = 'none';
+                    return true;
+                }
+                el.textContent = '✗ ' + (data.error || 'invalid');
+                el.style.display = 'block';
+                return false;
+            } catch (e) {
+                el.style.display = 'none';
+                return true;
+            }
+        }
+        $('add-schedule').addEventListener('input', () => { validateAddSchedule(); });
+        $('add-create').onclick = async () => {
+            const btn = $('add-create');
+            const ok = await validateAddSchedule();
+            if (!ok) return;
+            const payload = {
+                filename: $('add-file').value.trim() || 'manager',
+                schedule: $('add-schedule').value.trim(),
+                user: $('add-user').value.trim() || 'root',
+                command: $('add-command').value.trim(),
+                password: $('add-password').value,
+            };
+            if (!payload.command) {
+                $('add-error').textContent = 'Command is required';
+                $('add-error').style.display = 'block';
+                return;
+            }
+            btn.disabled = true;
+            btn.textContent = 'Creating…';
+            try {
+                const r = await fetch('/api/cron/jobs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await r.json().catch(() => ({}));
+                if (!r.ok) {
+                    $('add-error').textContent = data.error || 'Create failed';
+                    $('add-error').style.display = 'block';
+                    $('add-password').value = '';
+                    return;
+                }
+                toast(data.output || 'Job added', 'success');
+                $('add-password').value = '';
+                $('add-command').value = '';
+                closeAddModal();
+                await loadJobs();
+            } catch (e) {
+                $('add-error').textContent = 'Network error: ' + e.message;
+                $('add-error').style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Create';
+            }
+        };
+
+        // Validator card: jump a valid expression into the Add dialog.
+        $('schedule-use-btn').onclick = () => {
+            openAddModal($('schedule-input').value.trim());
+        };
 
         // ----- Toggle (enable/disable) -----
         function onToggle(event) {
@@ -499,6 +717,7 @@
         function closeAuth() {
             $('auth-modal').classList.remove('active');
             pendingToggle = null;
+            pendingBulk = null;
         }
 
         $('auth-password').addEventListener('keydown', (e) => {
@@ -506,12 +725,48 @@
         });
 
         $('auth-execute').onclick = async () => {
-            if (!pendingToggle) return;
             const password = $('auth-password').value;
             const btn = $('auth-execute');
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;display:inline-block;animation:spin 0.6s linear infinite"></span>';
             try {
+                if (pendingBulk) {
+                    const { items, enabled } = pendingBulk;
+                    let ok = 0;
+                    const failed = [];
+                    for (const it of items) {
+                        try {
+                            const r = await fetch('/api/cron/toggle', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ source: it.source, line_number: it.line_number, enabled, password }),
+                            });
+                            const data = await r.json().catch(() => ({}));
+                            if (!r.ok) {
+                                if (data.code === 'permission') {
+                                    $('auth-error').textContent = data.error || 'Wrong password';
+                                    $('auth-error').style.display = 'block';
+                                    $('auth-password').value = '';
+                                    $('auth-password').focus();
+                                    return;
+                                }
+                                failed.push(it.source + ':' + it.line_number);
+                            } else {
+                                ok++;
+                            }
+                        } catch (e) {
+                            failed.push(it.source + ':' + it.line_number);
+                        }
+                    }
+                    closeAuth();
+                    pendingBulk = null;
+                    clearSelection();
+                    await loadJobs();
+                    if (!failed.length) toast(`Cron jobs ${enabled ? 'enabled' : 'disabled'}: ${ok}/${items.length}`, 'success');
+                    else toast(`${ok} ok, ${failed.length} failed`, 'error');
+                    return;
+                }
+                if (!pendingToggle) return;
                 const r = await fetch('/api/cron/toggle', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },

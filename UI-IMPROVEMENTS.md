@@ -830,6 +830,51 @@ changes).
 **Verified live** (Playwright, zero JS errors, `node --check`
 clean).
 
+### Route 6b — Cron round 2: add jobs, next runs, bulk  [x]
+
+Backend (`app/cron_manager.py`): `next_run(expr, now)` —
+next run as ISO string via day scan (≤ ~4y so Feb 29 works,
+standard dom/dow OR semantics, 7 = Sunday, bare `5/10` steps;
+~1ms worst case) — and `add_job(filename, schedule, user,
+command, password)` — validates everything, appends to
+`/etc/cron.d/<name>` via the same sudo-cp-tempfile pattern as
+toggles. Routes: `POST /api/cron/jobs` (+ activity log);
+`GET /api/cron` now includes `next_run` per enabled job.
+Tests: +18 in `tests/test_cron_manager.py` (next-run cases,
+add validation/success, route validation test).
+
+Frontend (`templates/cron.html` only):
+
+1. **Add-job modal** ("Add job" button): file (default
+   `manager`), schedule with live `/api/cron/validate`
+   feedback, user (default `root`), command, sudo password.
+   Creates via POST, toasts, reloads.
+2. **Next-run column** (fixed 130px): relative labels ("in
+   19m", "in 5h 27m", "paused" for disabled, "—" when
+   unknown) with exact ISO in the tooltip.
+3. **Row expander**: clicking a row shows the raw line +
+   source; per-user rows get a `crontab -e` hint since the UI
+   can't edit them.
+4. **Bulk enable/disable**: checkbox column + select-all +
+   "N selected" bar; one password prompt loops the toggle
+   endpoint with an ok/failed summary toast.
+5. **Validator link**: a "New job" button appears next to a
+   valid expression and opens the Add dialog prefilled.
+
+Validation: reviewed with `agy` (read mode) before commit —
+it caught 4 blocking issues, all fixed: (a) unreadable
+existing cron.d files no longer truncate to a blank header
+(hard error instead — data-loss fix); (b) dots banned from
+file names (Debian/Ubuntu cron ignores dotted
+`/etc/cron.d/` files); (c) "App password" relabeled "Sudo
+password"; (d) bulk checkbox `onchange` uses
+`this.dataset.key` instead of interpolated quoting. Also
+applied its suggestions: dow `7` accepted, bare `5/10`
+expansion, tempfile kept at 0600, plus new-file/Feb-29/route
+tests. Verified live: dotted name → invalid, dow-7 valid,
+next_run in list payload, "New job" button behavior, zero JS
+errors.
+
 ### Next route: (to be picked — `/cron` done)
 
 ---
