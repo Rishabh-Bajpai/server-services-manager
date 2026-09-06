@@ -1668,6 +1668,14 @@ program entry appended to `config.yaml`).
   measured) → Full (Fullscreen API on the card, Esc
   returns to the previous level). Verified live incl.
   native exit path.
+- **Way back fixed:** Wide/Full hid the level buttons with
+  them. A floating Normal/Wide/Full bar now lives inside
+  the card (so it renders even in browser fullscreen),
+  plus `F11` toggles fullscreen and `Esc` steps Wide back
+  to Normal (shortcuts ignore keystrokes typed in fields,
+  and IDE-focused keys never leave the iframe). Verified:
+  float-bar visible in Wide + Full, click-through back to
+  Normal, F11 rejection falls back to Wide gracefully.
 - **Remote-access fix:** loopback-only bind broke non-localhost
   access (`Firefox can't connect to 100.77.255.82:8600` over
   Tailscale). code-server now binds `0.0.0.0:8600` with password

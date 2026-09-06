@@ -94,6 +94,21 @@
         /* Level 3 (browser fullscreen) targets the card, so the app
            header is excluded automatically by the Fullscreen API. */
         #code-card:fullscreen { margin: 0; border-radius: 0; height: 100dvh; }
+        #code-card { position: relative; }
+        /* Floating way back: lives INSIDE the card so it renders in
+           all three levels — including browser fullscreen, where only
+           the card's subtree is visible. Translucent until hovered. */
+        #float-bar {
+            position: absolute; top: 0.5rem; right: 0.5rem; z-index: 30;
+            display: none; align-items: center; gap: 0.25rem;
+            background: rgba(10, 10, 15, 0.75);
+            border: 1px solid var(--border-active);
+            border-radius: 0.5rem; padding: 0.25rem;
+            backdrop-filter: blur(4px); opacity: 0.65;
+            transition: opacity 0.15s ease;
+        }
+        #float-bar:hover { opacity: 1; }
+        #float-bar .lvl-btn { border-radius: 0.375rem; }
         .lvl-btn { padding: 0.375rem 0.625rem; font-size: 0.75rem; font-weight: 600; }
         .lvl-on { background: var(--accent-blue) !important; color: #fff !important; }
         .lvl-off { background: var(--bg-secondary); color: var(--text-secondary); }
@@ -154,6 +169,11 @@
                 <div class="empty-state" id="code-offline-text">Checking VS Code Server…</div>
             </div>
             <iframe id="code-frame" title="VS Code" style="display:none"></iframe>
+            <div id="float-bar" title="View level (Esc goes back)">
+                <button class="lvl-btn lvl-on" id="flvl-1" onclick="setLevel(1)" title="Normal view">Normal</button>
+                <button class="lvl-btn lvl-off" id="flvl-2" onclick="setLevel(2)" title="Wide view">Wide</button>
+                <button class="lvl-btn lvl-off" id="flvl-3" onclick="setLevel(3)" title="Browser fullscreen (F11)">Full</button>
+            </div>
         </section>
         <p class="text-[11px] text-[var(--text-muted)] mt-2" id="code-note">
             Full VS Code (code-server) with the Office Viewer extension for
@@ -271,11 +291,20 @@
         const MAIN_ORIG = document.querySelector('main').className;
 
         function paintLevels() {
+            // Both button sets: the subheader control and the floating
+            // way-back bar (the subheader is hidden in Wide/Full).
             for (const n of [1, 2, 3]) {
-                const b = document.getElementById('lvl-' + n);
-                b.classList.toggle('lvl-on', n === level);
-                b.classList.toggle('lvl-off', n !== level);
+                for (const prefix of ['lvl-', 'flvl-']) {
+                    const b = document.getElementById(prefix + n);
+                    if (!b) continue;
+                    b.classList.toggle('lvl-on', n === level);
+                    b.classList.toggle('lvl-off', n !== level);
+                }
             }
+            // The float bar is the only way back once the subheader
+            // is gone — show it in Wide and Full, hide in Normal.
+            document.getElementById('float-bar').style.display =
+                level >= 2 ? 'flex' : 'none';
         }
 
         function setLevel(n) {
@@ -309,6 +338,22 @@
         // Esc (or any native exit) drops back to the pre-fullscreen level.
         document.addEventListener('fullscreenchange', () => {
             if (!document.fullscreenElement && level === 3) setLevel(preFullLevel);
+        });
+
+        // Keyboard way back: F11 toggles browser fullscreen, Esc steps
+        // Wide back to Normal. Skipped while typing in a field — and
+        // keystrokes focused inside the VS Code iframe never reach us,
+        // so normal IDE shortcuts there are unaffected.
+        document.addEventListener('keydown', e => {
+            const tag = (document.activeElement && document.activeElement.tagName) || '';
+            if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag)) return;
+            if (e.key === 'F11') {
+                e.preventDefault();
+                if (level === 3 && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+                else setLevel(3);
+            } else if (e.key === 'Escape' && level === 2) {
+                setLevel(1);
+            }
         });
 
         // This page is same-origin safe to embed: code-server sends no
