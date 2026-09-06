@@ -776,7 +776,15 @@ Frontend (`templates/docker.html` only):
 10. **Stacks view.** New tab grouping by `compose_project`
     (+ a standalone group): per-stack running x/y counts,
     container rows with state, Start/Stop/Restart-all buttons
-    with confirm and per-stack summary toast.
+    with confirm and per-stack summary toast. Reworked into a
+    full-width accordion list (one compact header row per
+    stack: chevron, status dot, name, x/y running, action
+    buttons) instead of a card grid — 18 stacks scan in one
+    screen. Clicking a header expands its containers (name,
+    image, state badge, status); clicking a container jumps to
+    its detail in the Containers view. Expand/Collapse-all
+    buttons in the header; partially-running stacks auto-expand
+    on first render so problems are visible immediately.
 
 **Verified live** (Playwright, 59 containers, 52 images, zero
 JS errors): Running filter "53 / 59", bulk "2 selected", 24

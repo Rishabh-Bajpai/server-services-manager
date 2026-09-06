@@ -423,11 +423,14 @@
 
         <div id="view-stacks" class="hidden">
             <div class="panel-card overflow-hidden">
-                <div class="p-4 border-b border-[var(--border-subtle)] flex items-center gap-3">
+                <div class="p-4 border-b border-[var(--border-subtle)] flex items-center gap-3 flex-wrap">
                     <span class="text-sm font-semibold">Compose stacks</span>
                     <span id="stack-count" class="text-xs text-[var(--text-muted)] font-mono whitespace-nowrap"></span>
+                    <span class="flex-1"></span>
+                    <button class="btn" onclick="setAllStacks(true)" title="Expand all stacks"><i data-lucide="chevrons-down" class="w-3.5 h-3.5"></i> Expand</button>
+                    <button class="btn" onclick="setAllStacks(false)" title="Collapse all stacks"><i data-lucide="chevrons-up" class="w-3.5 h-3.5"></i> Collapse</button>
                 </div>
-                <div id="stacks-grid" class="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"></div>
+                <div id="stacks-list" class="divide-y divide-[var(--border-subtle)]"></div>
             </div>
         </div>
 
@@ -1150,39 +1153,80 @@
         }
         return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
     }
-    function renderStacks() {
-        const grid = document.getElementById('stacks-grid');
+    // Expanded/collapsed state per stack (in-memory; resets on reload).
+    // On first render, stacks that need attention (partially running)
+    // start expanded so problems are visible immediately.
+    const expandedStacks = new Set();
+    let stacksInitDone = false;
+    function setAllStacks(open) {
         const stacks = stackList();
+        expandedStacks.clear();
+        if (open) stacks.forEach(([name]) => expandedStacks.add(name));
+        renderStacks();
+    }
+    function toggleStack(name) {
+        if (expandedStacks.has(name)) expandedStacks.delete(name);
+        else expandedStacks.add(name);
+        renderStacks();
+    }
+    // Jump from a stack container to its detail in the Containers view.
+    function goToContainer(id) {
+        switchView('containers');
+        selectContainer(id);
+    }
+    function renderStacks() {
+        const list = document.getElementById('stacks-list');
+        const stacks = stackList();
+        if (!stacksInitDone) {
+            stacksInitDone = true;
+            stacks.forEach(([name, items]) => {
+                const running = items.filter(c => c.is_running).length;
+                if (running > 0 && running < items.length) expandedStacks.add(name);
+            });
+        }
         document.getElementById('stack-count').textContent = stacks.length + ' stacks';
         updateViewCount();
         if (!stacks.length) {
-            grid.innerHTML = '<div class="empty-state col-span-full">No containers</div>';
+            list.innerHTML = '<div class="empty-state">No containers</div>';
             return;
         }
-        grid.innerHTML = stacks.map(([name, list]) => {
-            const running = list.filter(c => c.is_running).length;
-            const dot = running === list.length ? 'var(--accent-green)' : running === 0 ? 'var(--accent-red)' : 'var(--accent-yellow)';
-            const rows = list.map(c => `
-                <div class="flex items-center gap-2 font-mono text-xs py-1 border-b border-[var(--border-subtle)] last:border-0">
-                    <span class="w-1.5 h-1.5 rounded-full flex-shrink-0" style="background:${dot}"></span>
-                    <span class="truncate" title="${escAttr(c.name)}">${escAttr(c.name)}</span>
-                    <span class="ml-auto text-[var(--text-muted)]">${escAttr(c.state)}</span>
+        list.innerHTML = stacks.map(([name, items]) => {
+            const running = items.filter(c => c.is_running).length;
+            const dot = running === items.length ? 'var(--accent-green)' : running === 0 ? 'var(--accent-red)' : 'var(--accent-yellow)';
+            const open = expandedStacks.has(name);
+            const safeName = escAttr(name).replace(/'/g, '&#39;');
+            const rows = items.map(c => `
+                <div class="flex items-center gap-3 px-4 py-2 text-xs border-t border-[var(--border-subtle)] hover:bg-white/[0.02] cursor-pointer" onclick="goToContainer('${escAttr(c.full_id)}')" title="Open in Containers view">
+                    <span class="w-1.5 h-1.5 rounded-full flex-shrink-0" style="background:${stateDotColor(c.state)}"></span>
+                    <span class="font-mono truncate" title="${escAttr(c.name)}">${escAttr(c.name)}</span>
+                    <span class="font-mono text-[var(--text-muted)] truncate hidden md:inline" title="${escAttr(c.image)}">${escAttr(c.image)}</span>
+                    <span class="ml-auto badge ${stateBadgeClass(c.state)} flex-shrink-0">${escAttr(c.state)}</span>
+                    <span class="text-[var(--text-muted)] font-mono hidden sm:inline flex-shrink-0">${escAttr(c.status)}</span>
                 </div>`).join('');
-            return `<div class="rounded-lg border border-[var(--border-subtle)] p-3">
-                <div class="flex items-center gap-2 mb-1">
-                    <span class="w-2 h-2 rounded-full" style="background:${dot}"></span>
+            return `<div>
+                <div class="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-white/[0.02]" onclick="toggleStack('${safeName}')">
+                    <i data-lucide="chevron-${open ? 'down' : 'right'}" class="w-4 h-4 text-[var(--text-muted)] flex-shrink-0"></i>
+                    <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${dot}"></span>
                     <span class="font-semibold text-sm truncate" title="${escAttr(name)}">${escAttr(name)}</span>
-                    <span class="ml-auto text-[11px] text-[var(--text-muted)] font-mono">${running}/${list.length} running</span>
+                    <span class="text-[11px] text-[var(--text-muted)] font-mono whitespace-nowrap">${running}/${items.length} running</span>
+                    <span class="flex-1"></span>
+                    <span class="flex gap-1.5" onclick="event.stopPropagation()">
+                        <button class="btn" onclick="stackAction('${safeName}', 'start')" title="Start all in ${escAttr(name)}"><i data-lucide="play" class="w-3 h-3"></i></button>
+                        <button class="btn" onclick="stackAction('${safeName}', 'stop')" title="Stop all in ${escAttr(name)}"><i data-lucide="square" class="w-3 h-3"></i></button>
+                        <button class="btn" onclick="stackAction('${safeName}', 'restart')" title="Restart all in ${escAttr(name)}"><i data-lucide="rotate-cw" class="w-3 h-3"></i></button>
+                    </span>
                 </div>
-                <div class="mb-2">${rows}</div>
-                <div class="flex gap-1.5">
-                    <button class="btn" onclick="stackAction('${escAttr(name)}', 'start')" title="Start all"><i data-lucide="play" class="w-3 h-3"></i></button>
-                    <button class="btn" onclick="stackAction('${escAttr(name)}', 'stop')" title="Stop all"><i data-lucide="square" class="w-3 h-3"></i></button>
-                    <button class="btn" onclick="stackAction('${escAttr(name)}', 'restart')" title="Restart all"><i data-lucide="rotate-cw" class="w-3 h-3"></i></button>
-                </div>
+                ${open ? rows : ''}
             </div>`;
         }).join('');
         lucide.createIcons();
+    }
+    function stateDotColor(state) {
+        if (state === 'running') return 'var(--accent-green)';
+        if (state === 'restarting') return 'var(--accent-yellow)';
+        if (state === 'paused') return 'var(--accent-purple)';
+        if (state === 'created') return 'var(--accent-cyan)';
+        return 'var(--accent-red)';
     }
     async function stackAction(project, action) {
         const list = (stackList().find(([n]) => n === project) || [])[1] || [];
