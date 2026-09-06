@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>History - Server Services Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --bg-primary:#0a0a0f; --bg-secondary:#12121a; --bg-card:#16161f; --border-subtle:#1e1e2a; --accent-blue:#3b82f6; --accent-green:#10b981; --accent-cyan:#06b6d4; --text-primary:#f1f5f9; --text-secondary:#94a3b8; --text-muted:#64748b; }
+        * { font-family:'Space Grotesk',system-ui,sans-serif; }
+        code,.font-mono { font-family:'JetBrains Mono',monospace !important; }
+        body { background:var(--bg-primary); }
+        .chart-box { position:relative; height:220px; }
+    </style>
+</head>
+<body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
+    {% import "_macros.html" as ui %}
+    {{ ui.header(title="History", icon="chart-line", icon_color="var(--accent-cyan)", current='/history') }}
+    {% set subheader %}
+        <select id="report-select" class="select-input" onchange="loadAll(this.value)" title="sar report (day)">
+            <option value="">Latest</option>
+        </select>
+        <button class="btn" onclick="loadAll(document.getElementById('report-select').value)">Refresh</button>
+        <span id="status-hint" class="text-xs text-[var(--text-muted)]"></span>
+    {% endset %}
+    {{ ui.subheader(subheader) }}
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+        <div id="unavailable" class="hidden panel-card p-5 text-sm text-[var(--text-secondary)]"></div>
+        <section class="panel-card p-5">
+            <h2 class="text-sm font-semibold mb-2">CPU total % (100 - idle)</h2>
+            <div class="chart-box"><canvas id="cpu-chart"></canvas></div>
+            <div id="cpu-summary" class="text-xs text-[var(--text-muted)] mt-2 font-mono"></div>
+        </section>
+        <section class="panel-card p-5">
+            <h2 class="text-sm font-semibold mb-2">Memory %</h2>
+            <div class="chart-box"><canvas id="mem-chart"></canvas></div>
+            <div id="mem-summary" class="text-xs text-[var(--text-muted)] mt-2 font-mono"></div>
+        </section>
+        <section class="panel-card p-5">
+            <h2 class="text-sm font-semibold mb-2">Network kB/s (all interfaces, totaled per timestamp)</h2>
+            <div class="chart-box"><canvas id="net-chart"></canvas></div>
+            <div id="net-summary" class="text-xs text-[var(--text-muted)] mt-2 font-mono"></div>
+        </section>
+    </main>
+    <script>
+        lucide.createIcons();
+        Chart.defaults.font.family = "'JetBrains Mono',monospace";
+        Chart.defaults.font.size = 10;
+        Chart.defaults.color = '#64748b';
+        function mkChart(id, labels, data, color, fill) {
+            const el = document.getElementById(id);
+            if (el._chart) el._chart.destroy();
+            el._chart = new Chart(el, { type:'line',
+                data:{ labels, datasets:[{ data, borderColor:color, backgroundColor:fill, borderWidth:1.5, fill:!!fill, pointRadius:0 }]},
+                options:{ responsive:true, maintainAspectRatio:false, animation:{duration:200},
+                    plugins:{ legend:{display:false} }, scales:{ x:{display:false}, y:{beginAtZero:true} },
+                    elements:{ line:{tension:0.3}, point:{radius:0} } } });
+        }
+        async function api(u) { const r = await fetch(u,{credentials:'same-origin'}); return { status:r.status, data:await r.json() }; }
+        async function init() {
+            const st = await api('/api/history/status');
+            if (!st.data.available) {
+                const box = document.getElementById('unavailable');
+                box.classList.remove('hidden');
+                box.textContent = st.data.reason || 'History unavailable';
+                document.getElementById('status-hint').textContent = 'sysstat missing';
+                return;
+            }
+            const rep = await api('/api/history/reports');
+            const sel = document.getElementById('report-select');
+            (rep.data.reports||[]).forEach(r => {
+                const o = document.createElement('option');
+                o.value = r.id; o.textContent = r.label || r.id;
+                sel.appendChild(o);
+            });
+            loadAll('');
+        }
+        async function loadAll(report) {
+            const q = report ? '?report='+encodeURIComponent(report) : '';
+            const [cpu, mem, net] = await Promise.all([
+                api('/api/history/cpu'+q), api('/api/history/memory'+q), api('/api/history/network'+q)]);
+            if (cpu.data.metrics) {
+                const m = cpu.data.metrics;
+                mkChart('cpu-chart', m.map(x=>x.time), m.map(x=>x.total), '#10b981', 'rgba(16,185,129,0.12)');
+                const mx = m.reduce((a,b)=>Math.max(a,b.total),0);
+                document.getElementById('cpu-summary').textContent = `${m.length} samples · max ${mx.toFixed(1)}% · report ${cpu.data.report||''}${cpu.data.truncated ? ' · truncated (narrow ?limit or pick a day)' : ''}`;
+            }
+            if (mem.data.metrics) {
+                const m = mem.data.metrics;
+                mkChart('mem-chart', m.map(x=>x.time), m.map(x=>x.percent), '#3b82f6', 'rgba(59,130,246,0.12)');
+                const mx = m.reduce((a,b)=>Math.max(a,b.percent),0);
+                document.getElementById('mem-summary').textContent = `${m.length} samples · max ${mx.toFixed(1)}% · report ${mem.data.report||''}${mem.data.truncated ? ' · truncated (narrow ?limit or pick a day)' : ''}`;
+            }
+            if (net.data.metrics) {
+                const byTime = {};
+                net.data.metrics.forEach(x => { byTime[x.time] = (byTime[x.time]||0)+x.total_kbs; });
+                const labels = Object.keys(byTime), vals = Object.values(byTime);
+                mkChart('net-chart', labels, vals, '#f97316', 'rgba(249,115,22,0.10)');
+                document.getElementById('net-summary').textContent = `${net.data.count} rows · report ${net.data.report||''}${net.data.truncated ? ' · truncated (narrow ?limit or pick a day)' : ''}`;
+            }
+            document.getElementById('status-hint').textContent = 'report: ' + (report || 'latest');
+        }
+        init();
+    </script>
+</body>
+</html>

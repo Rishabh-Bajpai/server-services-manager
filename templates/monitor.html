@@ -278,6 +278,20 @@
             </div>
         </div>
 
+        <!-- Pinned services (borrowed idea from Laranode LAMP cards, generalized) -->
+        <div class="card p-5 mb-4 animate-fade-in" style="animation-delay: 0.28s">
+            <div class="flex items-center gap-2 mb-3">
+                <div class="section-icon bg-[var(--accent-cyan)]/10">
+                    <i data-lucide="server-cog" class="w-4 h-4 text-[var(--accent-cyan)]"></i>
+                </div>
+                <span class="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Key Services</span>
+                <span class="ml-auto text-[10px] text-[var(--text-muted)] font-mono hidden sm:inline">docker · ssh · cron</span>
+            </div>
+            <div id="pinned-services" class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                <div class="text-[var(--text-muted)] text-xs">Loading…</div>
+            </div>
+        </div>
+
         <!-- Processes -->
         <div class="card p-5 animate-fade-in overflow-hidden flex flex-col" style="animation-delay: 0.3s">
             <div class="flex items-center gap-2 mb-4 shrink-0">
@@ -445,6 +459,17 @@
             `).join('');
         }
 
+        function applySortUI() {
+            document.querySelectorAll('.sort-btn').forEach(b => {
+                const active = b.dataset.col === sortCol;
+                b.classList.toggle('sorted', active);
+                b.querySelector('.sort-arrow').textContent = active ? (sortDir === 'asc' ? '▲' : '▼') : '▲';
+            });
+        }
+        // Seed sort from server-side preference (borrowed from Laranode top-sort).
+        fetch('/api/monitor/sort', { credentials: 'same-origin' }).then(r => r.json()).then(p => {
+            if (p && p.sort) { sortCol = p.sort; sortDir = p.direction || sortDir; applySortUI(); updateTable(); }
+        }).catch(() => {});
         document.querySelectorAll('.sort-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const col = btn.dataset.col;
@@ -454,13 +479,11 @@
                     sortCol = col;
                     sortDir = btn.dataset.type === 'str' ? 'asc' : 'desc';
                 }
-                document.querySelectorAll('.sort-btn').forEach(b => {
-                    b.classList.remove('sorted');
-                    b.querySelector('.sort-arrow').textContent = '▲';
-                });
-                btn.classList.add('sorted');
-                btn.querySelector('.sort-arrow').textContent = sortDir === 'asc' ? '▲' : '▼';
+                applySortUI();
                 updateTable();
+                fetch('/api/monitor/sort', { method: 'POST', credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sort: sortCol, direction: sortDir }) }).catch(() => {});
             });
         });
 
@@ -581,6 +604,40 @@
                 console.error('Monitor update error:', e);
             }
         });
+
+        // Pinned services overview (one fetch, no polling — systemd state changes slowly).
+        function escSvc(s) { return String(s == null ? '' : s).replace(/[<>"&]/g, c => ({'<':'&lt;','>':'&gt;','"':'&quot;','&':'&amp;'}[c])); }
+        function fmtSvcMem(b) {
+            if (!b) return '—';
+            if (b < 1024) return b + ' B';
+            const u = ['KB','MB','GB']; let v = b/1024;
+            for (const x of u) { if (v < 1024) return v.toFixed(1)+' '+x; v/=1024; }
+            return v.toFixed(1)+' TB';
+        }
+        fetch('/api/monitor/services?units=docker.service,ssh.service,cron.service', { credentials:'same-origin' })
+            .then(r => r.json()).then(j => {
+                const wrap = document.getElementById('pinned-services');
+                const items = (j.services||[]).filter(s => s.exists);
+                if (!items.length) { wrap.innerHTML = '<div class="text-[var(--text-muted)] text-xs">No pinned units found on this host.</div>'; return; }
+                wrap.innerHTML = items.map(s => {
+                    const active = s.active_state === 'active';
+                    const dot = active ? 'var(--accent-green)' : 'var(--accent-red)';
+                    // Backend maps systemd UINT64_MAX/"[not set]" to 0; also
+                    // guard client-side so a huge sentinel never renders EB.
+                    const mem = (s.memory_bytes == null || s.memory_bytes >= 2**63) ? '—' : fmtSvcMem(s.memory_bytes);
+                    const cpu = (s.cpu_nsec == null || s.cpu_nsec >= 2**63) ? '—' : (s.cpu_nsec/1e9).toFixed(1) + 's';
+                    return `<div class="rounded-lg border border-[var(--border-subtle)] p-3">
+                        <div class="flex items-center gap-2 font-mono text-xs">
+                            <span class="w-2 h-2 rounded-full" style="background:${dot}"></span>
+                            <span class="truncate" title="${escSvc(s.name)}">${escSvc(s.name)}</span>
+                            <span class="ml-auto text-[var(--text-muted)]">${escSvc(s.active_state||'—')}/${escSvc(s.sub_state||'—')}</span>
+                        </div>
+                        <div class="mt-2 text-[11px] text-[var(--text-muted)] font-mono">pid ${escSvc(s.main_pid||'—')} · ${escSvc(mem)} · ${escSvc(cpu)} cpu</div>
+                    </div>`;
+                }).join('');
+            }).catch(() => {
+                document.getElementById('pinned-services').innerHTML = '<div class="text-[var(--text-muted)] text-xs">Unavailable.</div>';
+            });
     </script>
 </body>
 </html>

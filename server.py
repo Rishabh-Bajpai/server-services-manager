@@ -27,6 +27,9 @@ from app import backup_manager
 from app import cluster_manager
 from app import disk_manager
 from app import file_explorer
+from app import history_manager
+from app import monitor_prefs
+from app import service_overview
 from app import ssh_manager
 from app import openapi as openapi_mod
 from app.health import HealthCheck, HealthMonitor
@@ -50,6 +53,19 @@ logger = logging.getLogger("FlaskAPI")
 app = Flask(__name__, template_folder='templates')
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', os.urandom(24).hex())
 app.config['TEMPLATES_AUTO_RELOAD'] = True
+# Defense in depth for /api/files/upload: Werkzeug rejects bodies larger
+# than the per-file cap plus multipart overhead regardless of whether
+# Content-Length is present (chunked requests have none). The handler
+# below still enforces a per-file + per-request check after writing.
+UPLOAD_MAX_BYTES = 1024 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = UPLOAD_MAX_BYTES + 16 * 1024 * 1024
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+
+
+@app.errorhandler(413)
+def _too_large(error):
+    return jsonify({"error": "upload too large (cap 1GB per file)", "code": "too_large"}), 413
 socketio = SocketIO(app, cors_allowed_origins=os.getenv('CORS_ORIGIN', '*'), max_http_buffer_size=10*1024*1024)
 
 
@@ -648,30 +664,202 @@ def list_files():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/files/upload', methods=['POST'])
+@openapi_mod.describe(
+    summary="Upload files (single-shot or chunked)",
+    description=(
+        "Single-shot: multipart with one or more `file` parts + `path`. "
+        "Chunked (borrowed from Laranode UploadFileAction): same endpoint "
+        "with `chunkIndex`, `totalChunks`, `originalName` fields; chunk 0 "
+        "creates/truncates, later chunks append. Returns per-file status "
+        "so large ISOs/backups survive flaky connections."
+    ),
+    tag="Files",
+)
 def upload_file():
     try:
         if 'file' not in request.files:
             return jsonify({"error": "No file part"}), 400
-        
-        file = request.files['file']
-        path = request.form.get('path', '.')
-        
-        if file.filename == '':
-            return jsonify({"error": "No selected file"}), 400
-            
-        if file:
-            filename = secure_filename(file.filename) if file.filename else ""
-            base_dir = os.path.realpath(os.path.expanduser('~'))
-            target_dir = os.path.realpath(os.path.join(base_dir, path))
-            
-            if target_dir != base_dir and not target_dir.startswith(base_dir + os.sep):
-                return jsonify({"error": "Access denied"}), 403
 
-            file.save(os.path.join(target_dir, filename))
-            return jsonify({"status": "uploaded", "filename": filename})
-            
+        path = request.form.get('path', '.')
+        base_dir = os.path.realpath(os.path.expanduser('~'))
+        target_dir = os.path.realpath(os.path.join(base_dir, path))
+
+        if target_dir != base_dir and not target_dir.startswith(base_dir + os.sep):
+            return jsonify({"error": "Access denied"}), 403
+        if not os.path.isdir(target_dir):
+            return jsonify({"error": "Target directory not found"}), 404
+
+        # Chunked mode detection (Laranode-compatible field names).
+        chunk_index_raw = request.form.get('chunkIndex')
+        total_chunks_raw = request.form.get('totalChunks')
+        original_name = (request.form.get('originalName') or "").strip()
+        chunked = chunk_index_raw is not None or total_chunks_raw is not None or bool(original_name)
+
+        files = request.files.getlist('file')
+        if not files:
+            return jsonify({"error": "No file part"}), 400
+
+        # Size caps (review finding: no unlimited disk fill).
+        # Per-request chunks stay small (2MB default in files.html), but the
+        # assembled file must stay bounded. 1GB covers ISOs/backups while
+        # preventing accidental disk-fill; above it the partial is removed.
+        # request.content_length is None for chunked Transfer-Encoding, so
+        # it is only a fast-path — every branch below re-checks the bytes
+        # actually written to disk. app.config['MAX_CONTENT_LENGTH'] is the
+        # outer guard that makes Werkzeug reject huge bodies either way.
+        upload_max_bytes = UPLOAD_MAX_BYTES
+        if (request.content_length or 0) > upload_max_bytes + 16 * 1024 * 1024:
+            return jsonify({"error": "upload too large (cap 1GB per file)", "code": "too_large"}), 413
+
+        def _too_large_error(filename):
+            return {"ok": False, "filename": filename,
+                    "error": "upload too large (cap 1GB per file)", "code": "too_large"}
+
+        results = []
+        request_total = 0
+        for file in files:
+            # In chunked mode the part filename is a blob; the real name
+            # comes from originalName.
+            raw_name = original_name if chunked else (file.filename or "")
+            if not raw_name:
+                results.append({"ok": False, "error": "No selected file"})
+                continue
+            filename = secure_filename(os.path.basename(raw_name))
+            if not filename:
+                results.append({"ok": False, "error": "Invalid filename"})
+                continue
+            dest = os.path.join(target_dir, filename)
+            # Symlink/chroot guard on the final destination.
+            dest_real = os.path.realpath(dest)
+            if dest_real != base_dir and not dest_real.startswith(base_dir + os.sep):
+                # Allow non-existent dest inside target_dir (realpath resolves
+                # to target_dir/filename); reject only escapes.
+                if os.path.dirname(dest_real) != target_dir:
+                    results.append({"ok": False, "filename": filename, "error": "Access denied"})
+                    continue
+            try:
+                if chunked:
+                    try:
+                        chunk_index = int(chunk_index_raw or 0)
+                        total_chunks = int(total_chunks_raw or 1)
+                    except (TypeError, ValueError):
+                        results.append({"ok": False, "filename": filename, "error": "Invalid chunkIndex/totalChunks"})
+                        continue
+                    if chunk_index < 0 or total_chunks < 1 or chunk_index >= total_chunks:
+                        results.append({"ok": False, "filename": filename, "error": "Chunk index out of range"})
+                        continue
+                    if len(original_name) > 255 or "/" in original_name or "\\" in original_name:
+                        results.append({"ok": False, "filename": filename, "error": "Invalid originalName"})
+                        continue
+                    # Write to a server-side staging name so an interrupted
+                    # upload never leaves a partial file under the real
+                    # name (the client ".part" blob name is untrusted and
+                    # ignored). The staging file is renamed onto dest only
+                    # on the final chunk.
+                    staging = dest + ".part"
+                    staging_real = os.path.realpath(staging)
+                    if staging_real != base_dir and not staging_real.startswith(base_dir + os.sep):
+                        if os.path.dirname(staging_real) != target_dir:
+                            results.append({"ok": False, "filename": filename, "error": "Access denied"})
+                            continue
+                    mode = "wb" if chunk_index == 0 else "ab"
+                    chunk_bytes = file.stream.read() if hasattr(file, "stream") else file.read()
+                    if isinstance(chunk_bytes, str):
+                        chunk_bytes = chunk_bytes.encode("utf-8", errors="replace")
+                    with open(staging, mode) as out:
+                        out.write(chunk_bytes or b"")
+                    try:
+                        staged_size = os.path.getsize(staging)
+                    except OSError:
+                        staged_size = 0
+                    request_total += len(chunk_bytes or b"")
+                    if staged_size > upload_max_bytes or request_total > upload_max_bytes:
+                        try:
+                            os.unlink(staging)
+                        except OSError:
+                            pass
+                        results.append(_too_large_error(filename))
+                        continue
+                    done = chunk_index + 1 >= total_chunks
+                    if done:
+                        try:
+                            os.replace(staging, dest)
+                        except OSError as e:
+                            results.append({"ok": False, "filename": filename, "error": str(e)})
+                            continue
+                    results.append({
+                        "ok": True, "filename": filename,
+                        "chunkIndex": chunk_index, "totalChunks": total_chunks,
+                        "done": done,
+                    })
+                else:
+                    file.save(dest)
+                    try:
+                        size = os.path.getsize(dest)
+                    except OSError:
+                        size = 0
+                    request_total += size
+                    if size > upload_max_bytes or request_total > upload_max_bytes:
+                        try:
+                            os.unlink(dest)
+                        except OSError:
+                            pass
+                        results.append(_too_large_error(filename))
+                        continue
+                    results.append({"ok": True, "filename": filename})
+            except Exception as e:  # noqa: BLE001
+                results.append({"ok": False, "filename": filename, "error": str(e)})
+
+        ok_all = all(r.get("ok") for r in results)
+        status = 200 if ok_all else 500 if len(results) == 1 else 207
+        # Backward compat: single single-shot upload returns {status, filename}.
+        if len(results) == 1 and not chunked:
+            single = results[0]
+            if single.get("ok"):
+                activity.log(
+                    "files.upload", target=os.path.join(path, single["filename"]),
+                    status="ok", ip=request.remote_addr or "",
+                )
+                return jsonify({"status": "uploaded", "filename": single["filename"]})
+            code = 413 if single.get("code") == "too_large" else 400
+            body = {"error": single.get("error", "upload failed")}
+            if single.get("code"):
+                body["code"] = single["code"]
+            return jsonify(body), code
+        activity.log(
+            "files.upload", target=path, status="ok" if ok_all else "partial",
+            detail=f"files={len(results)} chunked={chunked}",
+            ip=request.remote_addr or "",
+        )
+        return jsonify({"files": results, "chunked": chunked}), status
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/files/editable-types', methods=['GET'])
+@openapi_mod.describe(
+    summary="List editable MIME types for the file editor",
+    description=(
+        "Returns the server-side allowlist gating the text editor "
+        "(borrowed from Laranode editable_mime_types) plus a helper "
+        "flag for a specific ?path."
+    ),
+    tag="Files",
+)
+def api_files_editable_types():
+    rel = (request.args.get("path") or "").strip()
+    out: dict = {"editable_mime_types": sorted(file_explorer.EDITABLE_MIME_TYPES)}
+    if rel:
+        try:
+            target = file_explorer.resolve_api_path(rel)
+            out["path"] = rel
+            out["editable"] = file_explorer.is_editable_path(target)
+            out["mime"] = file_explorer.mime_guess(target)
+            out["kind"] = file_explorer.classify_api_path(target) if os.path.exists(target) else None
+        except file_explorer.FileExplorerError as e:
+            return jsonify({"error": str(e), "code": e.code}), 403
+    return jsonify(out)
 
 @app.route('/api/files/download', methods=['GET'])
 def download_file():
@@ -2043,8 +2231,39 @@ def api_firewall_add_rule():
         activity.log("firewall.add_rule",
                      target=f"{spec.get('action')}/{spec.get('port')}",
                      status="error", detail=f"{e.code}: {e}", ip=request.remote_addr or "")
+        if e.code == "confirm_required":
+            return jsonify({
+                "error": str(e), "code": e.code,
+                "preview": getattr(e, "preview", ""),
+                "lockout_warning": getattr(e, "lockout_warning", True),
+            }), 409
         http = 403 if e.code == "permission" else 400 if e.code == "invalid" else 500
         return jsonify({"error": str(e), "code": e.code}), http
+
+
+@app.route('/api/firewall/rule-preview', methods=['POST'])
+@openapi_mod.describe(
+    summary="Validate a firewall rule form and preview it",
+    description=(
+        "Validates action/port/protocol/source/direction without touching "
+        "the system (Laranode BuildUfwRuleSpec idea). Returns a normalized "
+        "spec, a human preview string, and lockout_warning=True when the "
+        "rule would deny inbound SSH without a source restriction."
+    ),
+    tag="Firewall",
+)
+def api_firewall_rule_preview():
+    data = request.get_json(silent=True) or {}
+    try:
+        return jsonify(firewall_manager.build_rule_spec(
+            action=data.get("action", "allow"),
+            port=str(data.get("port", "")),
+            protocol=data.get("protocol", "tcp"),
+            source=data.get("source", ""),
+            direction=data.get("direction", "in"),
+        ))
+    except firewall_manager.FirewallError as e:
+        return jsonify({"error": str(e), "code": e.code}), 400
 
 
 @app.route('/api/firewall/rules', methods=['DELETE'])
@@ -2280,6 +2499,134 @@ def api_disk_breadcrumb():
     except disk_manager.DiskError as e:
         return jsonify({"error": str(e), "code": e.code}), 403
     return jsonify({"breadcrumb": crumbs})
+
+
+# Historic stats via sysstat/sar (borrowed from Laranode SarHistory).
+# Optional: returns available=False with install hint when sar or
+# /var/log/sysstat/saNN files are missing, so the UI degrades gracefully.
+@app.route('/history')
+def history_page():
+    return render_template('history.html')
+
+
+@app.route('/api/history/status', methods=['GET'])
+@openapi_mod.describe(
+    summary="Check whether sar history is available",
+    description=(
+        "Probes for the sar binary and /var/log/sysstat/saNN files. "
+        "Returns available=False with a human-readable reason when "
+        "sysstat is not installed or collection is disabled."
+    ),
+    tag="History",
+)
+def api_history_status():
+    return jsonify(history_manager.is_available())
+
+
+@app.route('/api/history/reports', methods=['GET'])
+@openapi_mod.describe(
+    summary="List available sar reports",
+    description="Returns saNN report ids newest-first with mtimes.",
+    tag="History",
+)
+def api_history_reports():
+    try:
+        return jsonify({"reports": history_manager.list_reports()})
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"error": str(e), "code": "internal"}), 500
+
+
+@app.route('/api/history/<metric>', methods=['GET'])
+@openapi_mod.describe(
+    summary="Historic CPU/memory/network metrics from sar",
+    description=(
+        "metric is cpu|memory|network. Optional ?report=saNN selects "
+        "a specific day; defaults to newest. Returns time-series "
+        "metrics parsed in-process from sar output."
+    ),
+    tag="History",
+)
+def api_history_metric(metric):
+    report = request.args.get("report")
+    try:
+        limit = int(request.args.get("limit", "500"))
+    except (TypeError, ValueError):
+        limit = 500
+    limit = max(10, min(limit, 2000))
+    try:
+        if metric == "cpu":
+            return jsonify(history_manager.get_cpu_history(report, limit=limit))
+        if metric == "memory":
+            return jsonify(history_manager.get_memory_history(report, limit=limit))
+        if metric == "network":
+            return jsonify(history_manager.get_network_history(report, limit=limit * 2))
+        return jsonify({"error": f"unknown metric: {metric}", "code": "invalid"}), 400
+    except history_manager.HistoryError as e:
+        http = 404 if e.code in ("not_found", "no_reports") else 400
+        if e.code in ("missing_tool", "sar_failed", "timeout"):
+            http = 503
+        return jsonify({"error": str(e), "code": e.code}), http
+    except Exception as e:  # noqa: BLE001
+        logger.exception("history metric failed")
+        return jsonify({"error": str(e), "code": "internal"}), 500
+
+
+@app.route('/api/monitor/services', methods=['GET'])
+@openapi_mod.describe(
+    summary="Pinned systemd units overview for /monitor",
+    description=(
+        "Returns machine-readable status for up to 10 units "
+        "(?units=docker.service,ssh.service). Uses systemctl show, "
+        "not fragile status-text parsing. Missing units return "
+        "exists=False so the UI can hide them."
+    ),
+    tag="Monitor",
+)
+def api_monitor_services():
+    raw = request.args.get("units", "")
+    units = [u.strip() for u in raw.split(",") if u.strip()]
+    if not units:
+        units = ["docker.service", "ssh.service", "cron.service"]
+    return jsonify({"services": service_overview.get_summaries(units)})
+
+
+@app.route('/api/monitor/sort', methods=['GET'])
+@openapi_mod.describe(
+    summary="Get persisted Top Processes sort preference",
+    description=(
+        "Returns the server-side default sort column + direction for "
+        "the /monitor processes table (borrowed from Laranode top-sort). "
+        "The table itself still sorts client-side; this only seeds it."
+    ),
+    tag="Monitor",
+)
+def api_monitor_sort_get():
+    return jsonify(monitor_prefs.get_prefs())
+
+
+@app.route('/api/monitor/sort', methods=['POST'])
+@openapi_mod.describe(
+    summary="Persist Top Processes sort preference",
+    description="Body: {sort: cpu|memory|name|pid|status, direction?: asc|desc}.",
+    tag="Monitor",
+)
+def api_monitor_sort_set():
+    payload = request.get_json(silent=True) or {}
+    sort = str(payload.get("sort") or "").strip()
+    direction = payload.get("direction")
+    if direction is not None:
+        direction = str(direction).strip()
+    try:
+        prefs = monitor_prefs.set_prefs(sort, direction)
+    except ValueError as e:
+        return jsonify({"error": str(e), "code": "invalid"}), 400
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"error": str(e), "code": "internal"}), 500
+    activity.log(
+        "monitor.sort", target=prefs["sort"], status="ok",
+        detail=prefs["direction"], ip=request.remote_addr or "",
+    )
+    return jsonify(prefs)
 
 
 # SSH authorized_keys manager (Phase 26)

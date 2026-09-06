@@ -235,6 +235,8 @@
                     <label class="block mb-1 text-[var(--text-muted)]">App password (for sudo)</label>
                     <input id="rule-password" type="password" class="text-input" placeholder="password">
                 </div>
+                <div id="rule-preview" class="rounded-lg border border-[var(--border-subtle)] p-2.5 font-mono text-[11px] text-[var(--text-secondary)]">Preview will appear here.</div>
+                <div id="rule-warn" class="hidden rounded-lg border border-red-500/40 bg-red-500/10 p-2.5 text-[11px] text-[var(--accent-red)]">Warning: this would deny inbound SSH (port 22) from anywhere — you could lock yourself out. Add a source IP or use reject/limit instead.</div>
             </div>
             <div class="flex gap-2 justify-end mt-4">
                 <button class="btn" onclick="closeAddRule()">Cancel</button>
@@ -430,11 +432,47 @@
 
     function openAddRule() {
         document.getElementById('add-modal').classList.remove('hidden');
+        previewRule();
+    }
+    let previewTimer = null;
+    ['rule-action','rule-port','rule-proto','rule-source'].forEach(id => {
+        document.getElementById(id).addEventListener('input', () => {
+            clearTimeout(previewTimer);
+            previewTimer = setTimeout(previewRule, 250);
+        });
+    });
+    let lastPreview = null;
+    function previewRule() {
+        const body = {
+            action: document.getElementById('rule-action').value,
+            port: document.getElementById('rule-port').value.trim(),
+            protocol: document.getElementById('rule-proto').value,
+            source: document.getElementById('rule-source').value.trim(),
+            direction: 'in',
+        };
+        if (!body.port) {
+            document.getElementById('rule-preview').textContent = 'Enter a port to preview.';
+            document.getElementById('rule-warn').classList.add('hidden');
+            lastPreview = null;
+            return;
+        }
+        api('/api/firewall/rule-preview', { method: 'POST', body: JSON.stringify(body) })
+            .then(({ ok, data }) => {
+                if (!ok) {
+                    document.getElementById('rule-preview').textContent = data.error || 'Invalid rule';
+                    document.getElementById('rule-warn').classList.add('hidden');
+                    lastPreview = null;
+                    return;
+                }
+                lastPreview = data;
+                document.getElementById('rule-preview').textContent = data.preview || '';
+                document.getElementById('rule-warn').classList.toggle('hidden', !data.lockout_warning);
+            });
     }
     function closeAddRule() {
         document.getElementById('add-modal').classList.add('hidden');
     }
-    function submitAddRule() {
+    function submitAddRule(confirmed) {
         const body = {
             action: document.getElementById('rule-action').value,
             port: document.getElementById('rule-port').value.trim(),
@@ -444,10 +482,20 @@
         };
         if (!body.port) { toast('port is required', 'error'); return; }
         if (!body.password) { toast('password is required', 'error'); return; }
+        if (!confirmed && lastPreview && lastPreview.lockout_warning) {
+            if (!window.confirm('This will deny inbound SSH with no source restriction. You may lock yourself out. Proceed?')) return;
+            body.confirm_lockout = true;
+        }
         delete body.password;
         const payload = Object.assign({}, body, { password: document.getElementById('rule-password').value });
         api('/api/firewall/rules', { method: 'POST', body: JSON.stringify(payload) })
-            .then(({ ok, data }) => {
+            .then(({ ok, status, data }) => {
+                if (!ok && (status === 409 || data.code === 'confirm_required')) {
+                    if (window.confirm((data.preview || 'SSH lockout risk') + ' — proceed anyway?')) {
+                        submitAddRule(true);
+                    }
+                    return;
+                }
                 if (!ok) { toast(data.error || 'add rule failed', 'error'); return; }
                 toast('rule added', 'success');
                 closeAddRule();
