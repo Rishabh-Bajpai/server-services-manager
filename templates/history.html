@@ -74,7 +74,7 @@
             const sel = document.getElementById('report-select');
             (rep.data.reports||[]).forEach(r => {
                 const o = document.createElement('option');
-                o.value = r.id; o.textContent = r.id;
+                o.value = r.id; o.textContent = r.label || r.id;
                 sel.appendChild(o);
             });
             loadAll('');
@@ -87,20 +87,20 @@
                 const m = cpu.data.metrics;
                 mkChart('cpu-chart', m.map(x=>x.time), m.map(x=>x.total), '#10b981', 'rgba(16,185,129,0.12)');
                 const mx = m.reduce((a,b)=>Math.max(a,b.total),0);
-                document.getElementById('cpu-summary').textContent = `${m.length} samples · max ${mx.toFixed(1)}% · report ${cpu.data.report||''}`;
+                document.getElementById('cpu-summary').textContent = `${m.length} samples · max ${mx.toFixed(1)}% · report ${cpu.data.report||''}${cpu.data.truncated ? ' · truncated (narrow ?limit or pick a day)' : ''}`;
             }
             if (mem.data.metrics) {
                 const m = mem.data.metrics;
                 mkChart('mem-chart', m.map(x=>x.time), m.map(x=>x.percent), '#3b82f6', 'rgba(59,130,246,0.12)');
                 const mx = m.reduce((a,b)=>Math.max(a,b.percent),0);
-                document.getElementById('mem-summary').textContent = `${m.length} samples · max ${mx.toFixed(1)}% · report ${mem.data.report||''}`;
+                document.getElementById('mem-summary').textContent = `${m.length} samples · max ${mx.toFixed(1)}% · report ${mem.data.report||''}${mem.data.truncated ? ' · truncated (narrow ?limit or pick a day)' : ''}`;
             }
             if (net.data.metrics) {
                 const byTime = {};
                 net.data.metrics.forEach(x => { byTime[x.time] = (byTime[x.time]||0)+x.total_kbs; });
                 const labels = Object.keys(byTime), vals = Object.values(byTime);
                 mkChart('net-chart', labels, vals, '#f97316', 'rgba(249,115,22,0.10)');
-                document.getElementById('net-summary').textContent = `${net.data.count} rows · report ${net.data.report||''}`;
+                document.getElementById('net-summary').textContent = `${net.data.count} rows · report ${net.data.report||''}${net.data.truncated ? ' · truncated (narrow ?limit or pick a day)' : ''}`;
             }
             document.getElementById('status-hint').textContent = 'report: ' + (report || 'latest');
         }

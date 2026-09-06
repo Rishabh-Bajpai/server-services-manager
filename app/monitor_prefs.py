@@ -60,7 +60,15 @@ def set_prefs(sort: str, direction: str | None = None) -> Dict[str, Any]:
         raise ValueError(f"invalid direction: {direction!r}")
     prefs = {"sort": sort, "direction": direction}
     path = _prefs_path()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    parent = os.path.dirname(path)
+    os.makedirs(parent, mode=0o700, exist_ok=True)
+    try:
+        # Harden pre-existing dirs too: this file documents chmod 700 for
+        # ~/.server-services-manager (it also holds activity.db with
+        # potential credentials), but the default umask leaves it 755.
+        os.chmod(parent, 0o700)
+    except OSError:
+        pass
     fd, tmp = tempfile.mkstemp(prefix=".monitor.", dir=os.path.dirname(path))
     try:
         with os.fdopen(fd, "w") as f:

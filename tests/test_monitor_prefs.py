@@ -58,3 +58,16 @@ def test_invalid_values_in_file_ignored():
         json.dump({"sort": "bogus", "direction": "sideways"}, f)
     with patch("app.monitor_prefs._prefs_path", return_value=path):
         assert mp.get_prefs() == {"sort": "cpu", "direction": "desc"}
+
+
+def test_sort_endpoint_rejects_non_string_sort_gracefully():
+    import server
+
+    app = server.app
+    app.config["TESTING"] = True
+    with app.test_client() as client:
+        with client.session_transaction() as sess:
+            sess["logged_in"] = True
+        # Numeric sort must 400 (invalid), not 500 (AttributeError on .strip()).
+        resp = client.post("/api/monitor/sort", json={"sort": 5})
+        assert resp.status_code == 400

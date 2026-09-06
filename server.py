@@ -53,6 +53,19 @@ logger = logging.getLogger("FlaskAPI")
 app = Flask(__name__, template_folder='templates')
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', os.urandom(24).hex())
 app.config['TEMPLATES_AUTO_RELOAD'] = True
+# Defense in depth for /api/files/upload: Werkzeug rejects bodies larger
+# than the per-file cap plus multipart overhead regardless of whether
+# Content-Length is present (chunked requests have none). The handler
+# below still enforces a per-file + per-request check after writing.
+UPLOAD_MAX_BYTES = 1024 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = UPLOAD_MAX_BYTES + 16 * 1024 * 1024
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+
+
+@app.errorhandler(413)
+def _too_large(error):
+    return jsonify({"error": "upload too large (cap 1GB per file)", "code": "too_large"}), 413
 socketio = SocketIO(app, cors_allowed_origins=os.getenv('CORS_ORIGIN', '*'), max_http_buffer_size=10*1024*1024)
 
 
@@ -686,15 +699,24 @@ def upload_file():
         if not files:
             return jsonify({"error": "No file part"}), 400
 
-        # Total-size cap per file (review finding: no unlimited disk fill).
+        # Size caps (review finding: no unlimited disk fill).
         # Per-request chunks stay small (2MB default in files.html), but the
         # assembled file must stay bounded. 1GB covers ISOs/backups while
         # preventing accidental disk-fill; above it the partial is removed.
-        upload_max_bytes = 1024 * 1024 * 1024
+        # request.content_length is None for chunked Transfer-Encoding, so
+        # it is only a fast-path — every branch below re-checks the bytes
+        # actually written to disk. app.config['MAX_CONTENT_LENGTH'] is the
+        # outer guard that makes Werkzeug reject huge bodies either way.
+        upload_max_bytes = UPLOAD_MAX_BYTES
         if (request.content_length or 0) > upload_max_bytes + 16 * 1024 * 1024:
             return jsonify({"error": "upload too large (cap 1GB per file)", "code": "too_large"}), 413
 
+        def _too_large_error(filename):
+            return {"ok": False, "filename": filename,
+                    "error": "upload too large (cap 1GB per file)", "code": "too_large"}
+
         results = []
+        request_total = 0
         for file in files:
             # In chunked mode the part filename is a blob; the real name
             # comes from originalName.
@@ -729,23 +751,42 @@ def upload_file():
                     if len(original_name) > 255 or "/" in original_name or "\\" in original_name:
                         results.append({"ok": False, "filename": filename, "error": "Invalid originalName"})
                         continue
+                    # Write to a server-side staging name so an interrupted
+                    # upload never leaves a partial file under the real
+                    # name (the client ".part" blob name is untrusted and
+                    # ignored). The staging file is renamed onto dest only
+                    # on the final chunk.
+                    staging = dest + ".part"
+                    staging_real = os.path.realpath(staging)
+                    if staging_real != base_dir and not staging_real.startswith(base_dir + os.sep):
+                        if os.path.dirname(staging_real) != target_dir:
+                            results.append({"ok": False, "filename": filename, "error": "Access denied"})
+                            continue
                     mode = "wb" if chunk_index == 0 else "ab"
                     chunk_bytes = file.stream.read() if hasattr(file, "stream") else file.read()
                     if isinstance(chunk_bytes, str):
                         chunk_bytes = chunk_bytes.encode("utf-8", errors="replace")
-                    with open(dest, mode) as out:
+                    with open(staging, mode) as out:
                         out.write(chunk_bytes or b"")
                     try:
-                        if os.path.getsize(dest) > upload_max_bytes:
-                            try:
-                                os.unlink(dest)
-                            except OSError:
-                                pass
-                            results.append({"ok": False, "filename": filename, "error": "upload too large (cap 1GB per file)"})
-                            continue
+                        staged_size = os.path.getsize(staging)
                     except OSError:
-                        pass
+                        staged_size = 0
+                    request_total += len(chunk_bytes or b"")
+                    if staged_size > upload_max_bytes or request_total > upload_max_bytes:
+                        try:
+                            os.unlink(staging)
+                        except OSError:
+                            pass
+                        results.append(_too_large_error(filename))
+                        continue
                     done = chunk_index + 1 >= total_chunks
+                    if done:
+                        try:
+                            os.replace(staging, dest)
+                        except OSError as e:
+                            results.append({"ok": False, "filename": filename, "error": str(e)})
+                            continue
                     results.append({
                         "ok": True, "filename": filename,
                         "chunkIndex": chunk_index, "totalChunks": total_chunks,
@@ -753,6 +794,18 @@ def upload_file():
                     })
                 else:
                     file.save(dest)
+                    try:
+                        size = os.path.getsize(dest)
+                    except OSError:
+                        size = 0
+                    request_total += size
+                    if size > upload_max_bytes or request_total > upload_max_bytes:
+                        try:
+                            os.unlink(dest)
+                        except OSError:
+                            pass
+                        results.append(_too_large_error(filename))
+                        continue
                     results.append({"ok": True, "filename": filename})
             except Exception as e:  # noqa: BLE001
                 results.append({"ok": False, "filename": filename, "error": str(e)})
@@ -768,7 +821,11 @@ def upload_file():
                     status="ok", ip=request.remote_addr or "",
                 )
                 return jsonify({"status": "uploaded", "filename": single["filename"]})
-            return jsonify({"error": single.get("error", "upload failed")}), 400
+            code = 413 if single.get("code") == "too_large" else 400
+            body = {"error": single.get("error", "upload failed")}
+            if single.get("code"):
+                body["code"] = single["code"]
+            return jsonify(body), code
         activity.log(
             "files.upload", target=path, status="ok" if ok_all else "partial",
             detail=f"files={len(results)} chunked={chunked}",
@@ -2174,6 +2231,12 @@ def api_firewall_add_rule():
         activity.log("firewall.add_rule",
                      target=f"{spec.get('action')}/{spec.get('port')}",
                      status="error", detail=f"{e.code}: {e}", ip=request.remote_addr or "")
+        if e.code == "confirm_required":
+            return jsonify({
+                "error": str(e), "code": e.code,
+                "preview": getattr(e, "preview", ""),
+                "lockout_warning": getattr(e, "lockout_warning", True),
+            }), 409
         http = 403 if e.code == "permission" else 400 if e.code == "invalid" else 500
         return jsonify({"error": str(e), "code": e.code}), http
 
@@ -2549,7 +2612,7 @@ def api_monitor_sort_get():
 )
 def api_monitor_sort_set():
     payload = request.get_json(silent=True) or {}
-    sort = (payload.get("sort") or "").strip()
+    sort = str(payload.get("sort") or "").strip()
     direction = payload.get("direction")
     if direction is not None:
         direction = str(direction).strip()

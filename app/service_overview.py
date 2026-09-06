@@ -53,9 +53,15 @@ def _parse_show(text: str) -> Dict[str, str]:
 
 def _to_int(value: str, default: int = 0) -> int:
     try:
-        return int(value)
+        n = int(value)
     except (TypeError, ValueError):
         return default
+    # systemd reports unknown numeric properties as UINT64_MAX (2^64-1)
+    # on some versions (others print "[not set]"). Treat any value at
+    # or above 2^63 as "unknown" so the UI never renders "16.0 EB".
+    if n >= (1 << 63):
+        return default
+    return n
 
 
 def get_summary(unit: str) -> Dict[str, Any]:

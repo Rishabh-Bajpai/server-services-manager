@@ -39,7 +39,12 @@ def test_chunked_upload_assembles(tmp_path, monkeypatch):
         assert resp.status_code == 200, resp.get_json()
         body = resp.get_json()
         assert body["files"][0]["filename"] == "big.bin"
+        if i < 2:
+            # Staged under .part until the final chunk; the real name
+            # must not appear as a partial file.
+            assert not (tmp_path / "big.bin").exists()
     assert (tmp_path / "big.bin").read_bytes() == b"abcdef"
+    assert not (tmp_path / "big.bin.part").exists()
 
 
 def test_chunked_bad_index_rejected(tmp_path, monkeypatch):

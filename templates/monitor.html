@@ -622,13 +622,17 @@
                 wrap.innerHTML = items.map(s => {
                     const active = s.active_state === 'active';
                     const dot = active ? 'var(--accent-green)' : 'var(--accent-red)';
+                    // Backend maps systemd UINT64_MAX/"[not set]" to 0; also
+                    // guard client-side so a huge sentinel never renders EB.
+                    const mem = (s.memory_bytes == null || s.memory_bytes >= 2**63) ? '—' : fmtSvcMem(s.memory_bytes);
+                    const cpu = (s.cpu_nsec == null || s.cpu_nsec >= 2**63) ? '—' : (s.cpu_nsec/1e9).toFixed(1) + 's';
                     return `<div class="rounded-lg border border-[var(--border-subtle)] p-3">
                         <div class="flex items-center gap-2 font-mono text-xs">
                             <span class="w-2 h-2 rounded-full" style="background:${dot}"></span>
                             <span class="truncate" title="${escSvc(s.name)}">${escSvc(s.name)}</span>
                             <span class="ml-auto text-[var(--text-muted)]">${escSvc(s.active_state||'—')}/${escSvc(s.sub_state||'—')}</span>
                         </div>
-                        <div class="mt-2 text-[11px] text-[var(--text-muted)] font-mono">pid ${escSvc(s.main_pid||'—')} · ${escSvc(fmtSvcMem(s.memory_bytes))} · ${escSvc((s.cpu_nsec/1e9).toFixed(1))}s cpu</div>
+                        <div class="mt-2 text-[11px] text-[var(--text-muted)] font-mono">pid ${escSvc(s.main_pid||'—')} · ${escSvc(mem)} · ${escSvc(cpu)} cpu</div>
                     </div>`;
                 }).join('');
             }).catch(() => {

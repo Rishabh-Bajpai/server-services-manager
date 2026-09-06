@@ -13,6 +13,7 @@ on PATH), :func:`is_available` returns ``False`` with a human-readable
 reason so the UI can explain what's missing.
 """
 import logging
+import ipaddress
 import re
 import shutil
 import subprocess
@@ -257,23 +258,38 @@ def _ufw_set_default(policy: str, direction: str, password: str) -> str:
 #   <port>:<proto>         — numeric port with colon-separated protocol
 
 def _ufw_add_rule(spec: dict, password: str) -> str:
-    """Add a ufw rule. ``spec`` keys: action, port, protocol, source."""
+    """Add a ufw rule. ``spec`` keys: action, port, protocol, source, direction."""
     action = spec.get("action", "allow").lower()
     port = str(spec.get("port", "")).strip()
     protocol = spec.get("protocol", "").lower().strip()
     source = spec.get("source", "").strip()
+    direction = str(spec.get("direction", "in") or "in").lower().strip()
 
     if action not in ("allow", "deny", "reject", "limit"):
         raise FirewallError(f"invalid action: {action}", code="invalid")
     if not port:
         raise FirewallError("port is required", code="invalid")
 
+    if direction not in ("in", "out"):
+        raise FirewallError(f"invalid direction: {direction}", code="invalid")
+    if protocol and protocol not in ("any", "tcp", "udp"):
+        raise FirewallError(f"invalid protocol: {protocol}", code="invalid")
+
+    if direction == "out":
+        # ufw outbound: "ufw allow out 80/tcp", optionally scoped to a
+        # destination with "ufw allow out to <dest> port <p>[/proto]".
+        if source:
+            cmd = ["sudo", "-S", "ufw", action, "out", "to", source, "port", port]
+        else:
+            cmd = ["sudo", "-S", "ufw", action, "out", port]
+        if protocol in ("tcp", "udp"):
+            cmd.append(protocol)
+        return _run(cmd, password=password, timeout=15)
+
     cmd = ["sudo", "-S", "ufw", action]
     if source:
         cmd += ["from", source]
     cmd += ["to", "any", "port", port]
-    if protocol and protocol not in ("any", "tcp", "udp"):
-        raise FirewallError(f"invalid protocol: {protocol}", code="invalid")
     if protocol in ("tcp", "udp"):
         cmd.append(protocol)
     return _run(cmd, password=password, timeout=15)
@@ -294,7 +310,7 @@ def _ufw_delete_rule(spec: dict, password: str) -> str:
         return _run(["sudo", "-S", "ufw", "delete", str(num)],
                     password=password, timeout=15)
     action = spec.get("action", "allow").lower()
-    port = str(spec.get("port", "")).strip()
+    port = str(spec.get("port", "")).strip().split("/")[0]
     protocol = spec.get("protocol", "").lower().strip()
     if not port:
         raise FirewallError("port is required", code="invalid")
@@ -387,7 +403,9 @@ def _firewalld_apply(action: str, password: str) -> str:
 
 def _firewalld_add_rule(spec: dict, password: str) -> str:
     action = spec.get("action", "allow").lower()
-    port = str(spec.get("port", "")).strip()
+    # Normalized specs never carry a "/proto" suffix, but tolerate it for
+    # callers that bypass build_rule_spec. firewalld ranges use "-", not ":".
+    port = str(spec.get("port", "")).strip().split("/")[0].replace(":", "-")
     protocol = spec.get("protocol", "").lower().strip()
     source = spec.get("source", "").strip()
 
@@ -419,7 +437,7 @@ def _firewalld_add_rule(spec: dict, password: str) -> str:
 
 
 def _firewalld_delete_rule(spec: dict, password: str) -> str:
-    port = str(spec.get("port", "")).strip()
+    port = str(spec.get("port", "")).strip().split("/")[0].replace(":", "-")
     protocol = spec.get("protocol", "").lower().strip()
     source = spec.get("source", "").strip()
     if not port:
@@ -499,6 +517,36 @@ def set_default(policy: str, direction: str, password: str) -> dict:
     return {"ok": True, "output": out or f"default {direction} = {policy}"}
 
 
+def _validate_source(src: str) -> str:
+    """Validate a ufw ``from`` source as IP or CIDR. Returns normalized str."""
+    if not src:
+        return ""
+    try:
+        # Accept both bare addresses and CIDR ranges, v4 and v6.
+        if "/" in src:
+            return str(ipaddress.ip_network(src, strict=False))
+        return str(ipaddress.ip_address(src))
+    except ValueError:
+        raise FirewallError(
+            f"invalid source: {src!r} (expected IP or CIDR, e.g. 10.0.0.5 or 192.168.1.0/24)",
+            code="invalid",
+        )
+
+
+def _covers_ssh_port(prt_core: str) -> bool:
+    """True when a normalized port spec (``22`` or ``lo:hi``) covers port 22."""
+    if ":" in prt_core:
+        lo, _, hi = prt_core.partition(":")
+        try:
+            return int(lo) <= 22 <= int(hi)
+        except ValueError:
+            return False
+    try:
+        return int(prt_core) == 22
+    except ValueError:
+        return False
+
+
 def build_rule_spec(
     action: str = "allow",
     port: str = "",
@@ -535,6 +583,8 @@ def build_rule_spec(
     src = (source or "").strip()
     if src.lower() in ("", "any", "anywhere"):
         src = ""
+    else:
+        src = _validate_source(src)
     direc = (direction or "in").strip().lower()
     if direc not in ("in", "out"):
         raise FirewallError(f"invalid direction: {direction!r}", code="invalid")
@@ -543,22 +593,57 @@ def build_rule_spec(
     preview = (
         f"{act} {direc} proto {proto} from {src or 'any'} to any port {prt_core}"
     )
-    # SSH lockout heuristic: denying inbound 22 without source restriction.
+    # SSH lockout heuristic: denying inbound SSH without a source
+    # restriction, whether the port is written as "22", "22:22", or a
+    # range covering 22 (e.g. "20:25").
     lockout_warning = (
-        act in ("deny", "reject") and direc == "in" and prt_core == "22" and not src
+        act in ("deny", "reject") and direc == "in"
+        and _covers_ssh_port(prt_core) and not src
     )
     return {"spec": spec, "preview": preview, "lockout_warning": lockout_warning}
 
 
 def add_rule(spec: dict, password: str) -> dict:
+    """Validate via :func:`build_rule_spec`, then apply to the backend.
+
+    The preview endpoint and this mutation therefore always agree on
+    what "valid" means. A rule that would lock out inbound SSH requires
+    an explicit ``confirm_lockout`` flag in ``spec``; without it a
+    ``FirewallError`` with code ``confirm_required`` is raised (mapped
+    to HTTP 409 by the API) carrying the preview + lockout_warning so
+    the UI can ask for confirmation and resubmit.
+    """
+    data = dict(spec or {})
+    confirmed_raw = data.pop("confirm_lockout", False)
+    confirmed = str(confirmed_raw).lower() in ("1", "true", "yes", "on") \
+        if not isinstance(confirmed_raw, bool) else confirmed_raw
+    checked = build_rule_spec(
+        action=data.get("action", "allow"),
+        port=str(data.get("port", "")),
+        protocol=data.get("protocol", "tcp"),
+        source=data.get("source", ""),
+        direction=data.get("direction", "in"),
+    )
+    if checked["lockout_warning"] and not confirmed:
+        err = FirewallError(
+            "refusing to deny inbound SSH without a source restriction "
+            "(resubmit with confirm_lockout=true to proceed)",
+            code="confirm_required",
+        )
+        err.preview = checked["preview"]  # type: ignore[attr-defined]
+        err.lockout_warning = True  # type: ignore[attr-defined]
+        raise err
+    normalized = checked["spec"]
     det = is_available()
     if not det["available"]:
         raise FirewallError(det["reason"], code="missing_tool")
     if det["backend"] == "ufw":
-        out = _ufw_add_rule(spec, password)
+        out = _ufw_add_rule(normalized, password)
     else:
-        out = _firewalld_add_rule(spec, password)
-    return {"ok": True, "output": out or "rule added"}
+        out = _firewalld_add_rule(normalized, password)
+    return {"ok": True, "output": out or "rule added",
+            "preview": checked["preview"],
+            "lockout_warning": checked["lockout_warning"]}
 
 
 def delete_rule(spec: dict, password: str) -> dict:

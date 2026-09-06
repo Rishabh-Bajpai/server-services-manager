@@ -26,7 +26,27 @@ _SAR_DIR = "/var/log/sysstat"
 _SAR_GLOB = os.path.join(_SAR_DIR, "sa[0-9][0-9]")
 _SAR_TIMEOUT = 15
 
-_TIME_RE = re.compile(r"^(\d{2}:\d{2}:\d{2})")
+_TIME_RE = re.compile(r"^(\d{2}:\d{2}:\d{2})(?:\s+[AP]M)?")
+
+# Sentinel: sar timestamps may be followed by an AM/PM token on 12-hour
+# locales (e.g. "12:10:00 AM lo ..."). All parsers strip that token via
+# _split_sar_line() and then locate values by header column name instead
+# of hardcoded positions, so locale/version drift cannot mislabel data.
+
+
+def _split_sar_line(line: str):
+    """Split a sar data/header line into (time, rest_tokens).
+
+    Returns ``None`` when the line is not timestamped (headers without
+    timestamps, blank lines, "Average:" summaries, Linux banner, ...).
+    The optional AM/PM marker on 12-hour locales is consumed here so
+    callers never see it as an interface/CPU column.
+    """
+    m = _TIME_RE.match(line)
+    if not m:
+        return None
+    rest = line[m.end():].split()
+    return m.group(1), rest
 
 
 class HistoryError(Exception):
@@ -61,7 +81,11 @@ def list_reports() -> List[Dict[str, Any]]:
 
     Each entry: ``{"id": "sa10", "path": ..., "label": ..., "mtime": ...}``.
     ``id`` is the basename so the API never leaks absolute paths.
+    ``label`` adds a human-readable day (``sa10 (2026-09-04)``) so the
+    UI dropdown is not a cryptic bare id.
     """
+    import datetime
+
     out: List[Dict[str, Any]] = []
     for path in sorted(glob.glob(_SAR_GLOB)):
         base = os.path.basename(path)
@@ -69,10 +93,15 @@ def list_reports() -> List[Dict[str, Any]]:
             mtime = os.path.getmtime(path)
         except OSError:
             mtime = 0.0
+        try:
+            day = datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
+            label = f"{base} ({day})" if mtime else base
+        except (OSError, OverflowError, ValueError):
+            label = base
         out.append(
             {
                 "id": base,
-                "label": base,
+                "label": label,
                 "mtime": mtime,
             }
         )
@@ -126,40 +155,56 @@ def _parse_float(tok: str) -> Optional[float]:
 
 
 def get_cpu_history(report: Optional[str] = None, limit: int = 500) -> Dict[str, Any]:
-    """Parse ``sar -u`` for user/system/idle over time."""
+    """Parse ``sar -u`` for user/system/idle over time.
+
+    Header-driven: the ``%user``/``%system``/``%idle`` column positions
+    are read from sar's own header row, so extra columns or a missing
+    CPU column across sysstat versions cannot shift the values.
+    """
     path = _resolve_report(report)
     out = _run_sar(["-u", "-f", path])
     metrics: List[Dict[str, Any]] = []
+    truncated = False
+    header: Optional[List[str]] = None
+    user_idx = system_idx = idle_idx = -1
     for raw in out.splitlines():
         line = raw.strip()
-        m = _TIME_RE.match(line)
-        if not m:
+        split = _split_sar_line(line)
+        if not split:
             continue
-        parts = line.split()
-        # sar -u columns: time CPU %user %nice %system %iowait %steal %idle
-        # Some versions omit CPU column when -u without -P. Handle both.
-        nums = [_parse_float(t) for t in parts[1:]]
-        nums = [n for n in nums if n is not None]
-        if len(nums) < 3:
+        tstamp, rest = split
+        if not rest:
             continue
-        # Heuristic: last value is %idle, first numeric after time/CPU is %user.
-        # For "time CPU user nice system ... idle": nums = [cpu?, user, nice, system, ..., idle]
-        # For "time user nice system ... idle": nums = [user, nice, system, ..., idle]
-        idle = nums[-1]
-        if len(nums) >= 7:
-            user = nums[1]
-            system = nums[3]
-        elif len(nums) >= 6:
-            user = nums[0]
-            # nums = [user, nice, system, iowait, steal, idle] (no CPU col)
-            system = nums[2]
-        else:
-            user = nums[0]
-            system = nums[1] if len(nums) > 1 else 0.0
+        lowered = [t.lower() for t in rest]
+        if any(t.startswith("%") for t in rest):
+            # Header row, e.g. "CPU %user %nice %system ... %idle".
+            header = lowered
+            try:
+                user_idx = header.index("%user")
+                idle_idx = header.index("%idle")
+                system_idx = header.index("%system")
+            except ValueError:
+                header = None
+                user_idx = system_idx = idle_idx = -1
+            continue
+        if header is None or user_idx < 0 or idle_idx < 0 or system_idx < 0:
+            continue
+        if len(rest) <= max(user_idx, system_idx, idle_idx):
+            continue
+        # Skip per-CPU rows ("0", "1", ...) — only the "all" aggregate.
+        cpu_col = header.index("cpu") if "cpu" in header else -1
+        if cpu_col >= 0 and len(rest) > cpu_col:
+            if rest[cpu_col].lower() != "all":
+                continue
+        user = _parse_float(rest[user_idx])
+        system = _parse_float(rest[system_idx])
+        idle = _parse_float(rest[idle_idx])
+        if user is None or system is None or idle is None:
+            continue
         total = max(0.0, min(100.0, 100.0 - idle))
         metrics.append(
             {
-                "time": m.group(1),
+                "time": tstamp,
                 "user": round(user, 2),
                 "system": round(system, 2),
                 "idle": round(idle, 2),
@@ -167,34 +212,62 @@ def get_cpu_history(report: Optional[str] = None, limit: int = 500) -> Dict[str,
             }
         )
         if len(metrics) >= limit:
+            truncated = True
             break
     return {
         "report": os.path.basename(path),
         "metrics": metrics,
         "count": len(metrics),
+        "truncated": truncated,
     }
 
 
 def get_memory_history(report: Optional[str] = None, limit: int = 500) -> Dict[str, Any]:
-    """Parse ``sar -r`` for available/used/percent over time."""
+    """Parse ``sar -r`` for available/used/percent over time.
+
+    Header-driven: ``kbmemfree``/``kbavail``/``kbmemused``/``%memused``
+    positions come from sar's header row, tolerating columns added or
+    removed across sysstat versions.
+    """
     path = _resolve_report(report)
     out = _run_sar(["-r", "-f", path])
     metrics: List[Dict[str, Any]] = []
+    truncated = False
+    header: Optional[List[str]] = None
+    idx_free = idx_avail = idx_used = idx_pct = -1
     for raw in out.splitlines():
         line = raw.strip()
-        m = _TIME_RE.match(line)
-        if not m:
+        split = _split_sar_line(line)
+        if not split:
             continue
-        parts = line.split()
-        nums = [_parse_float(t) for t in parts[1:]]
-        nums = [n for n in nums if n is not None]
-        # sar -r: kbmemfree kbavail kbmemused %memused kbbuffers kbcached ...
-        if len(nums) < 4:
+        tstamp, rest = split
+        if not rest:
             continue
-        free_kb, avail_kb, used_kb, pct = nums[0], nums[1], nums[2], nums[3]
+        lowered = [t.lower() for t in rest]
+        if "kbmemfree" in lowered or "%memused" in lowered:
+            header = lowered
+            try:
+                idx_free = header.index("kbmemfree")
+                idx_avail = header.index("kbavail")
+                idx_used = header.index("kbmemused")
+                idx_pct = header.index("%memused")
+            except ValueError:
+                header = None
+                idx_free = idx_avail = idx_used = idx_pct = -1
+            continue
+        if header is None or min(idx_free, idx_avail, idx_used, idx_pct) < 0:
+            continue
+        if len(rest) <= max(idx_free, idx_avail, idx_used, idx_pct):
+            continue
+        free_kb = _parse_float(rest[idx_free])
+        avail_kb = _parse_float(rest[idx_avail])
+        used_kb = _parse_float(rest[idx_used])
+        pct = _parse_float(rest[idx_pct])
+        if free_kb is None or avail_kb is None or used_kb is None or pct is None:
+            continue
         metrics.append(
             {
-                "time": m.group(1),
+                "time": tstamp,
                 "free_gb": round(free_kb / 1024 / 1024, 3),
                 "avail_gb": round(avail_kb / 1024 / 1024, 3),
                 "used_gb": round(used_kb / 1024 / 1024, 3),
@@ -202,39 +275,68 @@ def get_memory_history(report: Optional[str] = None, limit: int = 500) -> Dict[s
             }
         )
         if len(metrics) >= limit:
+            truncated = True
             break
     return {
         "report": os.path.basename(path),
         "metrics": metrics,
         "count": len(metrics),
+        "truncated": truncated,
     }
 
 
 def get_network_history(
     report: Optional[str] = None, limit: int = 1000
 ) -> Dict[str, Any]:
-    """Parse ``sar -n DEV`` for per-interface rx/tx kB/s over time."""
+    """Parse ``sar -n DEV`` for per-interface rx/tx kB/s over time.
+
+    Header-driven: the ``IFACE``/``rxkB/s``/``txkB/s`` positions come
+    from sar's header row, and a 12-hour-locale ``AM``/``PM`` token is
+    stripped by :func:`_split_sar_line`, so values can never be shifted
+    into packet-rate columns. Loopback (``lo``) is excluded from the
+    series, matching the UI's "all interfaces, totaled" chart.
+    """
     path = _resolve_report(report)
     out = _run_sar(["-n", "DEV", "-f", path])
     metrics: List[Dict[str, Any]] = []
+    truncated = False
+    header: Optional[List[str]] = None
+    idx_iface = idx_rx = idx_tx = -1
     for raw in out.splitlines():
         line = raw.strip()
-        m = _TIME_RE.match(line)
-        if not m:
+        split = _split_sar_line(line)
+        if not split:
             continue
-        parts = line.split()
-        if len(parts) < 6:
+        tstamp, rest = split
+        if not rest:
             continue
-        # time IFACE rxpck/s txpck/s rxkB/s txkB/s ...
-        iface = parts[1]
-        rx = _parse_float(parts[4])
-        tx = _parse_float(parts[5])
+        lowered = [t.lower() for t in rest]
+        if "iface" in lowered:
+            header = lowered
+            try:
+                idx_iface = header.index("iface")
+                idx_rx = header.index("rxkb/s")
+                idx_tx = header.index("txkb/s")
+            except ValueError:
+                header = None
+                idx_iface = idx_rx = idx_tx = -1
+            continue
+        if header is None or min(idx_iface, idx_rx, idx_tx) < 0:
+            continue
+        if len(rest) <= max(idx_iface, idx_rx, idx_tx):
+            continue
+        iface = rest[idx_iface]
+        if iface.upper() == "IFACE":
+            continue
+        if iface == "lo":
+            continue
+        rx = _parse_float(rest[idx_rx])
+        tx = _parse_float(rest[idx_tx])
         if rx is None or tx is None:
             continue
-        # Skip aggregate / loopback noise like Laranode UI does per-iface.
         metrics.append(
             {
-                "time": m.group(1),
+                "time": tstamp,
                 "interface": iface,
                 "rx_kbs": round(rx, 2),
                 "tx_kbs": round(tx, 2),
@@ -242,9 +344,11 @@ def get_network_history(
             }
         )
         if len(metrics) >= limit:
+            truncated = True
             break
     return {
         "report": os.path.basename(path),
         "metrics": metrics,
         "count": len(metrics),
+        "truncated": truncated,
     }

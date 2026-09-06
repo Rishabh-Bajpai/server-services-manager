@@ -42,3 +42,18 @@ def test_get_summaries_caps_and_dedupes():
         out = so.get_summaries(units)
         assert [o["name"] for o in out] == ["a.service", "b.service"]
         assert m.call_count == 2
+
+
+def test_uint64_max_sentinel_treated_as_unknown():
+    out_text = (
+        "Id=docker.service\nLoadState=loaded\nActiveState=active\nSubState=running\n"
+        "MainPID=123\nMemoryCurrent=18446744073709551615\nMemoryPeak=18446744073709551615\n"
+        "CPUUsageNSec=18446744073709551615\n"
+        "ActiveEnterTimestamp=Thu 2026-09-04 00:00:00 UTC\nUnitFileState=enabled\nDescription=Docker\n"
+    )
+    with patch("app.service_overview.subprocess.run", return_value=_result(out_text)):
+        out = so.get_summary("docker.service")
+        assert out["exists"] is True
+        assert out["memory_bytes"] == 0
+        assert out["memory_peak"] == 0
+        assert out["cpu_nsec"] == 0
