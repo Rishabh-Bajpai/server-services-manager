@@ -1126,10 +1126,14 @@
         if (!selected) return;
         const c = containers.find(x => x.full_id === selected);
         document.getElementById('remove-name').textContent = (c && c.name) || (detail && detail.name) || selected;
+        // NB: 'open' class required — the shared header macro emits
+        // `.modal-backdrop { display: none }` after this page's styles.
         document.getElementById('remove-modal').classList.remove('hidden');
+        document.getElementById('remove-modal').classList.add('open');
     }
     function closeRemoveModal() {
         document.getElementById('remove-modal').classList.add('hidden');
+        document.getElementById('remove-modal').classList.remove('open');
     }
     function executeRemove() {
         if (!selected) return;

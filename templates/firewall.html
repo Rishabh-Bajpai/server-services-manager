@@ -466,8 +466,22 @@
         });
     }
 
+    // NB: modals need the 'open' class as well as hidden removal:
+    // the shared header macro emits its own `.modal-backdrop
+    // { display: none }` *after* this page's styles, so hidden-only
+    // toggling leaves them invisible. `.modal-backdrop.open` wins.
+    function showModal(id) {
+        const el = document.getElementById(id);
+        el.classList.remove('hidden');
+        el.classList.add('open');
+    }
+    function hideModal(id) {
+        const el = document.getElementById(id);
+        el.classList.add('hidden');
+        el.classList.remove('open');
+    }
     function openAddRule() {
-        document.getElementById('add-modal').classList.remove('hidden');
+        showModal('add-modal');
         previewRule();
     }
     let previewTimer = null;
@@ -506,7 +520,7 @@
             });
     }
     function closeAddRule() {
-        document.getElementById('add-modal').classList.add('hidden');
+        hideModal('add-modal');
         document.getElementById('rule-password').value = '';
     }
     function submitAddRule(confirmed) {
@@ -553,10 +567,10 @@
     }
 
     function openDefault() {
-        document.getElementById('default-modal').classList.remove('hidden');
+        showModal('default-modal');
     }
     function closeDefaultModal() {
-        document.getElementById('default-modal').classList.add('hidden');
+        hideModal('default-modal');
         document.getElementById('default-password').value = '';
     }
     function submitDefault() {
@@ -583,10 +597,10 @@
         document.getElementById('toggle-body').textContent = action === 'enable'
             ? 'Enabling the firewall will activate the configured rules immediately.'
             : 'Disabling the firewall will stop all filtering. Incoming connections will be unrestricted until re-enabled.';
-        document.getElementById('toggle-modal').classList.remove('hidden');
+        showModal('toggle-modal');
     }
     function closeToggle() {
-        document.getElementById('toggle-modal').classList.add('hidden');
+        hideModal('toggle-modal');
         document.getElementById('toggle-password').value = '';
         toggleAction = null;
     }

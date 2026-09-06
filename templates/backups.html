@@ -435,11 +435,24 @@
         });
     }
 
+    // NB: modals need the 'open' class too — the shared header
+    // macro emits `.modal-backdrop { display: none }` after this
+    // page's styles, so hidden-only toggling leaves them invisible.
+    function showModal(id) {
+        const el = document.getElementById(id);
+        el.classList.remove('hidden');
+        el.classList.add('open');
+    }
+    function hideModal(id) {
+        const el = document.getElementById(id);
+        el.classList.add('hidden');
+        el.classList.remove('open');
+    }
     function openCreate() {
-        document.getElementById('create-modal').classList.remove('hidden');
+        showModal('create-modal');
     }
     function closeCreate() {
-        document.getElementById('create-modal').classList.add('hidden');
+        hideModal('create-modal');
     }
     function submitCreate() {
         const preset = document.getElementById('f-schedule-preset').value;
@@ -504,10 +517,10 @@
                     load();
                 });
         };
-        document.getElementById('confirm-modal').classList.remove('hidden');
+        showModal('confirm-modal');
     }
     function closeConfirm() {
-        document.getElementById('confirm-modal').classList.add('hidden');
+        hideModal('confirm-modal');
         confirmCallback = null;
     }
     function submitConfirm() {

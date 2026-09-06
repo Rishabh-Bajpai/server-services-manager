@@ -1227,6 +1227,25 @@ subheader.
 Verified live with screenshots (zero JS errors,
 `node --check` clean); secrets clean.
 
+### Route 11 follow-up II — invisible modals  [x]
+
+User report: Default policy and Add rule buttons do
+nothing. Root cause, found by reading the stylesheets, not
+the handlers (the JS was flawless): the shared header macro
+(`_macros.html`) emits its own `.modal-backdrop { display:
+none }` *after* each page's `<style>`, so at equal
+specificity the macro rule beats the page's `display: flex`
+— removing `hidden` alone can never show the modal. The
+codebase convention (used by cluster/ssh/files) is an
+`open` class for exactly this; firewall/backups/docker
+predate it. Fix: `showModal()`/`hideModal()` helpers (plus
+the equivalent lines in docker's remove modal) toggle both
+classes. Same latent bug fixed proactively in backups
+(create/confirm) and docker (remove) — all verified by
+**computed display** (`flex` open / `none` closed) plus a
+screenshot, since classList checks are what let this slip
+through the first time. Secrets clean.
+
 ### Next route: (to be picked — `/backups` is next in line)
 
 ---
