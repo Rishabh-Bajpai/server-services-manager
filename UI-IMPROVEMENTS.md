@@ -900,6 +900,18 @@ clean; this host has no monitored services so filters were
 proven with 3 synthetic events): service filter "api" → 2
 rows, plus healthy-state → 0 rows with "0 / 3 events".
 
+4. **Nav label mismatch.** The More menu / mobile tiles said
+   "Health" while the page, tab title, and command palette all
+   say "Health & Notifications". Nav macro updated to the full
+   name (verified highlighted + active on the page).
+5. **Empty-state chopped and left-aligned.** The "No monitored
+   services yet" message was a `<td class="empty">` inside the
+   table, rendering off-left and clipped. Replaced with a
+   centered div below the table (same pattern as the events
+   table on this page), including the `health_check` onboarding
+   hint. Verified centered, unclipped, and hidden once rows
+   arrive.
+
 ### Next route: (to be picked — `/notifications` done)
 
 ---

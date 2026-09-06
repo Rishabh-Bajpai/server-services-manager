@@ -180,6 +180,10 @@
                     </thead>
                     <tbody id="states-tbody"></tbody>
                 </table>
+                <div id="states-empty" class="empty">
+                    <i data-lucide="inbox" class="w-10 h-10 opacity-40"></i>
+                    <p class="text-sm">No monitored services yet. Add a <code class="font-mono text-[var(--accent-green)]">health_check</code> block to a service in <code class="font-mono text-[var(--accent-green)]">config.yaml</code> to start.</p>
+                </div>
             </div>
         </div>
 
@@ -242,10 +246,13 @@
 
         function renderStates(states) {
             const tbody = $('states-tbody');
+            const empty = $('states-empty');
             if (!states || states.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="empty">No monitored services yet.</td></tr>';
+                tbody.innerHTML = '';
+                empty.style.display = 'flex';
                 return;
             }
+            empty.style.display = 'none';
             tbody.innerHTML = states.map(s => {
                 const cls = s.last_state === 'healthy' ? 'healthy' : s.last_state === 'unhealthy' ? 'unhealthy' : 'unknown';
                 const stateBadge = s.last_state === 'healthy'
