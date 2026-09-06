@@ -245,8 +245,8 @@
                 <span class="hidden 2xl:inline">Export</span>
             </a>
             <button onclick="openPalette()" class="btn" title="Command palette (Ctrl+K)">
-                <i data-lucide="search" class="w-3.5 h-3.5"></i>
-                <kbd class="hidden md:inline text-[10px] font-mono opacity-60">⌘K</kbd>
+                <i data-lucide="command" class="w-3.5 h-3.5"></i>
+                <span class="hidden md:inline text-[11px] font-medium opacity-70">Command + K</span>
             </button>
             <a href="/docs/" target="_blank" rel="noopener"
                 class="btn"
@@ -288,18 +288,26 @@
                 <div class="w-12 h-1 rounded-full bg-[var(--border-active)] group-hover:bg-[var(--accent-blue)]/50 transition-colors"></div>
             </div>
 
-            <!-- Terminal Pane (Bottom) -->
-            <div id="terminal-pane" class="h-[280px] min-h-[150px] bg-[var(--bg-primary)] flex flex-col p-3 sm:p-6 pt-2">
+            <!-- Terminal Pane (Bottom). shrink-0 so flexbox never
+                 squishes it back once the services pane hits its floor. -->
+            <div id="terminal-pane" class="h-[280px] min-h-[150px] shrink-0 bg-[var(--bg-primary)] flex flex-col p-3 sm:p-6 pt-2">
                 <section class="flex-1 bg-[var(--bg-card)] rounded-2xl border border-[var(--border-subtle)] overflow-hidden flex flex-col shadow-xl">
                     <div class="flex items-center justify-between border-b border-[var(--border-subtle)] px-3 py-2 shrink-0 bg-[var(--bg-secondary)]">
                         <div class="flex items-center gap-1 overflow-x-auto no-scrollbar" id="terminal-tabs">
                             <!-- Tabs injected here -->
                         </div>
-                        <button onclick="createNewTerminal()"
-                            class="p-2 hover:bg-white/5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-all"
-                            title="New Terminal">
-                            <i data-lucide="plus" class="w-4 h-4"></i>
-                        </button>
+                        <div class="flex items-center gap-1 shrink-0">
+                            <button onclick="toggleTerminalMaximize()" id="terminal-maximize-btn"
+                                class="p-2 hover:bg-white/5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-all"
+                                title="Maximize terminal">
+                                <i data-lucide="maximize-2" class="w-4 h-4"></i>
+                            </button>
+                            <button onclick="createNewTerminal()"
+                                class="p-2 hover:bg-white/5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-all"
+                                title="New Terminal">
+                                <i data-lucide="plus" class="w-4 h-4"></i>
+                            </button>
+                        </div>
                     </div>
                     <div id="terminal-container" class="flex-1 bg-[#0a0a0f] relative">
                         <div id="terminal-hint" class="absolute inset-0 flex items-center justify-center text-[var(--text-muted)] text-sm select-none pointer-events-none">
@@ -519,20 +527,18 @@
 
         let isResizing = false;
 
-        function _doResize(clientY) {
-            const containerRect = appContainer.getBoundingClientRect();
-            const newTerminalHeight = containerRect.bottom - clientY;
-            const MIN_TERMINAL_HEIGHT = 150;
-            const MAX_TERMINAL_HEIGHT = containerRect.height - 150;
-            if (newTerminalHeight >= MIN_TERMINAL_HEIGHT && newTerminalHeight <= MAX_TERMINAL_HEIGHT) {
-                terminalPane.style.height = `${newTerminalHeight}px`;
-            }
-        }
-        function _endResize() {
-            isResizing = false;
-            document.body.style.cursor = '';
-            document.body.style.userSelect = '';
-            if (resizer) resizer.classList.remove('bg-blue-600/20');
+        // The terminal can cover the whole content area: past the
+        // services pane's content floor the pane is hidden and the
+        // terminal takes everything except the resizer bar (which stays
+        // visible so you can always drag back down).
+        // The services pane has a min-h class so it never collapses under
+        // a small terminal. While dragging/maximizing we relax it inline,
+        // otherwise flexbox clamps the pane and the drag hits a ceiling.
+        const SERVICES_MIN_PX = 250;
+        let terminalMaximized = false;
+        let preMaximizeHeight = null;
+
+        function _fitActiveTerminal() {
             if (typeof activeTerminalId !== 'undefined' && activeTerminalId && terminals[activeTerminalId]) {
                 const session = terminals[activeTerminalId];
                 session.fitAddon.fit();
@@ -541,6 +547,98 @@
                     socket.emit('terminal_resize', { id: activeTerminalId, cols: dims.cols, rows: dims.rows });
                 }
             }
+        }
+
+        function _fullTerminalHeight() {
+            const containerRect = appContainer.getBoundingClientRect();
+            const resizerH = resizer ? resizer.getBoundingClientRect().height : 12;
+            return containerRect.height - resizerH;
+        }
+
+        function _setTerminalHeight(px) {
+            terminalPane.style.height = `${px}px`;
+            // Fit after layout settles (double rAF), so xterm measures
+            // the real width instead of the pre-layout one.
+            requestAnimationFrame(() => requestAnimationFrame(() => _fitActiveTerminal()));
+        }
+
+        function toggleTerminalMaximize() {
+            const containerRect = appContainer.getBoundingClientRect();
+            const btn = document.getElementById('terminal-maximize-btn');
+            if (!terminalMaximized) {
+                preMaximizeHeight = terminalPane.style.height || '';
+                servicesPane.style.minHeight = '0px';
+                servicesPane.style.display = 'none';
+                _setTerminalHeight(_fullTerminalHeight());
+                terminalMaximized = true;
+                if (btn) {
+                    btn.title = 'Restore terminal size';
+                    btn.innerHTML = '<i data-lucide="minimize-2" class="w-4 h-4"></i>';
+                    lucide.createIcons();
+                }
+            } else {
+                servicesPane.style.display = '';
+                if (preMaximizeHeight) terminalPane.style.height = preMaximizeHeight;
+                else terminalPane.style.removeProperty('height');
+                const cRect = appContainer.getBoundingClientRect();
+                const tH = terminalPane.getBoundingClientRect().height;
+                servicesPane.style.minHeight = (cRect.height - tH >= SERVICES_MIN_PX) ? '' : '0px';
+                terminalMaximized = false;
+                if (btn) {
+                    btn.title = 'Maximize terminal';
+                    btn.innerHTML = '<i data-lucide="maximize-2" class="w-4 h-4"></i>';
+                    lucide.createIcons();
+                }
+                requestAnimationFrame(() => requestAnimationFrame(() => _fitActiveTerminal()));
+            }
+        }
+
+        function _doResize(clientY) {
+            const containerRect = appContainer.getBoundingClientRect();
+            const newTerminalHeight = containerRect.bottom - clientY;
+            const MIN_TERMINAL_HEIGHT = 150;
+            // Full coverage: once the services pane hits its content
+            // floor it can't shrink further and flexbox starts squishing
+            // the terminal back — so past that point hide the pane and
+            // let the terminal take everything except the resizer bar
+            // (which stays visible so you can always drag back down).
+            const FULL_H = _fullTerminalHeight();
+            servicesPane.style.minHeight = '0px';
+            if (newTerminalHeight < MIN_TERMINAL_HEIGHT) return;
+            if (terminalMaximized) {
+                terminalMaximized = false;
+                const btn = document.getElementById('terminal-maximize-btn');
+                if (btn) {
+                    btn.title = 'Maximize terminal';
+                    btn.innerHTML = '<i data-lucide="maximize-2" class="w-4 h-4"></i>';
+                    lucide.createIcons();
+                }
+            }
+            if (newTerminalHeight >= FULL_H) {
+                servicesPane.style.display = 'none';
+                _setTerminalHeight(FULL_H);
+            } else {
+                servicesPane.style.display = '';
+                _setTerminalHeight(newTerminalHeight);
+            }
+        }
+        function _endResize() {
+            isResizing = false;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            if (resizer) resizer.classList.remove('bg-blue-600/20');
+            // If the terminal was dragged back down to a size where the
+            // services pane fits naturally, restore the pane fully.
+            // Otherwise keep the tall state so it sticks.
+            const termH = terminalPane.getBoundingClientRect().height;
+            if (termH < _fullTerminalHeight() - 1) {
+                servicesPane.style.display = '';
+                const containerRect = appContainer.getBoundingClientRect();
+                if (containerRect.height - termH >= SERVICES_MIN_PX) {
+                    servicesPane.style.minHeight = '';
+                }
+            }
+            _fitActiveTerminal();
         }
 
         if (resizer) {
@@ -1447,15 +1545,24 @@
                 session.tab.classList.remove('bg-white/5', 'text-[var(--text-muted)]', 'border-transparent');
                 session.tab.classList.add('bg-[var(--accent-blue)]/10', 'text-[var(--accent-blue)]', 'border-[var(--accent-blue)]/30');
 
-                // Fit terminal
-                requestAnimationFrame(() => {
+                // Fit terminal after layout settles (double rAF). A single
+                // rAF can fire before the unhidden container has its real
+                // width, leaving xterm cropped until the next manual resize.
+                const fitAndNotify = () => {
                     session.fitAddon.fit();
                     const dims = session.fitAddon.proposeDimensions();
                     if (dims) {
                         socket.emit('terminal_resize', { id, cols: dims.cols, rows: dims.rows });
                     }
+                };
+                requestAnimationFrame(() => requestAnimationFrame(() => {
+                    fitAndNotify();
                     session.term.focus();
-                });
+                }));
+                // Fallback: re-fit once layout/fonts are fully settled.
+                setTimeout(() => {
+                    if (activeTerminalId === id && terminals[id]) fitAndNotify();
+                }, 150);
             }
         }
 

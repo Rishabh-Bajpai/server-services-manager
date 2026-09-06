@@ -451,6 +451,79 @@ was similarly hidden on small screens so the row still fits.
 
 ---
 
+## Route-by-route improvement pass
+
+Reviewing and polishing every route one by one, starting with the
+dashboard. Each entry records the user-reported issue, the fix, and
+how it was verified.
+
+### Route 1 — Dashboard (`/`)  [x]
+
+Files: `templates/index.html` (only file changed; no backend changes).
+
+1. **Command palette icon.** The toolbar button used a generic
+   `search` magnifier, identical to filter inputs elsewhere.
+   Changed to the `command` (⌘) icon, the standard command-palette
+   glyph. The `⌘K` kbd badge rendered as odd-looking text, so it
+   was replaced with a plain `Command + K` text label (tooltip
+   still reads "Command palette (Ctrl+K)").
+
+2. **Terminal maximize.** Added a maximize/restore button
+   (`maximize-2` / `minimize-2` icon) in the terminal header next
+   to the `+` button. Maximizing hides the services pane and grows
+   the terminal to the full content height; restoring returns the
+   previous height. Manually dragging while maximized exits
+   maximize mode cleanly (pane visibility is restored).
+
+3. **Draggable to full page.** The divider previously stopped well
+   short of the top. Three stacked causes were found and fixed:
+   - The drag cap only allowed `container − 150px` (later `−48px`,
+     then `−32px`); it now allows the full height.
+   - `#services-pane` carries a `min-h-[250px]` class, so flexbox
+     clamped it during a plain drag and the divider hit a ceiling.
+     The min-height is now relaxed inline while dragging and
+     restored on release when the terminal is back to normal size.
+   - **Root cause (found via live browser measurement):** the
+     terminal pane had default `flex-shrink: 1`, so once the
+     services pane hit its content floor (~48px), flexbox squished
+     the terminal back no matter what height was set. The pane is
+     now `shrink-0`, and past the services floor the pane is
+     hidden (`display: none`) so the terminal takes everything
+     except the 12px divider bar — which stays visible so the user
+     can always drag back down.
+   - Terminal height changes (drag / maximize / restore) re-fit
+     xterm through one shared `_fitActiveTerminal()` helper
+     (double-rAF so layout settles first) instead of three
+     duplicated fit blocks.
+
+4. **Cropped width on new terminals.** `term.open()` ran while the
+   new tab's container was still `hidden`, so xterm measured zero
+   width; the single-rAF fit in `switchTab()` could fire before
+   layout settled, leaving the terminal narrow until the next
+   manual resize. `switchTab()` now fits in a double-rAF plus a
+   150ms fallback re-fit, re-emitting `terminal_resize` each time.
+
+**Verified live** (Playwright against the running server, plus
+`pytest`: 799 passed):
+- Simulated drag to top: terminal 593/605px = 98% coverage,
+  services pane hidden; drag back down restores both panes.
+- Maximize → 593px / hidden; restore → previous sizes back.
+- Scrollbar check: with 30 extra cards injected, the services
+  pane measured `scrollHeight 1672px` vs visible `373px` with
+  `overflow-y: auto` — a vertical scrollbar appears on the right
+  side of the service panel; header, toolbar, divider, and
+  terminal stay fixed. (Test cards removed afterwards.)
+
+**Known remaining sliver:** the 12px divider bar always stays
+visible at full height (it is the drag-back handle). Removing it
+would require button-only restore; left as-is by design.
+
+### Next route: `/monitor` (System Monitor)
+
+The next route in the pass after the dashboard.
+
+---
+
 ## Deferred
 
 These were considered but pushed for later:
