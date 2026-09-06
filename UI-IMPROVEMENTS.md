@@ -594,7 +594,32 @@ Files: `templates/control.html` (only file changed; no backend changes).
   real command output → spinner clears (explicit-event path).
 - Escape closes the output drawer.
 
-### Next route: (to be picked — `/control` done)
+### Route 4 — System Services (`/system-services`)  [x]
+
+Files: `templates/system-services.html` (only file changed; no
+backend changes).
+
+1. **Content width.** Same narrow `max-w-7xl` wrapper; now
+   `w-[90%]` capped at 1760px like monitor/control. Measured
+   live: 90%.
+
+2. **Failed detail fetch slammed the panel shut.** Ghost entries
+   such as `-.mount` appear in `list-units` (476 rows here) but
+   `systemctl show` reports them not-found, so the detail API
+   404s. Clicking one flashed an error toast and instantly closed
+   the panel. `openPanel()` now calls a new `showPanelError()`
+   instead: the panel stays open on the Overview tab with a red
+   error badge, the message as the description, all action
+   buttons disabled, and a Retry button in the metadata grid
+   (the toast is kept for visibility).
+
+**Verified live** (Playwright against the running server):
+- cron.service row click → panel opens with the real
+  description ("Regular background program processing da…").
+- `-.mount` → panel stays open showing "Unit not found" with a
+  working Retry button (retry keeps the panel open).
+
+### Next route: (to be picked — `/system-services` done)
 
 ---
 

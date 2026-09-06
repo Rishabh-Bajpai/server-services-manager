@@ -384,7 +384,7 @@
         </button>
     {% endset %}
     {{ ui.subheader(subheader) }}
-<main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+<main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6">
         <!-- Table -->
         <div class="table-wrap animate-fade-in">
             <div class="table-scroll">
@@ -788,14 +788,46 @@
                 const r = await fetch('/api/system-services/' + encodeURIComponent(name));
                 const u = await r.json();
                 if (!r.ok) {
-                    toast(u.error || 'Failed to load unit', 'error');
-                    closePanel();
+                    // Ghost entries (e.g. transient mount units) can appear
+                    // in list-units but fail `systemctl show`. Keep the
+                    // panel open with an inline error instead of slamming
+                    // it shut — the toast alone left users wondering.
+                    showPanelError(name, u.error || 'Failed to load unit');
                     return;
                 }
                 populatePanel(u);
             } catch (e) {
-                toast('Network error: ' + e.message, 'error');
+                showPanelError(name, 'Network error: ' + e.message);
             }
+        }
+
+        // Error state for the side panel: keeps it open on the Overview
+        // tab with an explanation and a Retry button.
+        function showPanelError(name, message) {
+            toast(message, 'error');
+            $('panel-description').textContent = message;
+            $('panel-state-dot').className = 'state-dot state-failed';
+            $('panel-badge-state').className = 'badge badge-red';
+            $('panel-badge-state').textContent = 'error';
+            $('panel-badge-enabled').className = 'badge badge-gray';
+            $('panel-badge-enabled').textContent = '—';
+            $('panel-badge-override').style.display = 'none';
+            for (const id of ['btn-start', 'btn-stop', 'btn-restart', 'btn-reload', 'btn-enable', 'btn-disable', 'btn-mask', 'btn-unmask']) {
+                $(id).disabled = true;
+            }
+            switchTab('overview');
+            const meta = $('panel-meta');
+            meta.innerHTML = '';
+            const item = el('div', { class: 'meta-item', style: 'grid-column:1 / -1' });
+            const retry = el('button', {
+                class: 'row-action-btn restart',
+                style: 'height:auto;padding:0.5rem 0.75rem;width:auto;display:inline-flex;gap:0.375rem',
+                onclick: () => openPanel(name),
+            });
+            retry.innerHTML = '<i data-lucide="refresh-ccw" class="w-3.5 h-3.5"></i><span>Retry</span>';
+            item.append('Failed to load details for this unit. It may be a transient entry. ', retry);
+            meta.appendChild(item);
+            lucide.createIcons();
         }
 
         function closePanel() {
