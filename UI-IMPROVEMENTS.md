@@ -875,7 +875,32 @@ tests. Verified live: dotted name → invalid, dow-7 valid,
 next_run in list payload, "New job" button behavior, zero JS
 errors.
 
-### Next route: (to be picked — `/cron` done)
+### Route 7 — Notifications (`/notifications`)  [x]
+
+Files: `templates/notifications.html` (only file changed; no
+backend changes — the `/api/notifications/state` payload
+already matches what the UI renders, and its unix-float
+timestamps fit `formatTime`).
+
+1. **Content width.** Same narrow `max-w-7xl` wrapper; now
+   `w-[90%]` capped at 1760px. Measured live: 90%.
+2. **Events filter.** The page had no subheader and no way to
+   find events across many services. Added a filter bar:
+   service substring input (150ms debounce) + state select
+   (All/Healthy/Unhealthy/Unknown) + live "N / M events"
+   counter. Filter state survives the 5s re-fetches (applied
+   inside `renderEvents`).
+3. **Socket consistency.** `io()` → `io({ transports:
+   ['websocket'], upgrade: false })` like the monitor page.
+   No auto-refresh pause toggle: both tables are read-only, so
+   re-renders can't steal clicks.
+
+**Verified live** (Playwright, zero JS errors, `node --check`
+clean; this host has no monitored services so filters were
+proven with 3 synthetic events): service filter "api" → 2
+rows, plus healthy-state → 0 rows with "0 / 3 events".
+
+### Next route: (to be picked — `/notifications` done)
 
 ---
 

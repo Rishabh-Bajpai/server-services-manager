@@ -146,7 +146,21 @@
             actions=actions,
             current='/notifications',
         ) }}
-<main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+{% set subheader %}
+        <div class="relative flex-1 min-w-[12rem]">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"></i>
+            <input id="filter-service" type="text" placeholder="Filter events by service…" autocomplete="off" style="background:var(--bg-secondary);border:1px solid var(--border-subtle);border-radius:0.5rem;padding:0.5rem 0.875rem 0.5rem 2.25rem;color:var(--text-primary);font-size:0.8125rem;outline:none;width:100%">
+        </div>
+        <select id="filter-state" title="Filter by state" style="background:var(--bg-secondary);border:1px solid var(--border-subtle);border-radius:0.5rem;padding:0.5rem 0.75rem;font-size:0.8125rem;color:var(--text-primary);outline:none">
+            <option value="all">All states</option>
+            <option value="healthy">Healthy</option>
+            <option value="unhealthy">Unhealthy</option>
+            <option value="unknown">Unknown</option>
+        </select>
+        <span id="event-count" class="text-xs text-[var(--text-muted)] font-mono whitespace-nowrap px-2"></span>
+{% endset %}
+{{ ui.subheader(subheader) }}
+<main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6">
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6 animate-fade-in" id="summary"></div>
 
         <div class="animate-fade-in mb-4" style="animation-delay:0.05s">
@@ -200,7 +214,7 @@
 
     <script>
         lucide.createIcons();
-        const socket = io();
+        const socket = io({ transports: ['websocket'], upgrade: false });
 
         function $(id) { return document.getElementById(id); }
         function escapeHtml(s) {
@@ -249,16 +263,30 @@
             }).join('');
         }
 
+        let lastEvents = [];
+        function eventMatches(e) {
+            const q = ($('filter-service').value || '').toLowerCase();
+            const st = $('filter-state').value || 'all';
+            if (st !== 'all' && (e.state || '') !== st) return false;
+            if (q && !(e.service || '').toLowerCase().includes(q)) return false;
+            return true;
+        }
         function renderEvents(events) {
+            lastEvents = events || [];
+            const list = lastEvents.filter(eventMatches);
             const tbody = $('events-tbody');
             const empty = $('events-empty');
-            if (!events || events.length === 0) {
+            $('event-count').textContent =
+                list.length === lastEvents.length
+                    ? `${lastEvents.length} events`
+                    : `${list.length} / ${lastEvents.length} events`;
+            if (!list.length) {
                 tbody.innerHTML = '';
                 empty.style.display = 'flex';
                 return;
             }
             empty.style.display = 'none';
-            tbody.innerHTML = events.map(e => {
+            tbody.innerHTML = list.map(e => {
                 const badge = e.state === 'healthy' ? 'badge-green' : e.state === 'unhealthy' ? 'badge-red' : 'badge-blue';
                 return `<tr>
                     <td><code class="font-mono font-semibold">${escapeHtml(e.service)}</code></td>
@@ -308,6 +336,13 @@
             toast(`${e.service}: ${e.state} — ${e.detail || 'no detail'}`, isFail ? 'error' : 'success');
             loadState();
         });
+
+        let filterDebounce = null;
+        $('filter-service').addEventListener('input', () => {
+            clearTimeout(filterDebounce);
+            filterDebounce = setTimeout(() => renderEvents(lastEvents), 150);
+        });
+        $('filter-state').addEventListener('change', () => renderEvents(lastEvents));
 
         loadState();
         setInterval(loadState, 5000);
