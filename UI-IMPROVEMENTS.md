@@ -1450,7 +1450,41 @@ secret exposure is documented for prefill, logged-in only).
 Full suite: 855 passed (pre-existing alert_log failure
 excluded); secrets clean.
 
-### Next route: (to be picked — `/files` is next in line)
+### Route 16 — Files (`/files`)  [x]
+
+Files: `templates/files.html`, `server.py` (one-line mode
+field). Backend chroot/caps already sound.
+
+1. **Stored XSS via filenames, three handlers (fixed).**
+   Row navigate/preview, checkbox select, and chmod all
+   used quote-only escaping inside double-quoted
+   `onclick` — a `"` in a filename broke out. Full
+   `escapeAttr()` now. Proven live with planted hostile
+   names at root and in a subdir: zero injected elements,
+   no alert, correct files previewed (all probes removed).
+2. **Search-result clicks hit the WRONG file (fixed).**
+   Matches dropped their paths, so clicking a subdirectory
+   hit joined onto the current dir — including Zip/Delete
+   operating on unintended files. Rows now carry full
+   home-relative paths end to end (click, select, chmod);
+   selection stores paths, not names. Proven live:
+   `probe-sub/nested-'evil.txt` previews correctly.
+3. **Mode column always `---------`, chmod default garbage.**
+   The list route never sent `mode` (only search did), and
+   `String.toString(8)` ignores the radix (`"0420"` for a
+   0644 file). Route now includes `mode`; modal parses
+   properly (decimal `'493'` → `0755`, verified live).
+4. **Content width** 90% (measured). Table/preview 560px
+   caps dropped (items top 263px → ends ~37px above
+   viewport bottom). Unstyled search box fixed (missing
+   `.search-input` CSS). Load/tree failures now toast
+   instead of sticking on "Loading…".
+
+**Verified live** (zero JS errors, `node --check` clean).
+Full suite: 855 passed (pre-existing alert_log failure
+excluded); secrets clean.
+
+### Next route: (to be picked — `/plugins` is next in line)
 
 ---
 

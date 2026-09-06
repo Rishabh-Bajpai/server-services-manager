@@ -71,7 +71,7 @@
         .btn-primary:hover { background: #60a5fa; }
         .btn-danger { background: rgba(239,68,68,0.15); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.3); }
         .btn-danger:hover { background: rgba(239,68,68,0.25); }
-        .text-input {
+        .text-input, .search-input {
             background: var(--bg-secondary);
             border: 1px solid var(--border-subtle);
             border-radius: 0.5rem;
@@ -80,7 +80,7 @@
             font-size: 0.8125rem; outline: none; width: 100%;
             font-family: 'JetBrains Mono', monospace;
         }
-        .text-input:focus { border-color: var(--accent-blue); }
+        .text-input:focus, .search-input:focus { border-color: var(--accent-blue); }
         .empty-state {
             padding: 2rem 1rem; text-align: center;
             color: var(--text-muted); font-size: 0.875rem;
@@ -100,8 +100,7 @@
             overflow-x: auto;
         }
         .tree-scroll, .items-scroll {
-            max-height: 560px;
-            max-height: min(560px, calc(100dvh - 300px));
+            max-height: calc(100dvh - 300px);
         }
         .tree-scroll { overflow-y: auto; }
         .items-scroll { overflow: auto; }
@@ -158,8 +157,7 @@
             border: 1px solid var(--border-subtle);
             border-radius: 0.5rem;
             padding: 1rem;
-            max-height: 600px;
-            max-height: min(560px, calc(100dvh - 300px));
+            max-height: calc(100dvh - 300px);
             overflow: auto;
         }
         .preview-text {
@@ -248,7 +246,7 @@
     {% endset %}
     {{ ui.subheader(subheader) }}
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+    <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6">
         <div class="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4">
             <aside class="panel-card p-3">
                 <div class="flex items-center justify-between mb-2">
@@ -328,8 +326,9 @@
         let currentPath = '.';
         let treeCache = null;
         let searchTimeout = null;
-        let selected = new Set();  // paths of currently selected items
+        let selected = new Set();  // full home-relative paths of selected items
         let searchScope = 'cwd';  // 'cwd' | 'global' — drives the /api/files/search?path= value
+        let searchActive = false; // true while a search result list is shown
 
         function api(url, opts = {}) {
             return fetch(url, {
@@ -395,6 +394,9 @@
                 if (status >= 400) { toast(data.error || 'HTTP ' + status, 'error'); return; }
                 treeCache = data;
                 renderTree(data.entries || [], null);
+            }).catch(err => {
+                toast('failed to load tree: ' + (err && err.message ? err.message : err), 'error');
+                document.getElementById('tree').innerHTML = '<div class="empty-state">Could not reach the server.</div>';
             });
         }
 
@@ -428,6 +430,10 @@
                 .then(({ status, data }) => {
                     if (status >= 400) { toast(data.error || 'HTTP ' + status, 'error'); return; }
                     renderItems(data);
+                })
+                .catch(err => {
+                    toast('failed to load directory: ' + (err && err.message ? err.message : err), 'error');
+                    document.getElementById('items-list').innerHTML = '<div class="empty-state">Could not reach the server.</div>';
                 });
         }
 
@@ -444,22 +450,27 @@
             document.getElementById('dir-stats').textContent =
                 `${items.length} item${items.length === 1 ? '' : 's'} (${dirs} dir, ${files} file)`;
             const rows = items.map(it => {
-                const isSel = selected.has(it.name);
+                // Search results carry their home-relative path; plain
+                // directory rows only have names. Using the name alone
+                // for search hits would navigate/zip/delete the WRONG
+                // file (joined onto the current directory).
+                const full = it.path || joinPath(currentPath, it.name);
+                const isSel = selected.has(full);
                 const checked = isSel ? 'checked' : '';
                 const icon = it.is_dir ? 'folder' : 'file';
                 const color = it.is_dir ? 'var(--accent-blue)' : 'var(--accent-yellow)';
                 const click = it.is_dir
-                    ? `navigateTo('${escapeAttr(joinPath(currentPath, it.name))}')`
-                    : `previewFile('${escapeAttr(joinPath(currentPath, it.name))}')`;
+                    ? `navigateTo('${escapeAttr(full)}')`
+                    : `previewFile('${escapeAttr(full)}')`;
                 return `<div class="item-row ${isSel ? 'selected' : ''}" onclick="${click}">
-                    <input type="checkbox" ${checked} onclick="event.stopPropagation(); toggleSelect('${escapeAttr(it.name)}', this.checked)" class="accent-[var(--accent-blue)]">
+                    <input type="checkbox" ${checked} onclick="event.stopPropagation(); toggleSelect('${escapeAttr(full)}', this.checked)" class="accent-[var(--accent-blue)]">
                     <span class="item-name" title="${escapeHtml(it.name)}">
                         <i data-lucide="${icon}" class="w-3.5 h-3.5 inline ${it.is_dir ? 'text-[var(--accent-blue)]' : ''}" style="color:${it.is_dir ? 'var(--accent-blue)' : 'var(--accent-yellow)'}"></i>
                         ${escapeHtml(it.name)}
                     </span>
                     <span class="item-mode">${it.is_dir ? 'd' : '-'}${formatMode(it.mode)}</span>
                     <span class="item-size">${it.is_dir ? '—' : humanizeSize(it.size)}</span>
-                    <button class="text-[var(--text-muted)] hover:text-[var(--accent-yellow)]" onclick="event.stopPropagation(); openPerm('${escapeAttr(joinPath(currentPath, it.name))}', '${it.mode}')" title="chmod">
+                    <button class="text-[var(--text-muted)] hover:text-[var(--accent-yellow)]" onclick="event.stopPropagation(); openPerm('${escapeAttr(full)}', '${it.mode}')" title="chmod">
                         <i data-lucide="lock" class="w-3.5 h-3.5"></i>
                     </button>
                 </div>`;
@@ -481,21 +492,36 @@
             return parent + '/' + name;
         }
 
-        function escapeAttr(s) { return String(s).replace(/'/g, "\\'"); }
+        // Escaper for values placed inside a double-quoted HTML
+        // attribute as a single-quoted JS string
+        // (onclick="fn('…')"). Escaping only quotes is NOT enough:
+        // an unescaped `"` breaks out of the attribute entirely
+        // (stored XSS via a crafted filename).
+        function escapeAttr(s) {
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/'/g, "\\'");
+        }
 
         function navigateTo(path) {
             currentPath = path;
             selected.clear();
+            searchActive = false;
+            document.getElementById('search-input').value = '';
             closePreview();
             buildBreadcrumb();
             loadDir(path);
         }
 
-        function toggleSelect(name, on) {
-            if (on) selected.add(name);
-            else selected.delete(name);
+        function toggleSelect(path, on) {
+            if (on) selected.add(path);
+            else selected.delete(path);
             // Re-render to update checkbox state
-            loadDir(currentPath);
+            if (searchActive) doSearch(document.getElementById('search-input').value);
+            else loadDir(currentPath);
         }
 
         function updateButtons() {
@@ -588,7 +614,7 @@
         async function deleteSelected() {
             if (!selected.size) return;
             if (!await uiConfirm(`Delete ${selected.size} item(s)?`, 'This cannot be undone.', true)) return;
-            const paths = [...selected].map(n => joinPath(currentPath, n));
+            const paths = [...selected];
             api('/api/files/bulk-delete', {
                 method: 'POST',
                 body: JSON.stringify({ paths }),
@@ -603,7 +629,7 @@
 
         function downloadZip() {
             if (!selected.size) return;
-            const paths = [...selected].map(n => joinPath(currentPath, n));
+            const paths = [...selected];
             fetch('/api/files/zip', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -624,7 +650,12 @@
 
         function openPerm(path, currentMode) {
             document.getElementById('perm-path').textContent = path;
-            document.getElementById('perm-mode').value = '0' + (currentMode || 644).toString(8);
+            // currentMode arrives as a decimal string ('420'); parse
+            // first — String.toString(8) ignores the radix and would
+            // show "0420" instead of "0644".
+            const dec = parseInt(currentMode, 10);
+            document.getElementById('perm-mode').value =
+                '0' + (Number.isFinite(dec) ? dec.toString(8) : '644');
             document.getElementById('perm-error').classList.add('hidden');
             document.getElementById('modal-perm').classList.add('open');
         }
@@ -674,9 +705,11 @@
         function doSearch(q) {
             const wrap = document.getElementById('items-list');
             if (!q || !q.trim()) {
+                searchActive = false;
                 loadDir(currentPath);
                 return;
             }
+            searchActive = true;
             // cwd  → path = currentPath (matches the directory the
             //         user is looking at; subdirs are included
             //         because the backend's search() is recursive)
@@ -695,6 +728,7 @@
                     }
                     const items = (data.matches || []).map(m => ({
                         name: m.path.split('/').pop(),
+                        path: m.path,
                         is_dir: m.is_dir,
                         size: m.size,
                         mode: m.mode,

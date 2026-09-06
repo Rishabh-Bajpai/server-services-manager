@@ -637,18 +637,21 @@ def list_files():
                 stat = entry.stat()
                 size = stat.st_size if not is_dir else 0
                 modified = stat.st_mtime
+                mode = stat.st_mode & 0o777
             except OSError as e:
                 # Handle broken symlinks or permission errors
                 logger.warning(f"Error accessing {entry.name}: {e}")
                 is_dir = False
                 size = 0
                 modified = 0
+                mode = 0
 
             items.append({
                 "name": entry.name,
                 "is_dir": is_dir,
                 "size": size,
-                "modified": modified
+                "modified": modified,
+                "mode": mode,
             })
         
         # Sort folders first, then files
