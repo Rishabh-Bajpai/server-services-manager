@@ -103,8 +103,7 @@
             color: var(--accent-blue);
         }
         .keys-wrap {
-            max-height: 600px;
-            max-height: min(600px, calc(100dvh - 260px));
+            max-height: calc(100dvh - 260px);
             overflow-y: auto;
             overflow-x: auto;
             min-width: 560px;
@@ -218,7 +217,7 @@
     {% endset %}
     {{ ui.subheader(subheader) }}
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+    <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6 space-y-4">
         <div id="warning-banner"></div>
 
         <section class="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -351,6 +350,22 @@
             return String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
         }
 
+        // Escaper for values placed inside a double-quoted HTML
+        // attribute as a single-quoted JS string
+        // (onclick="fn('…')"). escapeHtml() is WRONG here: `&#39;`
+        // is HTML-decoded back to `'` before JS parses, breaking
+        // out of the string (a key comment with a quote breaks the
+        // row's buttons, or worse). `\'` survives HTML parsing and
+        // escapes the quote for the JS layer instead.
+        function escapeAttr(s) {
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/'/g, "\\'");
+        }
+
         function loadList() {
             api('/api/ssh/keys').then(({ status, data }) => {
                 if (status >= 500) {
@@ -361,6 +376,10 @@
                 renderStats();
                 renderWarning();
                 renderList();
+            }).catch(err => {
+                toast('failed to load keys: ' + (err && err.message ? err.message : err), 'error');
+                document.getElementById('keys-list').innerHTML =
+                    '<tr><td colspan="3" class="empty-state">Could not reach the server. Click Refresh to retry.</td></tr>';
             });
         }
 
@@ -450,10 +469,10 @@
                         </td>
                         <td>
                             <div class="flex items-center justify-end gap-2">
-                                <button class="btn" onclick="copyText('${escapeHtml(k.raw)}')" title="Copy key">
+                                <button class="btn" onclick="copyText('${escapeAttr(k.raw)}')" title="Copy key">
                                     <i data-lucide="copy" class="w-3.5 h-3.5"></i>
                                 </button>
-                                <button class="btn btn-danger" onclick="askRemove('${escapeHtml(k.fingerprint)}', '${escapeHtml(k.comment || '')}', ${keys.length})">
+                                <button class="btn btn-danger" onclick="askRemove('${escapeAttr(k.fingerprint)}', '${escapeAttr(k.comment || '')}', ${keys.length})">
                                     <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                                 </button>
                             </div>
@@ -503,6 +522,10 @@
                     } else {
                         showAddError(data.error || `HTTP ${status}`);
                     }
+                })
+                .catch(err => {
+                    btn.disabled = false;
+                    showAddError('failed: ' + (err && err.message ? err.message : err));
                 });
         }
         function showAddError(msg) {
@@ -541,6 +564,7 @@
                         loadList();
                     } else if (status === 409 && data.requires_confirm) {
                         // Shouldn't happen — UI already warned — but retry with confirm_last.
+                        // Shouldn't happen — UI already warned — but retry with confirm_last.
                         api('/api/ssh/keys/' + encodeURIComponent(pendingRemove.identifier),
                             { method: 'DELETE', body: JSON.stringify({ confirm_last: true }) })
                             .then(({ status: s2, data: d2 }) => {
@@ -556,6 +580,10 @@
                     } else {
                         toast(data.error || `HTTP ${status}`, 'error');
                     }
+                })
+                .catch(err => {
+                    btn.disabled = false;
+                    toast('failed: ' + (err && err.message ? err.message : err), 'error');
                 });
         }
 

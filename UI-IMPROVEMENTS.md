@@ -1391,7 +1391,37 @@ at "60 of 292 shown", zero JS errors, `node --check`
 clean). Full suite: 855 passed (pre-existing alert_log
 failure excluded); secrets clean.
 
-### Next route: (to be picked — `/ssh` is next in line)
+### Route 14 — SSH (`/ssh`)  [x]
+
+Files: `templates/ssh.html` (only file changed; backend
+parsing/validation/atomic-write already careful).
+
+1. **Broken row buttons via key comments (fixed).** The
+   Copy/Delete `onclick` handlers used `escapeHtml()`, but
+   `&#39;` HTML-decodes back to `'` before JS parses — any
+   key comment containing a quote broke the row's buttons
+   (and admitted script injection). New `escapeAttr()`
+   (backslash-escapes quotes) for JS-string contexts;
+   `escapeHtml()` kept for HTML/title contexts. Proven live
+   with a real throwaway ed25519 key commented
+   `xss');alert('PWNED');//"<img src=x>`: zero injected
+   elements, no alert, Copy toasts, Delete opens the modal
+   with the lockout warning (single key — correct), removal
+   succeeds; `authorized_keys` verified byte-identical
+   afterwards and all probe artifacts deleted.
+2. **Content width.** `w-[90%]` capped at 1760px, measured
+   90%. List 600px cap dropped.
+3. **Silent failures.** `loadList` had no rejection handler
+   (stuck on "Loading…" when unreachable) — now toasts with
+   a retry row. `submitAdd`/`confirmRemove` re-enable their
+   buttons and report on network failure (previously stuck
+   disabled forever).
+
+**Verified live** (zero JS errors, `node --check` clean).
+Full suite: 855 passed (pre-existing alert_log failure
+excluded); secrets clean.
+
+### Next route: (to be picked — `/cluster` is next in line)
 
 ---
 
