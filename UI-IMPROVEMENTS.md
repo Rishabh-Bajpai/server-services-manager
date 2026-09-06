@@ -787,7 +787,10 @@ Frontend (`templates/docker.html` only):
     earlier auto-expand of degraded stacks was removed as
     inconsistent); a "Filter stacks or containers..." search
     matches stack names as well as container names/images,
-    showing only matching containers inside a hit stack.
+    showing only matching containers inside a hit stack. The
+    stacks list reuses the containers table's `.table-wrap`
+    scroll container, so both lists share the same max-height
+    and scroll behavior (verified identical computed styles).
 
 **Verified live** (Playwright, 59 containers, 52 images, zero
 JS errors): Running filter "53 / 59", bulk "2 selected", 24
