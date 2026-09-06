@@ -126,8 +126,138 @@ To                         Action      From
     assert status.rules[0].number == 1
     assert status.rules[0].port_proto == "22/tcp"
     assert status.rules[0].action == "ALLOW"
+    assert status.rules[0].direction == "IN"
     assert status.rules[1].to == "192.168.1.0/24"
     assert status.rules[2].action == "DENY"
+
+
+def _ok_run(stdout):
+    fake = MagicMock()
+    fake.returncode = 0
+    fake.stdout = stdout
+    fake.stderr = ""
+    return fake
+
+
+def test_ufw_status_rules_come_from_numbered():
+    # Rule numbers for delete-by-number come exclusively from
+    # "ufw status numbered": verbose order differs (OUT interleaved,
+    # app rules expanded), so verbose-synthesized numbers deleted the
+    # wrong rule in production.
+    verbose = """\
+Status: active
+Logging: on (low)
+Default: deny (incoming), allow (outgoing), allow (routed)
+New profiles: skip
+
+To                         Action      From
+--                         ------      ----
+9443                       ALLOW IN    Anywhere
+Anywhere                   ALLOW OUT   Anywhere on tailscale0
+"""
+    numbered = """\
+Status: active
+     To                         Action      From
+     --                         ------      ----
+[ 1] 9443                       ALLOW IN    Anywhere
+[ 2] Samba                      ALLOW IN    Anywhere
+[ 3] Anywhere                   ALLOW OUT   Anywhere on tailscale0     (out)
+"""
+    with patch.object(fm.subprocess, "run",
+                      side_effect=[_ok_run(verbose), _ok_run(numbered)]):
+        status = fm._ufw_status()
+    assert status.enabled is True
+    assert status.default_incoming == "deny"
+    assert [r.number for r in status.rules] == [1, 2, 3]
+    assert status.rules[1].port_proto == "Samba"
+    assert status.rules[2].direction == "OUT"
+    assert status.rules[2].to == "Anywhere on tailscale0"
+    d = status.rules[0].to_dict()
+    assert d["direction"] == "IN"
+
+
+def test_ufw_status_unnumbered_fallback_disables_delete():
+    # Numbered call fails: rules still parse from verbose output but
+    # carry number 0 (unknown) so the UI hides delete buttons.
+    import subprocess
+    verbose = """\
+Status: active
+Default: deny (incoming), allow (outgoing), allow (routed)
+
+To                         Action      From
+--                         ------      ----
+9443                       ALLOW IN    Anywhere
+11434                      ALLOW IN    100.64.0.0/10
+137,138/udp (Samba)        ALLOW IN    Anywhere
+Anywhere on tailscale0     ALLOW IN    Anywhere
+Anywhere                   ALLOW OUT   Anywhere on tailscale0
+22/tcp (v6)                ALLOW IN    Anywhere (v6)
+"""
+    numbered_fail = MagicMock()
+    numbered_fail.returncode = 1
+    numbered_fail.stdout = ""
+    numbered_fail.stderr = "ERROR: You need to be root to run this script"
+    with patch.object(fm.subprocess, "run",
+                      side_effect=[_ok_run(verbose), numbered_fail]):
+        status = fm._ufw_status()
+    assert len(status.rules) == 6
+    assert [r.number for r in status.rules] == [0, 0, 0, 0, 0, 0]
+    assert "delete is disabled" in status.reason
+    assert status.rules[0].port_proto == "9443"
+    assert status.rules[0].to == "Anywhere"
+    assert status.rules[0].direction == "IN"
+    assert status.rules[1].to == "100.64.0.0/10"
+    assert status.rules[2].port_proto == "137,138/udp (Samba)"
+    assert status.rules[4].direction == "OUT"
+    assert status.rules[4].to == "Anywhere on tailscale0"
+
+
+def test_ufw_status_direction_boundary_and_fwd():
+    # A source starting with IN/OUT must not be split, and routed
+    # FWD rules must land in direction, not in the source.
+    sample = """\
+Status: active
+
+To                         Action      From
+--                         ------      ----
+22                         ALLOW IN    INTERNAL-LAN
+80                         ALLOW FWD   Anywhere
+22                         DENY        Anywhere # web ssh
+"""
+    fake = MagicMock()
+    fake.returncode = 0
+    fake.stdout = sample
+    fake.stderr = ""
+    with patch.object(fm.subprocess, "run", return_value=fake):
+        status = fm._ufw_status()
+    assert len(status.rules) == 3
+    assert status.rules[0].direction == "IN"
+    assert status.rules[0].to == "INTERNAL-LAN"
+    assert status.rules[1].direction == "FWD"
+    assert status.rules[1].to == "Anywhere"
+    assert status.rules[2].direction == ""
+    assert status.rules[2].to == "Anywhere"
+
+
+def test_delete_rule_spec_validates_action(monkeypatch):
+    import app.firewall_manager as m
+    monkeypatch.setattr(m, "is_available",
+                        lambda: {"available": True, "backend": "ufw", "reason": ""})
+    with pytest.raises(FirewallError):
+        m.delete_rule({"action": "--purge", "port": "22", "protocol": "tcp"},
+                      password="x")
+
+
+def test_ufw_status_requests_plain_verbose():
+    fake = MagicMock()
+    fake.returncode = 0
+    fake.stdout = "Status: inactive\n"
+    fake.stderr = ""
+    with patch.object(fm.subprocess, "run", return_value=fake) as run:
+        fm._ufw_status()
+    calls = [c[0][0] for c in run.call_args_list]
+    assert calls[0][-2:] == ["status", "verbose"]
+    assert calls[1][-2:] == ["status", "numbered"]
 
 
 def test_ufw_status_inactive():
@@ -221,6 +351,9 @@ def test_ufw_delete_rule_by_number():
     cmd = run.call_args[0][0]
     assert "delete" in cmd
     assert "3" in cmd
+    # --force skips ufw's interactive "(y|n)?", which would read EOF
+    # on our captured stdin and abort.
+    assert "--force" in cmd
 
 
 def test_ufw_delete_rule_by_spec():
@@ -265,7 +398,79 @@ def test_ufw_enable():
     cmd = run.call_args[0][0]
     assert "ufw" in cmd
     assert "enable" in cmd
+    assert "--force" in cmd
     assert isinstance(result, str)
+
+
+def test_ufw_add_rule_uses_proto_keyword():
+    fake = MagicMock()
+    fake.returncode = 0
+    fake.stdout = "Rule added\n"
+    fake.stderr = ""
+    with patch.object(fm.subprocess, "run", return_value=fake) as run:
+        fm._ufw_add_rule(
+            {"action": "allow", "port": "22", "protocol": "tcp"}, password="x",
+        )
+    cmd = run.call_args[0][0]
+    # "... to any port 22 proto tcp" — a bare trailing "tcp" is
+    # rejected by ufw ("Wrong number of arguments").
+    assert cmd[-6:] == ["to", "any", "port", "22", "proto", "tcp"]
+
+
+def test_ufw_add_rule_outbound_forms():
+    fake = MagicMock()
+    fake.returncode = 0
+    fake.stdout = "Rule added\n"
+    fake.stderr = ""
+    with patch.object(fm.subprocess, "run", return_value=fake) as run:
+        fm._ufw_add_rule(
+            {"action": "allow", "port": "80", "protocol": "tcp",
+             "direction": "out"}, password="x",
+        )
+    assert run.call_args[0][0][-2:] == ["out", "80/tcp"]
+    with patch.object(fm.subprocess, "run", return_value=fake) as run:
+        fm._ufw_add_rule(
+            {"action": "allow", "port": "80", "protocol": "tcp",
+             "source": "10.0.0.5", "direction": "out"}, password="x",
+        )
+    assert run.call_args[0][0][-6:] == ["to", "10.0.0.5", "port", "80", "proto", "tcp"]
+
+
+def test_ufw_delete_rule_by_spec_slash_form():
+    fake = MagicMock()
+    fake.returncode = 0
+    fake.stdout = "ok"
+    fake.stderr = ""
+    with patch.object(fm.subprocess, "run", return_value=fake) as run:
+        fm._ufw_delete_rule(
+            {"action": "allow", "port": "22", "protocol": "tcp"}, password="x",
+        )
+    cmd = run.call_args[0][0]
+    assert cmd[-2:] == ["allow", "22/tcp"]
+
+
+def test_run_suppresses_sudo_prompt():
+    fake = MagicMock()
+    fake.returncode = 0
+    fake.stdout = "ok"
+    fake.stderr = ""
+    with patch.object(fm.subprocess, "run", return_value=fake) as run:
+        fm._run(["sudo", "-S", "ufw", "status", "verbose"], password="secret")
+    cmd = run.call_args[0][0]
+    assert cmd[:4] == ["sudo", "-S", "-p", ""]
+    assert run.call_args[1]["input"] == "secret\n"
+
+
+def test_ufw_reload_has_no_force_flag():
+    fake = MagicMock()
+    fake.returncode = 0
+    fake.stdout = "ok"
+    fake.stderr = ""
+    with patch.object(fm.subprocess, "run", return_value=fake) as run:
+        fm._ufw_apply("reload", password="x")
+    cmd = run.call_args[0][0]
+    assert "reload" in cmd
+    assert "--force" not in cmd
 
 
 def test_enable_public_returns_dict():

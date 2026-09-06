@@ -101,7 +101,7 @@
             background: var(--bg-secondary);
             border-bottom: 1px solid var(--border-subtle);
         }
-        .table-scroll { max-height: min(520px, calc(100dvh - 300px)); min-height: 200px; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+        .table-scroll { max-height: calc(100dvh - 300px); min-height: 200px; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
         .data-table td {
             padding: 0.625rem 0.875rem;
             border-bottom: 1px solid var(--border-subtle);
@@ -170,7 +170,7 @@
     {% endset %}
     {{ ui.subheader(subheader) }}
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+    <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6 space-y-4">
         <div id="unavailable-banner"></div>
 
         <section class="grid grid-cols-2 sm:grid-cols-4 gap-3" id="status-cards">
@@ -190,6 +190,7 @@
                         <tr>
                             <th style="width: 4rem">#</th>
                             <th style="width: 6rem">Action</th>
+                            <th style="width: 4rem">Dir</th>
                             <th>To / Port</th>
                             <th>From</th>
                             <th style="width: 4rem" class="text-right">—</th>
@@ -334,7 +335,7 @@
                 </div>
             </div>`;
         document.getElementById('status-cards').innerHTML = '';
-        document.getElementById('rules-tbody').innerHTML = '<tr><td colspan="5"><div class="empty-state">No firewall available</div></td></tr>';
+        document.getElementById('rules-tbody').innerHTML = '<tr><td colspan="6"><div class="empty-state">No firewall available</div></td></tr>';
         lucide.createIcons();
     }
 
@@ -342,9 +343,7 @@
         const backendBadge = document.getElementById('backend-badge');
         backendBadge.textContent = state.backend;
         backendBadge.classList.remove('hidden');
-        if (state.backend !== 'ufw') {
-            document.getElementById('btn-add-rule').classList.add('hidden');
-        }
+        document.getElementById('btn-add-rule').classList.toggle('hidden', state.backend !== 'ufw');
         // Status cards
         const cards = document.getElementById('status-cards');
         const enabledClass = state.enabled ? 'badge-green' : 'badge-red';
@@ -379,20 +378,25 @@
         const tbody = document.getElementById('rules-tbody');
         document.getElementById('rule-count').textContent = (state.rules || []).length;
         if (!state.rules || !state.rules.length) {
-            tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">No rules configured. Click "Add rule" to add one.</div></td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No rules configured. Click "Add rule" to add one.</div></td></tr>';
         } else {
             tbody.innerHTML = state.rules.map(r => {
                 const ac = badgeClassForAction(r.action);
+                // number 0 means "unknown" (unnumbered fallback): no
+                // delete button, since deleting by a guessed number
+                // can remove the wrong rule.
+                const delBtn = r.number
+                    ? `<button class="btn" style="padding:0.25rem 0.5rem" onclick="deleteRule(${r.number})" title="Delete rule">
+                            <i data-lucide="trash-2" class="w-3 h-3"></i>
+                        </button>`
+                    : '';
                 return `<tr>
-                    <td class="font-mono text-[var(--text-muted)]">[${r.number}]</td>
+                    <td class="font-mono text-[var(--text-muted)]">${r.number ? '[' + r.number + ']' : '—'}</td>
                     <td><span class="badge ${ac}">${escAttr(r.action)}</span></td>
+                    <td class="font-mono text-xs text-[var(--text-muted)]">${escAttr(r.direction) || '—'}</td>
                     <td class="font-mono text-xs">${escAttr(r.port_proto)}</td>
                     <td class="text-xs">${escAttr(r.to)}</td>
-                    <td class="text-right">
-                        <button class="btn" style="padding:0.25rem 0.5rem" onclick="deleteRule(${r.number})" title="Delete rule">
-                            <i data-lucide="trash-2" class="w-3 h-3"></i>
-                        </button>
-                    </td>
+                    <td class="text-right">${delBtn}</td>
                 </tr>`;
             }).join('');
         }
@@ -427,6 +431,10 @@
             }
             document.getElementById('unavailable-banner').innerHTML = '';
             render(data);
+        }).catch(err => {
+            toast('failed to load firewall status: ' + (err && err.message ? err.message : err), 'error');
+            document.getElementById('status-cards').innerHTML = '';
+            document.getElementById('rules-tbody').innerHTML = '<tr><td colspan="6"><div class="empty-state">Could not reach the server. Click Refresh to retry.</div></td></tr>';
         });
     }
 
@@ -471,8 +479,12 @@
     }
     function closeAddRule() {
         document.getElementById('add-modal').classList.add('hidden');
+        document.getElementById('rule-password').value = '';
     }
     function submitAddRule(confirmed) {
+        // NB: the password field is wiped only on a terminal outcome
+        // (success / non-409 error / close) — the 409 lockout flow
+        // resubmits via submitAddRule(true) and needs it still present.
         const body = {
             action: document.getElementById('rule-action').value,
             port: document.getElementById('rule-port').value.trim(),
@@ -486,9 +498,7 @@
             if (!window.confirm('This will deny inbound SSH with no source restriction. You may lock yourself out. Proceed?')) return;
             body.confirm_lockout = true;
         }
-        delete body.password;
-        const payload = Object.assign({}, body, { password: document.getElementById('rule-password').value });
-        api('/api/firewall/rules', { method: 'POST', body: JSON.stringify(payload) })
+        api('/api/firewall/rules', { method: 'POST', body: JSON.stringify(body) })
             .then(({ ok, status, data }) => {
                 if (!ok && (status === 409 || data.code === 'confirm_required')) {
                     if (window.confirm((data.preview || 'SSH lockout risk') + ' — proceed anyway?')) {
@@ -496,6 +506,7 @@
                     }
                     return;
                 }
+                document.getElementById('rule-password').value = '';
                 if (!ok) { toast(data.error || 'add rule failed', 'error'); return; }
                 toast('rule added', 'success');
                 closeAddRule();
@@ -518,12 +529,15 @@
     }
     function closeDefaultModal() {
         document.getElementById('default-modal').classList.add('hidden');
+        document.getElementById('default-password').value = '';
     }
     function submitDefault() {
+        const password = document.getElementById('default-password').value;
+        document.getElementById('default-password').value = '';
         const body = {
             direction: document.getElementById('default-direction').value,
             policy: document.getElementById('default-policy').value,
-            password: document.getElementById('default-password').value,
+            password: password,
         };
         if (!body.password) { toast('password is required', 'error'); return; }
         api('/api/firewall/default', { method: 'POST', body: JSON.stringify(body) })
@@ -545,10 +559,12 @@
     }
     function closeToggle() {
         document.getElementById('toggle-modal').classList.add('hidden');
+        document.getElementById('toggle-password').value = '';
         toggleAction = null;
     }
     function submitToggle() {
         const pw = document.getElementById('toggle-password').value;
+        document.getElementById('toggle-password').value = '';
         if (!pw) { toast('password is required', 'error'); return; }
         const url = toggleAction === 'enable' ? '/api/firewall/enable' : '/api/firewall/disable';
         api(url, { method: 'POST', body: JSON.stringify({ password: pw }) })

@@ -39,6 +39,7 @@ class Rule:
     action: str        # "ALLOW" | "DENY" | "REJECT" | "LIMIT"
     to: str            # "Anywhere", "192.168.1.0/24", etc.
     port_proto: str    # "22/tcp", "80", "Anywhere", ...
+    direction: str = ""  # "IN" | "OUT" | "" (unknown)
 
     def to_dict(self) -> dict:
         return {
@@ -46,6 +47,7 @@ class Rule:
             "action": self.action,
             "to": self.to,
             "port_proto": self.port_proto,
+            "direction": self.direction,
         }
 
 
@@ -97,9 +99,18 @@ def is_available() -> dict:
 # ---------------------------------------------------------------------------
 
 def _run(cmd: List[str], timeout: int = 10, password: Optional[str] = None) -> str:
-    """Run a command; pipe ``password`` to sudo if provided."""
+    """Run a command; pipe ``password`` to sudo if provided.
+
+    ``-p ""`` suppresses sudo's "[sudo] password for ..." prompt on
+    stderr — without it, the word "password" in the prompt makes every
+    backend error look like an auth failure (wrong 403 code).
+    """
     try:
         if password is not None and cmd and cmd[0] == "sudo":
+            cmd = list(cmd)
+            if "-S" in cmd and "-p" not in cmd:
+                cmd.insert(cmd.index("-S") + 1, "-p")
+                cmd.insert(cmd.index("-p") + 1, "")
             proc = subprocess.run(
                 cmd, input=password + "\n", capture_output=True, text=True, timeout=timeout,
             )
@@ -133,18 +144,99 @@ def _run(cmd: List[str], timeout: int = 10, password: Optional[str] = None) -> s
 # ufw backend
 # ---------------------------------------------------------------------------
 
+_RULE_RE = re.compile(
+    r"(?:\[\s*(\d+)\]\s+)?(.+?)\s+"
+    r"(ALLOW|DENY|REJECT|LIMIT)\s+(?:(IN|OUT|FWD)\s+)?(.*)")
+_OUT_MARKER_RE = re.compile(r"\s+\((in|out)\)$", re.IGNORECASE)
+
+
+def _parse_ufw_rule_line(line: str):
+    """Parse one ufw status rule line. Returns
+    ``(number_or_None, port_proto, action, direction, source)`` or None
+    for non-rule lines."""
+    line = line.strip()
+    if not line:
+        return None
+    # "To                         Action      From"
+    if line.startswith("To") and "Action" in line:
+        return None
+    # Numbered:   "[ 1] 22/tcp                  ALLOW IN    Anywhere"
+    # Unnumbered: "9443                          ALLOW IN    Anywhere"
+    #             "Anywhere on tailscale0        ALLOW IN    Anywhere"
+    #             "Anywhere                      ALLOW OUT   Anywhere on tailscale0"
+    # The direction token requires trailing whitespace so a source
+    # like "INTERNAL-LAN" is never split into dir="IN" + "TERNAL-LAN".
+    m = _RULE_RE.match(line)
+    if not m:
+        return None
+    num = int(m.group(1)) if m.group(1) else None
+    port_proto = m.group(2).strip()
+    action = m.group(3)
+    direction = m.group(4) or ""
+    # Strip ufw rule comments ("... Anywhere # web").
+    where = re.sub(r"\s+#.*$", "", m.group(5).strip())
+    # Numbered OUT lines carry an "(out)" suffix (IN lines have none).
+    marker = _OUT_MARKER_RE.search(where)
+    if marker:
+        where = _OUT_MARKER_RE.sub("", where).strip()
+        if not direction:
+            direction = marker.group(1).upper()
+    return (num, port_proto, action, direction, where or "Anywhere")
+
+
+def _parse_ufw_rules(out: str, numbered: bool) -> List[Rule]:
+    """Parse the rule section of ufw status output.
+
+    ``numbered`` must reflect whether the output carries ``[ N]``
+    prefixes. When False, rules get number 0 (unknown) — the UI hides
+    the delete button for those, because deleting by a guessed number
+    can remove the wrong rule (verbose and numbered orders differ).
+    """
+    rules: List[Rule] = []
+    in_rules = False
+    for raw in out.splitlines():
+        line = raw.rstrip()
+        if "----" in line:
+            in_rules = True
+            continue
+        if not in_rules:
+            continue
+        parsed = _parse_ufw_rule_line(line)
+        if not parsed:
+            continue
+        num, port_proto, action, direction, where = parsed
+        if num is None:
+            num = len(rules) + 1 if numbered else 0
+        rules.append(Rule(
+            number=num,
+            action=action,
+            direction=direction,
+            to=where,
+            port_proto=port_proto,
+        ))
+    return rules
+
+
 def _ufw_status(password: Optional[str] = None) -> Status:
     """Read ufw status and parse into a Status object.
 
-    Tries ``sudo -S ufw status verbose numbered`` first (works if the
-    user's sudo timestamp is fresh, or a password is provided). If
-    that fails, falls back to plain ``ufw status`` (which works for
-    root or NOPASSWD sudo). Returns a Status with whatever info could
-    be read on partial failure.
+    Rule numbers for delete-by-number come exclusively from
+    ``ufw status numbered``: its order differs from the verbose
+    listing (OUT rules are interleaved, app rules shown by name),
+    so verbose-synthesized numbers would delete the wrong rule.
+
+    Tries sudo first (works if the user's sudo timestamp is fresh,
+    or a password is provided). If that fails, falls back to plain
+    ``ufw status`` (works for root or NOPASSWD sudo) with unknown
+    rule numbers. Returns a Status with whatever info could be read
+    on partial failure.
     """
     out = ""
+    reason = ""
     try:
-        out = _run(["sudo", "-S", "ufw", "status", "verbose", "numbered"],
+        # NB: "verbose numbered" is not a valid combination — ufw
+        # silently returns *unnumbered* verbose output for it.
+        out = _run(["sudo", "-S", "ufw", "status", "verbose"],
                    password=password)
     except FirewallError:
         if password is not None:
@@ -160,6 +252,13 @@ def _ufw_status(password: Optional[str] = None) -> Status:
                 default_incoming="", default_outgoing="", default_routed="",
                 rules=[], reason=f"ufw status unavailable: {e}",
             )
+        enabled = "Status: active" in out
+        return Status(
+            available=True, backend="ufw", enabled=enabled,
+            default_incoming="", default_outgoing="", default_routed="",
+            rules=_parse_ufw_rules(out, numbered=False),
+            reason="rule numbers unavailable without sudo; delete is disabled",
+        )
 
     enabled = "Status: active" in out
     backend = "ufw"
@@ -181,48 +280,16 @@ def _ufw_status(password: Optional[str] = None) -> Status:
             if len(parts) >= 3:
                 default_routed = parts[2].lower()
 
-    # Rules
-    rules: List[Rule] = []
-    in_rules = False
-    for raw in out.splitlines():
-        line = raw.rstrip()
-        if "----" in line:
-            in_rules = True
-            continue
-        if not in_rules:
-            continue
-        line = line.strip()
-        if not line:
-            continue
-        # "To                         Action      From"
-        if line.startswith("To") and "Action" in line:
-            continue
-        # Format: "[ 1] 22/tcp                     ALLOW IN    Anywhere"
-        m = re.match(r"\[\s*(\d+)\]\s+(.+?)\s+(ALLOW|DENY|REJECT|LIMIT)\s+(IN|OUT)?\s*(.*)", line)
-        if m:
-            num = int(m.group(1))
-            port_proto = m.group(2).strip()
-            action = m.group(3)
-            where = m.group(5).strip()
-            rules.append(Rule(
-                number=num,
-                action=action,
-                to=where or "Anywhere",
-                port_proto=port_proto,
-            ))
-            continue
-        # Unnumbered or app rule lines
-        m2 = re.match(r"(.+?)\s+(ALLOW|DENY|REJECT|LIMIT)\s+(\S+)", line)
-        if m2:
-            port_proto = m2.group(1).strip()
-            action = m2.group(2)
-            where = m2.group(3).strip()
-            rules.append(Rule(
-                number=len(rules) + 1,
-                action=action,
-                to=where,
-                port_proto=port_proto,
-            ))
+    try:
+        numbered_out = _run(["sudo", "-S", "ufw", "status", "numbered"],
+                            password=password)
+        rules = _parse_ufw_rules(numbered_out, numbered=True)
+    except FirewallError:
+        # Verbose output parsed fine but numbered didn't (shouldn't
+        # normally happen — same privilege level). Show the rules
+        # without delete buttons rather than wrong numbers.
+        rules = _parse_ufw_rules(out, numbered=False)
+        reason = "rule numbers unavailable; delete is disabled"
 
     return Status(
         available=True,
@@ -232,14 +299,23 @@ def _ufw_status(password: Optional[str] = None) -> Status:
         default_outgoing=default_outgoing,
         default_routed=default_routed,
         rules=rules,
+        reason=reason,
     )
 
 
 def _ufw_apply(action: str, password: str) -> str:
-    """Run an ufw action verb (enable, disable, reload)."""
+    """Run an ufw action verb (enable, disable, reload).
+
+    ``--force`` skips ufw's interactive "(y|n)" confirmation, which
+    would otherwise read EOF on our captured stdin and abort (or hang
+    until the timeout) for enable/disable.
+    """
     if action not in ("enable", "disable", "reload"):
         raise FirewallError(f"unknown ufw action: {action}", code="invalid")
-    return _run(["sudo", "-S", "ufw", action], password=password, timeout=15)
+    cmd = ["sudo", "-S", "ufw", action]
+    if action in ("enable", "disable"):
+        cmd = ["sudo", "-S", "ufw", "--force", action]
+    return _run(cmd, password=password, timeout=15)
 
 
 def _ufw_set_default(policy: str, direction: str, password: str) -> str:
@@ -276,22 +352,28 @@ def _ufw_add_rule(spec: dict, password: str) -> str:
         raise FirewallError(f"invalid protocol: {protocol}", code="invalid")
 
     if direction == "out":
-        # ufw outbound: "ufw allow out 80/tcp", optionally scoped to a
-        # destination with "ufw allow out to <dest> port <p>[/proto]".
+        # Verified against real ufw (--dry-run): the bare form takes
+        # the slash syntax ("out 80/tcp"), the scoped form takes the
+        # "proto" keyword ("out to <dest> port <p> proto tcp").
         if source:
             cmd = ["sudo", "-S", "ufw", action, "out", "to", source, "port", port]
+            if protocol in ("tcp", "udp"):
+                cmd += ["proto", protocol]
+        elif protocol in ("tcp", "udp"):
+            cmd = ["sudo", "-S", "ufw", action, "out", f"{port}/{protocol}"]
         else:
             cmd = ["sudo", "-S", "ufw", action, "out", port]
-        if protocol in ("tcp", "udp"):
-            cmd.append(protocol)
         return _run(cmd, password=password, timeout=15)
 
+    # Verified: the long form needs the "proto" keyword
+    # ("to any port 80 proto tcp"); a bare "tcp" is rejected with
+    # "Wrong number of arguments".
     cmd = ["sudo", "-S", "ufw", action]
     if source:
         cmd += ["from", source]
     cmd += ["to", "any", "port", port]
     if protocol in ("tcp", "udp"):
-        cmd.append(protocol)
+        cmd += ["proto", protocol]
     return _run(cmd, password=password, timeout=15)
 
 
@@ -307,16 +389,18 @@ def _ufw_delete_rule(spec: dict, password: str) -> str:
             num = int(spec["number"])
         except (TypeError, ValueError):
             raise FirewallError(f"invalid rule number: {spec['number']}", code="invalid")
-        return _run(["sudo", "-S", "ufw", "delete", str(num)],
+        # --force: "ufw delete N" asks "(y|n)?" otherwise.
+        return _run(["sudo", "-S", "ufw", "--force", "delete", str(num)],
                     password=password, timeout=15)
     action = spec.get("action", "allow").lower()
     port = str(spec.get("port", "")).strip().split("/")[0]
     protocol = spec.get("protocol", "").lower().strip()
     if not port:
         raise FirewallError("port is required", code="invalid")
-    cmd = ["sudo", "-S", "ufw", "delete", action, port]
-    if protocol in ("tcp", "udp"):
-        cmd.append(protocol)
+    # Slash form ("delete allow 22/tcp"); the "proto" keyword is
+    # rejected here (verified with --dry-run).
+    port_arg = f"{port}/{protocol}" if protocol in ("tcp", "udp") else port
+    cmd = ["sudo", "-S", "ufw", "delete", action, port_arg]
     return _run(cmd, password=password, timeout=15)
 
 
@@ -647,11 +731,24 @@ def add_rule(spec: dict, password: str) -> dict:
 
 
 def delete_rule(spec: dict, password: str) -> dict:
+    data = dict(spec or {})
+    if "number" not in data or not data["number"]:
+        # Spec-based delete: normalize through the same validator as
+        # add so action/protocol/source can't carry junk (e.g. flags
+        # or rich-rule metacharacters) into the backend command.
+        checked = build_rule_spec(
+            action=data.get("action", "allow"),
+            port=str(data.get("port", "")),
+            protocol=data.get("protocol", "tcp"),
+            source=data.get("source", ""),
+            direction=data.get("direction", "in"),
+        )
+        data.update(checked["spec"])
     det = is_available()
     if not det["available"]:
         raise FirewallError(det["reason"], code="missing_tool")
     if det["backend"] == "ufw":
-        out = _ufw_delete_rule(spec, password)
+        out = _ufw_delete_rule(data, password)
     else:
-        out = _firewalld_delete_rule(spec, password)
+        out = _firewalld_delete_rule(data, password)
     return {"ok": True, "output": out or "rule removed"}

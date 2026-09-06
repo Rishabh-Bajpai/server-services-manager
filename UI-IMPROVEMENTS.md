@@ -1129,7 +1129,76 @@ toggle alone couldn't work with the new inline display).
 Verified live with screenshot + kind-switch + search (29
 lines), zero JS errors.
 
-### Next route: (to be picked — `/firewall` is next in line)
+### Route 11 — Firewall (`/firewall`)  [x]
+
+Files: `templates/firewall.html`,
+`app/firewall_manager.py`,
+`tests/test_firewall_manager.py`.
+
+Backend bugs found by live verification (all fixed):
+
+1. **From column showed direction, not source.**
+   `"ufw status verbose numbered"` is not a valid
+   combination — ufw silently returns *unnumbered* verbose
+   output (confirmed in ufw's parser source by review), so
+   the numbered-only regex never matched and the fallback
+   captured just `IN` as the source. Parser rewritten for
+   both formats; command is now plain `verbose`.
+2. **Delete-by-number could remove the wrong rule.**
+   Verbose order differs from numbered order (OUT rules
+   interleaved, app rules expanded per-port), but the UI
+   sent verbose-synthesized numbers to `ufw delete`. Live
+   proof: deleting displayed [18] removed the user's
+   `2222/tcp` rule instead (restored immediately —
+   final verbose diff is byte-identical to the original,
+   nothing is missing). Rule numbers now come exclusively
+   from `ufw status numbered`; unnumbered fallbacks carry
+   number 0 with the delete button hidden.
+3. **Add-rule with tcp/udp always failed.**
+   The backend built `... port 22 tcp` but ufw requires
+   the `proto` keyword (`... port 22 proto tcp`) — every
+   tcp/udp add died with "Wrong number of arguments"
+   (verified via `--dry-run`, which changes nothing).
+   Outbound bare form takes the slash syntax
+   (`out 80/tcp`); delete-by-spec likewise. Fixed all
+   three; `--dry-run` verified each shape.
+4. **Enable/disable/delete-by-number hung or aborted.**
+   ufw prompts `(y|n)?`, which reads EOF on captured stdin.
+   `--force` added to all three (placement verified
+   against ufw's parser: only valid right after `ufw`).
+5. **Every backend error looked like a wrong password.**
+   sudo's `[sudo] password for …` prompt on stderr matched
+   the `"password" in err` check, so real ufw errors
+   returned 403. `_run()` now injects `-p ""` (same fix
+   class as the packages review).
+
+Frontend: 90% width (measured); 520px table cap dropped;
+new Dir column; add-rule button re-appears on backend
+switch (was add-only); `loadStatus()` failure toasts
+instead of sticking on "Loading…"; password fields wiped
+on submit/close (kept through the 409 lockout resubmit —
+wiping early broke the retry, caught by review).
+
+External review (agy, second round on the follow-ups)
+confirmed the `--force` placement and the verbose/numbered
+claim, and caught: direction-token splitting sources like
+`INTERNAL-LAN` (boundary fix + FWD + comment strip),
+spec-delete bypassing validation (now normalized through
+`build_rule_spec`), and the 409-retry wipe above. Accepted
+as-is: `?password=` on GET status (documented API,
+frontend never uses it) and pathological interface names
+containing action verbs.
+
+**Verified live** (zero JS errors, `node --check` clean):
+safe round-trip add `59999/tcp` (parsed
+`Anywhere`/`IN`, count 30→32) then deleted both twins by
+their real numbers (`[18]`/`[30]`, matching raw
+`ufw status numbered` line-for-line); Reload flow via the
+shared password modal; limited-status banner when sudo
+expires. Full suite: 837 passed (pre-existing alert_log
+failure excluded); secrets clean.
+
+### Next route: (to be picked — `/backups` is next in line)
 
 ---
 
