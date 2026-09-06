@@ -339,3 +339,62 @@ def test_apt_security_package_names_handles_error(monkeypatch):
         raise subprocess.CalledProcessError(1, "apt")
     with patch.object(pm.subprocess, "run", side_effect=fail):
         assert _apt_security_package_names() == set()
+
+
+# ---------------------------------------------------------------------------
+# lookup_package
+# ---------------------------------------------------------------------------
+
+def _fake_policy(stdout, returncode=0):
+    fake = MagicMock()
+    fake.returncode = returncode
+    fake.stdout = stdout
+    return fake
+
+
+def test_lookup_package_up_to_date(monkeypatch):
+    # Real apt-cache output is indented with two spaces; the parser
+    # strips lines before matching, so the prefixes must match the
+    # stripped form.
+    sample = "bash:\n  Installed: 5.2.21-2ubuntu4\n  Candidate: 5.2.21-2ubuntu4\n"
+    monkeypatch.setattr(pm, "detect_manager", lambda: "apt")
+    with patch.object(pm.subprocess, "run", return_value=_fake_policy(sample)):
+        result = pm.lookup_package("bash")
+    assert result["installed"] == "5.2.21-2ubuntu4"
+    assert result["candidate"] == "5.2.21-2ubuntu4"
+    assert result["available_upgrade"] is None
+    assert "error" not in result
+
+
+def test_lookup_package_upgrade_available(monkeypatch):
+    sample = "vim:\n  Installed: 9.0\n  Candidate: 9.1\n"
+    monkeypatch.setattr(pm, "detect_manager", lambda: "apt")
+    with patch.object(pm.subprocess, "run", return_value=_fake_policy(sample)):
+        result = pm.lookup_package("vim")
+    assert result["installed"] == "9.0"
+    assert result["available_upgrade"] == "9.1"
+
+
+def test_lookup_package_not_installed(monkeypatch):
+    sample = "htop:\n  Installed: (none)\n  Candidate: 3.3.0\n"
+    monkeypatch.setattr(pm, "detect_manager", lambda: "apt")
+    with patch.object(pm.subprocess, "run", return_value=_fake_policy(sample)):
+        result = pm.lookup_package("htop")
+    assert result["installed"] is None
+    assert result["candidate"] == "3.3.0"
+    assert result["available_upgrade"] is None
+
+
+def test_lookup_package_not_found(monkeypatch):
+    sample = "N: Unable to locate package nosuchpkg\n"
+    fake = _fake_policy(sample, returncode=100)
+    monkeypatch.setattr(pm, "detect_manager", lambda: "apt")
+    with patch.object(pm.subprocess, "run", return_value=fake):
+        result = pm.lookup_package("nosuchpkg")
+    assert result["error"] == "package not found"
+
+
+def test_lookup_package_unsupported_manager(monkeypatch):
+    monkeypatch.setattr(pm, "detect_manager", lambda: "unknown")
+    result = pm.lookup_package("bash")
+    assert "unsupported" in result["error"]

@@ -118,7 +118,7 @@
         .table-wrap {
             overflow-x: auto;
             overflow-y: auto;
-            max-height: min(520px, calc(100dvh - 300px));
+            max-height: calc(100dvh - 300px);
             min-height: 200px;
             overscroll-behavior: contain;
         }
@@ -269,7 +269,7 @@
     {% endset %}
     {{ ui.subheader(subheader) }}
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+    <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6 space-y-4">
         <div id="banners"></div>
 
         <div id="tab-updates">
@@ -397,7 +397,7 @@
     function escAttr(s) { return String(s == null ? '' : s).replace(/[<>"&]/g, c => ({'<':'&lt;','>':'&gt;','"':'&quot;','&':'&amp;'}[c])); }
     function fmtAgo(ts) {
         if (!ts) return '—';
-        const sec = Math.floor(Date.now() / 1000 - ts);
+        const sec = Math.max(0, Math.floor(Date.now() / 1000 - ts));
         if (sec < 60) return sec + 's ago';
         if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
         if (sec < 86400) return Math.floor(sec / 3600) + 'h ago';
@@ -522,7 +522,7 @@
             loadState();
         }).finally(() => {
             btn.disabled = false;
-            btn.innerHTML = '<i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i><span>Refresh</span>';
+            btn.innerHTML = '<i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">Refresh</span>';
             lucide.createIcons();
         });
     }
@@ -540,6 +540,7 @@
                 document.getElementById('job-log').textContent = '';
                 document.getElementById('job-spinner').classList.remove('hidden');
                 document.getElementById('job-status').textContent = '';
+                document.getElementById('jobs-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 pollJob();
             });
     }
@@ -556,6 +557,9 @@
                 if (data.success) {
                     document.getElementById('job-status').innerHTML = '<span class="badge badge-green"><i data-lucide="check" style="width:10px;height:10px"></i>success</span>';
                     toast('install completed', 'success');
+                    selected.clear();
+                    updateInstallButton();
+                    loadState();
                 } else {
                     document.getElementById('job-status').innerHTML = '<span class="badge badge-red"><i data-lucide="x" style="width:10px;height:10px"></i>failed</span>';
                     toast('install failed (see log)', 'error');
@@ -569,7 +573,7 @@
     }
 
     function switchTab(tab) {
-        document.querySelectorAll('.tab-button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        document.querySelectorAll('.ui-subheader .tab-button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
         document.getElementById('tab-updates').classList.toggle('hidden', tab !== 'updates');
         document.getElementById('tab-lookup-inner').classList.toggle('hidden', tab !== 'lookup');
         document.getElementById('tab-history').classList.toggle('hidden', tab !== 'history');
@@ -629,6 +633,7 @@
                 document.getElementById('job-log').textContent = '';
                 document.getElementById('job-spinner').classList.remove('hidden');
                 document.getElementById('job-status').textContent = '';
+                document.getElementById('jobs-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 pollJob();
             });
     }
@@ -671,6 +676,18 @@
             document.getElementById('job-id').textContent = data.id;
             document.getElementById('job-packages').textContent = (data.packages || []).join(', ');
             document.getElementById('job-log').textContent = data.tail || '(empty log)';
+            document.getElementById('jobs-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            if (!data.ended_at) {
+                // Still running: attach to the live poll loop instead of
+                // stamping a premature "failed" badge.
+                activeJobId = data.id;
+                if (jobPollTimer) { clearInterval(jobPollTimer); jobPollTimer = null; }
+                document.getElementById('job-spinner').classList.remove('hidden');
+                document.getElementById('job-status').innerHTML = '<span class="badge badge-yellow">running</span>';
+                lucide.createIcons();
+                pollJob();
+                return;
+            }
             document.getElementById('job-spinner').classList.add('hidden');
             const status = data.success ? 'success' : 'failed';
             document.getElementById('job-status').innerHTML = `<span class="badge badge-${data.success ? 'green' : 'red'}">${status}</span>`;

@@ -466,10 +466,12 @@ def lookup_package(name: str) -> dict:
             if proc.returncode == 0 and proc.stdout:
                 for line in proc.stdout.splitlines():
                     line = line.strip()
-                    if line.startswith("  Installed:"):
+                    # NB: the line is already stripped, so match without
+                    # the two-space indent apt-cache emits.
+                    if line.startswith("Installed:"):
                         val = line.split(":", 1)[1].strip()
                         result["installed"] = val if val != "(none)" else None
-                    elif line.startswith("  Candidate:"):
+                    elif line.startswith("Candidate:"):
                         val = line.split(":", 1)[1].strip()
                         result["candidate"] = val if val != "(none)" else None
         except subprocess.TimeoutExpired:

@@ -949,7 +949,45 @@ backend changes).
 **Verified live** (Playwright, zero JS errors, `node --check`
 clean).
 
-### Next route: (to be picked — `/packages` is next in line)
+### Route 9 — Packages (`/packages`)  [x]
+
+Files: `templates/packages.html`, `app/package_manager.py`,
+`tests/test_package_manager.py`.
+
+1. **Content width.** Same narrow `max-w-7xl` wrapper; now
+   `w-[90%]` capped at 1760px. Measured live: 90%.
+2. **Table height cap.** Dropped the 520px `.table-wrap` cap
+   (both Updates and History tables share the class).
+3. **Lookup was broken end-to-end (backend).**
+   `lookup_package()` stripped each `apt-cache policy` line
+   and then matched `"  Installed:"` / `"  Candidate:"`
+   *with* the two-space indent — the prefixes could never
+   match, so every lookup returned "package not found".
+   Fixed to match the stripped form; verified live for
+   `bash` (API + UI both report up-to-date). Covered with 5
+   new tests (up-to-date / upgrade / not-installed /
+   not-found / unsupported manager); the function previously
+   had zero coverage.
+4. **Stale table after install.** Successful install left
+   the Updates list unchanged. Now clears the selection and
+   re-fetches on success (failure keeps the selection for
+   retry). Install start also scrolls the progress section
+   into view (it renders below the fold).
+5. **History log for a running job showed "failed".**
+   `viewJobLog()` stamped `failed` whenever `success` was
+   falsy, including `ended_at == 0`. Now attaches running
+   jobs to the live poll loop with a "running" badge.
+6. **Small correctness.** Scoped `switchTab` to
+   `.ui-subheader .tab-button` (document-wide selector
+   lesson); refresh-button restore keeps the responsive
+   span class; `fmtAgo` clamps future timestamps.
+
+**Verified live** (Playwright, zero JS errors, `node --check`
+clean). Full suite: 816 passed + 5 new; the single failure
+(`test_fanout_with_logging_runs_in_parallel`) also fails on
+the clean tree — pre-existing, unrelated.
+
+### Next route: (to be picked — `/logs` is next in line)
 
 ---
 
