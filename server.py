@@ -646,9 +646,14 @@ def list_files():
                 modified = 0
                 mode = 0
 
+            try:
+                is_link = entry.is_symlink()
+            except OSError:
+                is_link = False
             items.append({
                 "name": entry.name,
                 "is_dir": is_dir,
+                "is_link": is_link,
                 "size": size,
                 "modified": modified,
                 "mode": mode,
@@ -2970,6 +2975,189 @@ def api_files_zip():
             "Content-Length": str(len(data)),
         },
     )
+
+
+def _files_err(e: file_explorer.FileExplorerError, default_status: int = 400):
+    """Map a FileExplorerError to (json, status); offset mismatches are 409."""
+    status = 409 if e.code == "offset_mismatch" else default_status
+    body = {"error": str(e), "code": e.code}
+    received = getattr(e, "received", None)
+    if received is not None:
+        body["received"] = received
+    return jsonify(body), status
+
+
+@app.route('/api/files/mkdir', methods=['POST'])
+@openapi_mod.describe(
+    summary="Create a directory",
+    description="Body: `{path, name}`. Creates one level; slashes rejected.",
+    tag="Files",
+)
+def api_files_mkdir():
+    payload = request.get_json(silent=True) or {}
+    try:
+        out = file_explorer.mkdir(payload.get("path", "."), payload.get("name", ""))
+    except file_explorer.FileExplorerError as e:
+        return _files_err(e)
+    activity.log("files.mkdir", target=out["path"], status="ok", ip=request.remote_addr or "")
+    return jsonify(out)
+
+
+@app.route('/api/files/rename', methods=['POST'])
+@openapi_mod.describe(
+    summary="Rename a file or directory",
+    description="Body: `{path, name}`. Stays in the same directory.",
+    tag="Files",
+)
+def api_files_rename():
+    payload = request.get_json(silent=True) or {}
+    try:
+        out = file_explorer.rename(payload.get("path", ""), payload.get("name", ""))
+    except file_explorer.FileExplorerError as e:
+        return _files_err(e)
+    activity.log(
+        "files.rename", target=f'{out["old_path"]} -> {out["path"]}',
+        status="ok", ip=request.remote_addr or "",
+    )
+    return jsonify(out)
+
+
+@app.route('/api/files/move', methods=['POST'])
+@openapi_mod.describe(
+    summary="Move paths into a directory (cut + paste)",
+    description="Body: `{paths: [...], dest}`. Cross-device falls back to streamed copy + unlink.",
+    tag="Files",
+)
+def api_files_move():
+    payload = request.get_json(silent=True) or {}
+    paths = payload.get("paths") or []
+    if not isinstance(paths, list):
+        return jsonify({"error": "paths must be a list", "code": "invalid"}), 400
+    try:
+        out = file_explorer.move(paths, payload.get("dest", "."))
+    except file_explorer.FileExplorerError as e:
+        return _files_err(e)
+    activity.log(
+        "files.move", target=payload.get("dest", "."), status="ok",
+        detail=f"moved={out['moved']} failed={out['failed']}",
+        ip=request.remote_addr or "",
+    )
+    return jsonify(out)
+
+
+@app.route('/api/files/copy', methods=['POST'])
+@openapi_mod.describe(
+    summary="Copy paths into a directory (copy + paste)",
+    description="Body: `{paths: [...], dest}`. Files stream; constant memory.",
+    tag="Files",
+)
+def api_files_copy():
+    payload = request.get_json(silent=True) or {}
+    paths = payload.get("paths") or []
+    if not isinstance(paths, list):
+        return jsonify({"error": "paths must be a list", "code": "invalid"}), 400
+    try:
+        out = file_explorer.copy(paths, payload.get("dest", "."))
+    except file_explorer.FileExplorerError as e:
+        return _files_err(e)
+    activity.log(
+        "files.copy", target=payload.get("dest", "."), status="ok",
+        detail=f"copied={out['copied']} failed={out['failed']}",
+        ip=request.remote_addr or "",
+    )
+    return jsonify(out)
+
+
+@app.route('/api/files/uploads', methods=['POST'])
+@openapi_mod.describe(
+    summary="Start a resumable upload session",
+    description=(
+        "Body: `{name, size, path?, subpath?, sha256?}`. Preallocates a "
+        "sparse staging file (instant even for 100 GB) and returns "
+        "`{id, received: 0}`. Fails fast when disk space is short."
+    ),
+    tag="Files",
+)
+def api_files_uploads_init():
+    payload = request.get_json(silent=True) or {}
+    try:
+        out = file_explorer.init_upload(
+            payload.get("name", ""),
+            payload.get("size", -1),
+            payload.get("path", "."),
+            subpath=payload.get("subpath"),
+            sha256=payload.get("sha256"),
+        )
+    except file_explorer.FileExplorerError as e:
+        return _files_err(e, 413 if e.code in ("too_large", "not_enough_space") else 400)
+    return jsonify(out)
+
+
+@app.route('/api/files/uploads/<session_id>', methods=['GET'])
+@openapi_mod.describe(
+    summary="Resumable upload status (bytes received)",
+    description="Lets an interrupted client resume from `received` instead of restarting.",
+    tag="Files",
+)
+def api_files_uploads_status(session_id):
+    try:
+        return jsonify(file_explorer.upload_status(session_id))
+    except file_explorer.FileExplorerError as e:
+        return _files_err(e, 404)
+
+
+@app.route('/api/files/uploads/<session_id>', methods=['PUT'])
+@openapi_mod.describe(
+    summary="Upload one chunk (raw body at ?offset=)",
+    description=(
+        "Raw octet-stream body written at `?offset=`, which must equal "
+        "the session's `received` counter (409 + `received` on mismatch). "
+        "The body streams to disk in 1 MiB blocks — constant memory."
+    ),
+    tag="Files",
+)
+def api_files_uploads_chunk(session_id):
+    try:
+        offset = int(request.args.get("offset", -1))
+    except (TypeError, ValueError):
+        return jsonify({"error": "offset must be a number", "code": "bad_offset"}), 400
+    try:
+        out = file_explorer.append_chunk(session_id, offset, request.stream)
+    except file_explorer.FileExplorerError as e:
+        return _files_err(e, 404 if e.code == "unknown_upload" else 400)
+    return jsonify(out)
+
+
+@app.route('/api/files/uploads/<session_id>/complete', methods=['POST'])
+@openapi_mod.describe(
+    summary="Finalize a resumable upload",
+    description=(
+        "Verifies size (+ optional `{sha256}`), then atomically renames "
+        "the staging file onto its real name. Interrupts never leave partials."
+    ),
+    tag="Files",
+)
+def api_files_uploads_complete(session_id):
+    payload = request.get_json(silent=True) or {}
+    try:
+        out = file_explorer.complete_upload(session_id, sha256=payload.get("sha256"))
+    except file_explorer.FileExplorerError as e:
+        return _files_err(e, 404 if e.code == "unknown_upload" else 400)
+    activity.log(
+        "files.upload", target=out["path"], status="ok",
+        detail=f"resumable {out['size']} bytes", ip=request.remote_addr or "",
+    )
+    return jsonify(out)
+
+
+@app.route('/api/files/uploads/<session_id>', methods=['DELETE'])
+@openapi_mod.describe(
+    summary="Cancel a resumable upload",
+    description="Discards staging bytes + session. Idempotent.",
+    tag="Files",
+)
+def api_files_uploads_cancel(session_id):
+    return jsonify(file_explorer.cancel_upload(session_id))
 
 
 @app.route('/api/packages/manager')

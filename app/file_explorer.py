@@ -15,15 +15,34 @@ routes that already exist in ``server.py``:
     in memory (cap on total uncompressed size to avoid
     unbounded memory growth).
   - ``mime_guess()`` — simple extension-based MIME detector.
+  - ``mkdir()`` / ``rename()`` / ``move()`` / ``copy()`` —
+    the create/rename/cut-copy-paste primitives the explorer
+    UI needs (``server.py`` never had these routes).
+  - Resumable uploads — ``init_upload()`` / ``append_chunk()``
+    / ``upload_status()`` / ``complete_upload()`` /
+    ``cancel_upload()``. Drive-style protocol: the client
+    declares the total size up front, the server preallocates
+    a sparse staging file, and each chunk is written at an
+    explicit offset by streaming the request body in 1 MiB
+    blocks — so a 100 GB upload on a 4 GB box never holds
+    more than one block in RAM. Interrupted uploads resume
+    from ``received`` (the offset survives server restarts
+    via a JSON sidecar), and the file appears under its real
+    name only on ``complete_upload()`` via an atomic rename.
 
 All paths are chrooted to ``$HOME`` the same way the existing
 file routes do (see ``list_files`` in server.py).
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import mimetypes
 import os
+import secrets
+import shutil
 import stat
+import time
 import zipfile
 from io import BytesIO
 from typing import Any, Dict, List, Optional, Tuple
@@ -624,3 +643,567 @@ def make_zip(paths: List[str]) -> Tuple[bytes, str]:
                 _check_size(os.path.getsize(target))
                 zf.write(target, arcname)
     return buf.getvalue(), "selection.zip"
+
+
+# ---------------------------------------------------------------------------
+# Create / rename / move / copy
+# ---------------------------------------------------------------------------
+
+def _sanitize_name(name: str, what: str = "name") -> str:
+    """Validate a single path component (no slashes, no dot-dots)."""
+    if not isinstance(name, str):
+        raise FileExplorerError("invalid_name", f"{what} must be a string")
+    cleaned = name.strip()
+    if not cleaned or cleaned in (".", ".."):
+        raise FileExplorerError("invalid_name", f"{what} is empty or reserved")
+    if "/" in cleaned or "\\" in cleaned or "\x00" in cleaned:
+        raise FileExplorerError(
+            "invalid_name", f"{what} must be a single path component",
+        )
+    if len(cleaned) > 255:
+        raise FileExplorerError("invalid_name", f"{what} is too long (max 255)")
+    return cleaned
+
+
+def mkdir(path: str, name: str) -> Dict[str, Any]:
+    """Create a single directory ``name`` inside ``path``."""
+    parent = _resolve(path)
+    if not os.path.isdir(parent):
+        raise FileExplorerError("not_a_directory", f"not a directory: {path}")
+    leaf = _sanitize_name(name, "directory name")
+    target = os.path.join(parent, leaf)
+    if os.path.lexists(target):
+        raise FileExplorerError("exists", f"already exists: {leaf}")
+    try:
+        os.mkdir(target, 0o755)
+    except OSError as e:
+        raise FileExplorerError("mkdir_failed", f"could not create directory: {e}")
+    return {"path": os.path.relpath(target, home_dir()), "name": leaf}
+
+
+def rename(path: str, new_name: str) -> Dict[str, Any]:
+    """Rename a file/directory, staying in the same parent directory."""
+    target = _resolve(path)
+    if not os.path.lexists(target):
+        raise FileExplorerError("not_found", f"path not found: {path}")
+    if os.path.realpath(home_dir()) == os.path.realpath(target):
+        raise FileExplorerError("invalid_name", "refusing to rename $HOME itself")
+    leaf = _sanitize_name(new_name, "new name")
+    dest = os.path.join(os.path.dirname(target), leaf)
+    if os.path.lexists(dest):
+        raise FileExplorerError("exists", f"already exists: {leaf}")
+    try:
+        os.replace(target, dest)
+    except OSError as e:
+        raise FileExplorerError("rename_failed", f"could not rename: {e}")
+    return {
+        "old_path": os.path.relpath(target, home_dir()),
+        "path": os.path.relpath(dest, home_dir()),
+        "name": leaf,
+    }
+
+
+def _move_one(src: str, dest_dir: str) -> None:
+    """Move one resolved path into a resolved directory (streamed)."""
+    base = os.path.basename(src.rstrip(os.sep))
+    dest = os.path.join(dest_dir, base)
+    if os.path.lexists(dest):
+        raise FileExplorerError("exists", f"already exists at destination: {base}")
+    if os.path.isdir(src) and not os.path.islink(src):
+        # Refuse to move a directory into itself (or a child of itself).
+        if dest == src or dest.startswith(src + os.sep):
+            raise FileExplorerError(
+                "invalid_move", "cannot move a directory into itself",
+            )
+    try:
+        os.replace(src, dest)
+        return
+    except OSError as e:
+        import errno
+        if e.errno != errno.EXDEV:
+            raise FileExplorerError("move_failed", f"could not move: {e}")
+    # Cross-device: streamed copy then unlink (constant memory).
+    try:
+        if os.path.isdir(src) and not os.path.islink(src):
+            shutil.copytree(src, dest, symlinks=True)
+        elif os.path.islink(src):
+            linkto = os.readlink(src)
+            os.symlink(linkto, dest)
+        else:
+            shutil.copyfile(src, dest)
+            shutil.copystat(src, dest)
+    except OSError as e:
+        raise FileExplorerError("move_failed", f"could not move: {e}")
+    try:
+        if os.path.isdir(src) and not os.path.islink(src):
+            shutil.rmtree(src)
+        else:
+            os.unlink(src)
+    except OSError as e:
+        raise FileExplorerError(
+            "move_failed", f"moved but could not remove source: {e}",
+        )
+
+
+def move(paths: List[str], dest: str) -> Dict[str, Any]:
+    """Move several paths into directory ``dest`` (cut + paste)."""
+    dest_dir = _resolve(dest)
+    if not os.path.isdir(dest_dir):
+        raise FileExplorerError("not_a_directory", f"not a directory: {dest}")
+    if not paths:
+        raise FileExplorerError("empty_paths", "no paths provided")
+    if len(paths) > 1000:
+        raise FileExplorerError("too_many", "refusing to move more than 1000 entries at once")
+    results: List[Dict[str, Any]] = []
+    for p in paths:
+        if not isinstance(p, str) or not p.strip():
+            results.append({"path": p, "ok": False, "error": "invalid path"})
+            continue
+        try:
+            src = _resolve(p)
+        except FileExplorerError as e:
+            results.append({"path": p, "ok": False, "error": e.message, "code": e.code})
+            continue
+        if not os.path.lexists(src):
+            results.append({"path": p, "ok": False, "error": "not found"})
+            continue
+        try:
+            _move_one(src, dest_dir)
+            results.append({"path": p, "ok": True})
+        except FileExplorerError as e:
+            results.append({"path": p, "ok": False, "error": e.message, "code": e.code})
+    return {
+        "results": results,
+        "moved": sum(1 for r in results if r["ok"]),
+        "failed": sum(1 for r in results if not r["ok"]),
+    }
+
+
+def copy(paths: List[str], dest: str) -> Dict[str, Any]:
+    """Copy several paths into directory ``dest`` (copy + paste).
+
+    Files stream through ``shutil.copyfile`` (constant memory,
+    safe for multi-GB files); directories use ``copytree``.
+    """
+    dest_dir = _resolve(dest)
+    if not os.path.isdir(dest_dir):
+        raise FileExplorerError("not_a_directory", f"not a directory: {dest}")
+    if not paths:
+        raise FileExplorerError("empty_paths", "no paths provided")
+    if len(paths) > 1000:
+        raise FileExplorerError("too_many", "refusing to copy more than 1000 entries at once")
+    results: List[Dict[str, Any]] = []
+    for p in paths:
+        if not isinstance(p, str) or not p.strip():
+            results.append({"path": p, "ok": False, "error": "invalid path"})
+            continue
+        try:
+            src = _resolve(p)
+        except FileExplorerError as e:
+            results.append({"path": p, "ok": False, "error": e.message, "code": e.code})
+            continue
+        if not os.path.lexists(src):
+            results.append({"path": p, "ok": False, "error": "not found"})
+            continue
+        base = os.path.basename(src.rstrip(os.sep))
+        target = os.path.join(dest_dir, base)
+        if os.path.lexists(target):
+            results.append({"path": p, "ok": False, "error": "already exists at destination"})
+            continue
+        if os.path.isdir(src) and not os.path.islink(src):
+            if target == src or target.startswith(src + os.sep):
+                results.append({"path": p, "ok": False, "error": "cannot copy a directory into itself"})
+                continue
+        try:
+            if os.path.isdir(src) and not os.path.islink(src):
+                shutil.copytree(src, target, symlinks=True)
+            elif os.path.islink(src):
+                os.symlink(os.readlink(src), target)
+            else:
+                shutil.copyfile(src, target)
+                shutil.copystat(src, target)
+            results.append({"path": p, "ok": True})
+        except OSError as e:
+            results.append({"path": p, "ok": False, "error": str(e)})
+    return {
+        "results": results,
+        "copied": sum(1 for r in results if r["ok"]),
+        "failed": sum(1 for r in results if not r["ok"]),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Resumable chunked uploads (Drive-style)
+# ---------------------------------------------------------------------------
+
+# Upper bound on a single resumable upload. 256 GiB comfortably
+# covers the "100 GB file on a 4 GB box" case while still bounding
+# abuse; free disk space is checked on top of this at init time.
+_RESUMABLE_MAX_BYTES = 256 * 1024 * 1024 * 1024  # 256 GiB
+
+# Largest request body a single chunk PUT may carry. The browser
+# sends 8 MiB chunks; the cap only guards hand-rolled clients.
+_RESUMABLE_PUT_MAX = 256 * 1024 * 1024  # 256 MiB
+
+# Copy block size when streaming a chunk to disk — the steady-state
+# memory cost of an upload, regardless of file size.
+_RESUMABLE_BLOCK = 1024 * 1024  # 1 MiB
+
+# Sessions idle longer than this are swept (on init + startup).
+_RESUMABLE_STALE_SECS = 48 * 3600
+
+
+def uploads_dir() -> str:
+    """Session directory for resumable uploads (created on demand)."""
+    d = os.path.join(
+        os.path.realpath(os.path.expanduser("~/.server-services-manager")),
+        "uploads",
+    )
+    os.makedirs(d, mode=0o700, exist_ok=True)
+    return d
+
+
+def _session_paths(session_id: str, sessions: Optional[str] = None) -> Tuple[str, str]:
+    """Return ``(staging_path, sidecar_path)`` for a session id.
+
+    The id is validated as strict token format so it can never
+    escape the sessions directory (no ``/``, no dots).
+    """
+    if not isinstance(session_id, str) or not session_id:
+        raise FileExplorerError("unknown_upload", "unknown upload session")
+    if len(session_id) > 64 or not all(
+        c.isalnum() or c in ("-", "_") for c in session_id
+    ):
+        raise FileExplorerError("unknown_upload", "unknown upload session")
+    root = sessions or uploads_dir()
+    try:
+        os.makedirs(root, mode=0o700, exist_ok=True)
+    except OSError:
+        pass
+    return (
+        os.path.join(root, session_id + ".part"),
+        os.path.join(root, session_id + ".json"),
+    )
+
+
+def _load_sidecar(session_id: str, sessions: Optional[str] = None) -> Dict[str, Any]:
+    _, sidecar = _session_paths(session_id, sessions)
+    try:
+        with open(sidecar, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        raise FileExplorerError("unknown_upload", "unknown upload session")
+    if not isinstance(data, dict) or data.get("id") != session_id:
+        raise FileExplorerError("unknown_upload", "unknown upload session")
+    return data
+
+
+def _save_sidecar(data: Dict[str, Any], sessions: Optional[str] = None) -> None:
+    _, sidecar = _session_paths(data["id"], sessions)
+    tmp = sidecar + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+    os.replace(tmp, sidecar)
+
+
+def sweep_stale_uploads(
+    sessions: Optional[str] = None, max_age_secs: int = _RESUMABLE_STALE_SECS,
+) -> int:
+    """Delete staging files + sidecars idle longer than ``max_age_secs``."""
+    root = sessions or uploads_dir()
+    now = time.time()
+    swept = 0
+    try:
+        names = os.listdir(root)
+    except OSError:
+        return 0
+    for name in names:
+        if not name.endswith(".json"):
+            continue
+        sidecar = os.path.join(root, name)
+        try:
+            with open(sidecar, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            updated = float(data.get("updated", 0))
+        except (OSError, ValueError, TypeError):
+            updated = 0
+        if now - updated < max_age_secs:
+            continue
+        sid = name[: -len(".json")]
+        try:
+            staging, _ = _session_paths(sid, root)
+        except FileExplorerError:
+            continue
+        for p in (staging, sidecar):
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+        swept += 1
+    return swept
+
+
+def init_upload(
+    name: str,
+    size: int,
+    path: str = ".",
+    subpath: Optional[str] = None,
+    sha256: Optional[str] = None,
+    sessions: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Start a resumable upload session.
+
+    ``path`` is the destination directory (home-relative);
+    ``subpath`` preserves folder-upload structure
+    (``webkitRelativePath`` minus the filename) and is created
+    eagerly with ``mkdir -p`` semantics. Returns
+    ``{"id", "name", "size", "received": 0, "path"}``.
+    """
+    leaf = _sanitize_name(name, "filename")
+    try:
+        total = int(size)
+    except (TypeError, ValueError):
+        raise FileExplorerError("invalid_size", "size must be a number")
+    if total < 0 or total > _RESUMABLE_MAX_BYTES:
+        raise FileExplorerError(
+            "too_large",
+            f"upload exceeds {_RESUMABLE_MAX_BYTES // (1024 ** 3)} GiB cap",
+        )
+    if sha256 is not None:
+        if not isinstance(sha256, str) or not all(
+            c in "0123456789abcdefABCDEF" for c in sha256
+        ) or len(sha256) != 64:
+            raise FileExplorerError("invalid_hash", "sha256 must be 64 hex chars")
+    dest_dir = _resolve(path)
+    if subpath:
+        # Folder uploads: each level must be a plain relative
+        # component (no ``..``, no absolute, no empty).
+        parts = str(subpath).replace("\\", "/").split("/")
+        clean: List[str] = []
+        for part in parts:
+            if part in ("", "."):
+                continue
+            if part == ".." or len(part) > 255:
+                raise FileExplorerError("outside_home", f"bad subpath: {subpath}")
+            clean.append(part)
+        for part in clean:
+            dest_dir = os.path.join(dest_dir, part)
+        if dest_dir != home_dir() and not dest_dir.startswith(home_dir() + os.sep):
+            raise FileExplorerError("outside_home", f"subpath escapes $HOME: {subpath}")
+        try:
+            os.makedirs(dest_dir, mode=0o755, exist_ok=True)
+        except OSError as e:
+            raise FileExplorerError("mkdir_failed", f"could not create folders: {e}")
+    if not os.path.isdir(dest_dir):
+        raise FileExplorerError("not_a_directory", f"not a directory: {path}")
+    dest = os.path.join(dest_dir, leaf)
+    if os.path.lexists(dest):
+        raise FileExplorerError("exists", f"already exists: {leaf}")
+    # Free-space gate — checked against the filesystem holding
+    # $HOME so a 100 GB upload fails fast instead of dying at 99%.
+    try:
+        free = shutil.disk_usage(home_dir()).free
+    except OSError:
+        free = total
+    if total > free:
+        raise FileExplorerError(
+            "not_enough_space",
+            f"need {total} bytes but only {free} free",
+        )
+    sweep_stale_uploads(sessions)
+    session_id = secrets.token_urlsafe(24)
+    staging, _ = _session_paths(session_id, sessions)
+    # Preallocate sparse (instant even for 100 GB) so space is
+    # reserved up front and later chunks only fill holes.
+    try:
+        with open(staging, "wb") as f:
+            if total:
+                f.truncate(total)
+    except OSError as e:
+        raise FileExplorerError("staging_failed", f"could not stage upload: {e}")
+    data = {
+        "id": session_id,
+        "name": leaf,
+        "size": total,
+        "received": 0,
+        "dest": os.path.relpath(dest, home_dir()),
+        "sha256": sha256.lower() if sha256 else None,
+        "created": time.time(),
+        "updated": time.time(),
+    }
+    _save_sidecar(data, sessions)
+    return {
+        "id": session_id,
+        "name": leaf,
+        "size": total,
+        "received": 0,
+        "path": data["dest"],
+    }
+
+
+def append_chunk(
+    session_id: str,
+    offset: int,
+    # Any byte-stream (Werkzeug's request.stream, BytesIO, raw socket
+    # file …) — only .read() is used, so no stricter type is needed.
+    stream: Any,
+    max_bytes: int = _RESUMABLE_PUT_MAX,
+    sessions: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Write one chunk at ``offset``, streaming in 1 MiB blocks.
+
+    ``offset`` must equal the session's ``received`` counter —
+    on mismatch a 409-style ``offset_mismatch`` error carries the
+    server's ``received`` so the client can re-sync and resume
+    instead of restarting. Returns ``{"received", "size"}``.
+    """
+    data = _load_sidecar(session_id, sessions)
+    try:
+        off = int(offset)
+    except (TypeError, ValueError):
+        raise FileExplorerError("bad_offset", "offset must be a number")
+    received = int(data.get("received", 0))
+    total = int(data.get("size", 0))
+    if off != received:
+        err = FileExplorerError(
+            "offset_mismatch",
+            f"server is at {received}, client sent {off}",
+        )
+        err.received = received  # type: ignore[attr-defined]
+        raise err
+    if off >= total and total > 0:
+        return {"id": session_id, "received": received, "size": total}
+    remaining = total - received
+    try:
+        limit = int(max_bytes)
+    except (TypeError, ValueError):
+        limit = _RESUMABLE_PUT_MAX
+    budget = max(0, min(limit, remaining, _RESUMABLE_PUT_MAX))
+    staging, _ = _session_paths(session_id, sessions)
+    written = 0
+    try:
+        fh = open(staging, "r+b")
+    except OSError as e:
+        raise FileExplorerError("staging_failed", f"lost staging file: {e}")
+    with fh:
+        try:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        except (ImportError, OSError):
+            pass  # Windows / odd fs: offsets still serialize via sidecar
+        fh.seek(off)
+        while written < budget:
+            block = stream.read(min(_RESUMABLE_BLOCK, budget - written))
+            if not block:
+                break
+            if isinstance(block, str):
+                block = block.encode("utf-8", errors="replace")
+            fh.write(block)
+            written += len(block)
+        fh.flush()
+        try:
+            os.fsync(fh.fileno())
+        except OSError:
+            pass
+    received += written
+    data["received"] = received
+    data["updated"] = time.time()
+    _save_sidecar(data, sessions)
+    return {"id": session_id, "received": received, "size": total}
+
+
+def upload_status(
+    session_id: str, sessions: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Return ``{"id", "name", "size", "received", "path"}``."""
+    data = _load_sidecar(session_id, sessions)
+    return {
+        "id": data["id"],
+        "name": data.get("name"),
+        "size": int(data.get("size", 0)),
+        "received": int(data.get("received", 0)),
+        "path": data.get("dest"),
+    }
+
+
+def _hash_file(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while True:
+            block = f.read(8 * 1024 * 1024)
+            if not block:
+                break
+            h.update(block)
+    return h.hexdigest()
+
+
+def complete_upload(
+    session_id: str,
+    sha256: Optional[str] = None,
+    sessions: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Finish a session: verify size (+ optional hash), atomic rename.
+
+    The destination appears only here — interrupted uploads never
+    leave a partial file under the real name.
+    """
+    data = _load_sidecar(session_id, sessions)
+    received = int(data.get("received", 0))
+    total = int(data.get("size", 0))
+    if received != total:
+        raise FileExplorerError(
+            "incomplete",
+            f"received {received} of {total} bytes; keep uploading",
+        )
+    staging, sidecar = _session_paths(session_id, sessions)
+    want = (sha256 or data.get("sha256") or "").lower() or None
+    if want:
+        if len(want) != 64 or not all(c in "0123456789abcdef" for c in want):
+            raise FileExplorerError("invalid_hash", "sha256 must be 64 hex chars")
+        try:
+            actual = _hash_file(staging)
+        except OSError as e:
+            raise FileExplorerError("staging_failed", f"lost staging file: {e}")
+        if actual != want:
+            for p in (staging, sidecar):
+                try:
+                    os.unlink(p)
+                except OSError:
+                    pass
+            raise FileExplorerError(
+                "hash_mismatch",
+                "sha256 mismatch; staged bytes discarded, re-upload",
+            )
+    dest = _resolve(data["dest"])
+    if os.path.lexists(dest):
+        raise FileExplorerError("exists", "destination appeared during upload")
+    try:
+        os.makedirs(os.path.dirname(dest), mode=0o755, exist_ok=True)
+        os.replace(staging, dest)
+    except OSError as e:
+        raise FileExplorerError("complete_failed", f"could not finalize: {e}")
+    try:
+        os.unlink(sidecar)
+    except OSError:
+        pass
+    try:
+        size = os.path.getsize(dest)
+    except OSError:
+        size = total
+    return {"path": os.path.relpath(dest, home_dir()), "size": size}
+
+
+def cancel_upload(
+    session_id: str, sessions: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Discard a session's staging bytes + sidecar (idempotent)."""
+    try:
+        staging, sidecar = _session_paths(session_id, sessions)
+    except FileExplorerError:
+        return {"cancelled": True}
+    for p in (staging, sidecar):
+        try:
+            os.unlink(p)
+        except OSError:
+            pass
+    return {"cancelled": True}

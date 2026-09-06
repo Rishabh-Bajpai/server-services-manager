@@ -41,17 +41,6 @@
         ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
-        .badge {
-            display: inline-flex; align-items: center; gap: 0.25rem;
-            padding: 0.125rem 0.5rem; border-radius: 0.375rem;
-            font-size: 0.6875rem; font-weight: 600;
-            text-transform: uppercase; letter-spacing: 0.04em;
-        }
-        .badge-green { background: rgba(16,185,129,0.12); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.25); }
-        .badge-red { background: rgba(239,68,68,0.12); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.25); }
-        .badge-blue { background: rgba(59,130,246,0.12); color: var(--accent-blue); border: 1px solid rgba(59,130,246,0.25); }
-        .badge-yellow { background: rgba(245,158,11,0.12); color: var(--accent-yellow); border: 1px solid rgba(245,158,11,0.25); }
-        .badge-gray { background: rgba(100,116,139,0.12); color: var(--text-secondary); border: 1px solid rgba(100,116,139,0.25); }
         .panel-card {
             background: var(--bg-card);
             border: 1px solid var(--border-subtle);
@@ -64,6 +53,7 @@
             background: var(--bg-secondary); border: 1px solid var(--border-subtle);
             color: var(--text-primary); cursor: pointer;
             transition: all 0.15s ease;
+            white-space: nowrap;
         }
         .btn:hover { background: var(--border-subtle); }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -71,7 +61,9 @@
         .btn-primary:hover { background: #60a5fa; }
         .btn-danger { background: rgba(239,68,68,0.15); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.3); }
         .btn-danger:hover { background: rgba(239,68,68,0.25); }
-        .text-input, .search-input {
+        .btn-icon { padding: 0.5rem; }
+        .btn-icon.active { border-color: var(--accent-blue); color: var(--accent-blue); }
+        .text-input, .search-input, .select-input {
             background: var(--bg-secondary);
             border: 1px solid var(--border-subtle);
             border-radius: 0.5rem;
@@ -80,7 +72,8 @@
             font-size: 0.8125rem; outline: none; width: 100%;
             font-family: 'JetBrains Mono', monospace;
         }
-        .text-input:focus, .search-input:focus { border-color: var(--accent-blue); }
+        .select-input { width: auto; padding-right: 0.5rem; cursor: pointer; }
+        .text-input:focus, .search-input:focus, .select-input:focus { border-color: var(--accent-blue); }
         .empty-state {
             padding: 2rem 1rem; text-align: center;
             color: var(--text-muted); font-size: 0.875rem;
@@ -103,15 +96,15 @@
             max-height: calc(100dvh - 300px);
         }
         .tree-scroll { overflow-y: auto; }
-        .items-scroll { overflow: auto; }
+        .items-scroll { overflow: auto; position: relative; }
         .tree {
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.8125rem;
             user-select: none;
         }
         .tree-row {
-            display: flex; align-items: center; gap: 0.375rem;
-            padding: 0.25rem 0.5rem; border-radius: 0.25rem;
+            display: flex; align-items: center; gap: 0.25rem;
+            padding: 0.25rem 0.25rem; border-radius: 0.25rem;
             cursor: pointer;
             white-space: nowrap;
         }
@@ -120,10 +113,19 @@
         .tree-row .name {
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
-        .tree-children { padding-left: 1rem; border-left: 1px solid var(--border-subtle); margin-left: 0.5rem; }
+        .tree-twisty {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 1.1rem; height: 1.1rem; flex-shrink: 0;
+            color: var(--text-muted); border-radius: 0.25rem;
+        }
+        .tree-twisty:hover { background: var(--border-subtle); color: var(--text-primary); }
+        .tree-twisty svg { transition: transform 0.12s ease; }
+        .tree-twisty.open svg { transform: rotate(90deg); }
+        .tree-twisty.leaf { visibility: hidden; }
+        .tree-children { padding-left: 0.55rem; border-left: 1px solid var(--border-subtle); margin-left: 0.55rem; }
         .item-row {
             display: grid;
-            grid-template-columns: auto 1fr auto auto auto;
+            grid-template-columns: auto auto 1fr auto auto auto;
             align-items: center;
             gap: 0.75rem;
             padding: 0.5rem 0.875rem;
@@ -134,6 +136,18 @@
         .item-row:hover { background: var(--bg-secondary); }
         .item-row:last-child { border-bottom: none; }
         .item-row.selected { background: rgba(59, 130, 246, 0.12); }
+        .col-header {
+            display: grid;
+            grid-template-columns: auto auto 1fr auto auto auto;
+            gap: 0.75rem;
+            padding: 0.375rem 0.875rem;
+            font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border-subtle);
+            position: sticky; top: 0; background: var(--bg-card); z-index: 1;
+        }
+        .col-header .sortable { cursor: pointer; user-select: none; }
+        .col-header .sortable:hover { color: var(--text-primary); }
         .item-name {
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.8125rem;
@@ -141,17 +155,43 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            display: flex; align-items: center; gap: 0.5rem;
+            min-width: 0;
         }
-        .item-size {
+        .item-meta {
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.75rem;
             color: var(--text-secondary);
+            white-space: nowrap;
         }
         .item-mode {
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.6875rem;
             color: var(--text-muted);
+            white-space: nowrap;
         }
+        .tile-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 0.5rem;
+            padding: 0.875rem;
+        }
+        .tile {
+            display: flex; flex-direction: column; align-items: center; gap: 0.375rem;
+            padding: 0.75rem 0.5rem; border-radius: 0.5rem;
+            border: 1px solid transparent;
+            cursor: pointer; min-width: 0;
+        }
+        .tile:hover { background: var(--bg-secondary); }
+        .tile.selected { background: rgba(59, 130, 246, 0.12); border-color: rgba(59, 130, 246, 0.4); }
+        .tile .tile-icon { height: 3rem; display: flex; align-items: center; justify-content: center; }
+        .tile img.tile-thumb { max-height: 3rem; max-width: 100%; border-radius: 0.25rem; object-fit: contain; }
+        .tile .tile-name {
+            font-family: 'JetBrains Mono', monospace; font-size: 0.6875rem;
+            color: var(--text-primary); text-align: center;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+        }
+        .tile .tile-check { position: relative; }
         .preview-pane {
             background: var(--bg-secondary);
             border: 1px solid var(--border-subtle);
@@ -206,6 +246,56 @@
             padding: 1.5rem;
             max-width: 480px; width: 90%;
         }
+        .modal-wide { max-width: 900px; width: 94%; max-height: 90dvh; display: flex; flex-direction: column; }
+        .ctx-menu {
+            position: fixed; z-index: 200;
+            background: var(--bg-card);
+            border: 1px solid var(--border-active);
+            border-radius: 0.5rem;
+            padding: 0.25rem;
+            min-width: 200px;
+            box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+        }
+        .ctx-item {
+            display: flex; align-items: center; gap: 0.5rem;
+            width: 100%; text-align: left;
+            padding: 0.4375rem 0.625rem; border-radius: 0.375rem;
+            font-size: 0.8125rem; color: var(--text-primary);
+            cursor: pointer;
+        }
+        .ctx-item:hover { background: var(--bg-secondary); }
+        .ctx-item.danger { color: var(--accent-red); }
+        .ctx-item:disabled { opacity: 0.4; cursor: not-allowed; }
+        .ctx-sep { height: 1px; background: var(--border-subtle); margin: 0.25rem 0.375rem; }
+        .ctx-hint { margin-left: auto; font-size: 0.6875rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+        #upload-panel {
+            position: fixed; right: 1rem; bottom: 1rem; z-index: 90;
+            width: min(26rem, calc(100vw - 2rem));
+            max-height: 60dvh; display: flex; flex-direction: column;
+        }
+        .upload-bar { height: 0.375rem; border-radius: 999px; background: var(--border-subtle); overflow: hidden; }
+        .upload-bar > div { height: 100%; background: var(--accent-blue); border-radius: 999px; transition: width 0.2s ease; }
+        .upload-bar.done > div { background: var(--accent-green); }
+        .upload-bar.failed > div { background: var(--accent-red); }
+        .upload-bar.paused > div { background: var(--accent-yellow); }
+        #dnd-overlay {
+            position: absolute; inset: 0; z-index: 20;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(59, 130, 246, 0.08);
+            border: 2px dashed var(--accent-blue); border-radius: 0.75rem;
+            font-size: 0.9375rem; font-weight: 600; color: var(--accent-blue);
+            pointer-events: none;
+        }
+        #dnd-overlay.show { display: flex; }
+        .prop-grid { display: grid; grid-template-columns: auto 1fr; gap: 0.375rem 1rem; font-size: 0.8125rem; }
+        .prop-grid dt { color: var(--text-muted); }
+        .prop-grid dd { font-family: 'JetBrains Mono', monospace; color: var(--text-primary); word-break: break-all; }
+        .viewer-body { overflow: auto; flex: 1; min-height: 0; }
+        kbd.key {
+            font-family: 'JetBrains Mono', monospace; font-size: 0.6875rem;
+            background: var(--bg-secondary); border: 1px solid var(--border-subtle);
+            border-radius: 0.25rem; padding: 0 0.375rem;
+        }
     </style>
 </head>
 <body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
@@ -220,40 +310,83 @@
         current='/files',
     ) }}
     {% set subheader %}
-        <div class="inline-flex rounded-lg border border-[var(--border-subtle)] overflow-hidden flex-shrink-0" id="search-scope" title="Search scope">
-            <button class="px-2.5 py-1.5 text-xs font-semibold bg-[var(--accent-blue)] text-white" data-scope="cwd" onclick="setSearchScope('cwd')" title="Search inside the current directory only">cwd</button>
-            <button class="px-2.5 py-1.5 text-xs font-semibold bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]" data-scope="global" onclick="setSearchScope('global')" title="Search the entire home directory">global</button>
-        </div>
-        <div class="relative w-48 sm:w-64">
-            <i data-lucide="search" class="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"></i>
-            <input id="search-input" class="search-input" placeholder="Search filenames…" oninput="onSearchInput(this.value)">
-        </div>
-        <span class="flex-1"></span>
-        <button class="btn" onclick="uploadFile()" title="Upload to current dir">
-            <i data-lucide="upload" class="w-3.5 h-3.5"></i>
-            <span class="hidden sm:inline">Upload</span>
-        </button>
-        <div class="flex items-center gap-1.5">
-        <button class="btn" onclick="downloadZip()" id="btn-zip" disabled title="Download selected as zip">
-            <i data-lucide="archive" class="w-3.5 h-3.5"></i>
-            <span class="hidden sm:inline">Zip</span>
-        </button>
-        <button class="btn btn-danger" onclick="deleteSelected()" id="btn-delete" disabled title="Delete selected">
-            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-            <span class="hidden sm:inline">Delete</span>
-        </button>
+        <div class="flex items-center gap-1.5 flex-wrap w-full">
+            <button class="btn btn-icon" onclick="goUp()" title="Up one level">
+                <i data-lucide="arrow-up" class="w-3.5 h-3.5"></i>
+            </button>
+            <button class="btn btn-icon" onclick="refreshAll()" title="Refresh">
+                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            </button>
+            <button class="btn" onclick="promptMkdir()" title="New folder in current directory">
+                <i data-lucide="folder-plus" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">New folder</span>
+            </button>
+            <button class="btn" onclick="uploadFiles()" title="Upload files (resumable, any size)">
+                <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">Upload</span>
+            </button>
+            <button class="btn" onclick="uploadFolder()" title="Upload a whole folder (structure preserved)">
+                <i data-lucide="folder-up" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">Folder</span>
+            </button>
+            <span class="w-px h-6 bg-[var(--border-subtle)] mx-1 hidden md:inline-block"></span>
+            <div class="inline-flex rounded-lg border border-[var(--border-subtle)] overflow-hidden flex-shrink-0" title="View mode">
+                <button class="px-2.5 py-1.5 text-xs" id="view-list" onclick="setView('list')" title="List view"><i data-lucide="list" class="w-3.5 h-3.5"></i></button>
+                <button class="px-2.5 py-1.5 text-xs" id="view-grid" onclick="setView('grid')" title="Grid view"><i data-lucide="layout-grid" class="w-3.5 h-3.5"></i></button>
+            </div>
+            <select id="sort-select" class="select-input" onchange="setSort(this.value)" title="Sort order">
+                <option value="name-asc">Name ↑</option>
+                <option value="name-desc">Name ↓</option>
+                <option value="size-desc">Largest</option>
+                <option value="size-asc">Smallest</option>
+                <option value="modified-desc">Newest</option>
+                <option value="modified-asc">Oldest</option>
+                <option value="type-asc">Type</option>
+            </select>
+            <button class="btn btn-icon" id="btn-hidden" onclick="toggleHidden()" title="Show hidden files">
+                <i data-lucide="eye-off" class="w-3.5 h-3.5"></i>
+            </button>
+            <button class="btn btn-icon" id="btn-previewpane" onclick="togglePreviewPane()" title="Toggle preview pane">
+                <i data-lucide="panel-right" class="w-3.5 h-3.5"></i>
+            </button>
+            <span class="flex-1"></span>
+            <div class="inline-flex rounded-lg border border-[var(--border-subtle)] overflow-hidden flex-shrink-0" id="search-scope" title="Search scope">
+                <button class="px-2.5 py-1.5 text-xs font-semibold bg-[var(--accent-blue)] text-white" data-scope="cwd" onclick="setSearchScope('cwd')" title="Search inside the current directory only">cwd</button>
+                <button class="px-2.5 py-1.5 text-xs font-semibold bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]" data-scope="global" onclick="setSearchScope('global')" title="Search the entire home directory">global</button>
+            </div>
+            <div class="relative w-44 sm:w-60">
+                <i data-lucide="search" class="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"></i>
+                <input id="search-input" class="search-input" style="padding-left:2.25rem" placeholder="Search filenames…" oninput="onSearchInput(this.value)">
+            </div>
+            <button class="btn" onclick="pasteClipboard()" id="btn-paste" disabled title="Paste copied/cut items here">
+                <i data-lucide="clipboard-paste" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">Paste</span>
+            </button>
+            <button class="btn" onclick="downloadZip()" id="btn-zip" disabled title="Download selected as zip">
+                <i data-lucide="archive" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">Zip</span>
+            </button>
+            <button class="btn btn-danger" onclick="deleteSelected()" id="btn-delete" disabled title="Delete selected (Del)">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">Delete</span>
+            </button>
         </div>
     {% endset %}
     {{ ui.subheader(subheader) }}
 
     <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6">
-        <div class="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4">
-            <aside class="panel-card p-3">
+        <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4" id="main-grid">
+            <aside class="panel-card p-3" id="tree-panel">
                 <div class="flex items-center justify-between mb-2">
                     <h2 class="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Tree</h2>
-                    <button class="text-[var(--text-muted)] hover:text-[var(--text-primary)]" onclick="loadTree()" title="Refresh">
-                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-                    </button>
+                    <div class="flex items-center gap-1">
+                        <button class="text-[var(--text-muted)] hover:text-[var(--text-primary)]" onclick="collapseTree()" title="Collapse all">
+                            <i data-lucide="chevrons-up" class="w-3.5 h-3.5"></i>
+                        </button>
+                        <button class="text-[var(--text-muted)] hover:text-[var(--text-primary)]" onclick="loadTree(true)" title="Refresh">
+                            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
                 </div>
                 <div id="tree" class="tree tree-scroll">
                     <div class="empty-state">Loading…</div>
@@ -267,40 +400,74 @@
                     </div>
                 </section>
 
-                <div class="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-4">
-                    <section class="panel-card">
-                        <div class="p-4 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2">
-                            <h2 class="text-sm font-semibold flex items-center gap-2">
-                                <i data-lucide="list" class="w-4 h-4 text-[var(--accent-yellow)]"></i>
-                                <span id="dir-name">~</span>
-                            </h2>
-                            <div class="text-xs text-[var(--text-muted)]" id="dir-stats">—</div>
-                        </div>
-                        <div class="items-scroll">
-                            <div id="items-list" class="min-w-[560px]">
-                                <div class="empty-state">Loading…</div>
+                <section class="panel-card">
+                    <div class="p-4 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2 flex-wrap">
+                        <h2 class="text-sm font-semibold flex items-center gap-2">
+                            <i data-lucide="list" class="w-4 h-4 text-[var(--accent-yellow)]"></i>
+                            <span id="dir-name">~</span>
+                            <span id="sel-info" class="text-xs font-normal text-[var(--accent-blue)]"></span>
+                        </h2>
+                        <div class="flex items-center gap-2">
+                            <div class="relative">
+                                <i data-lucide="filter" class="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"></i>
+                                <input id="filter-input" class="search-input !w-40 sm:!w-52" style="padding-left:2.25rem" placeholder="Filter…" oninput="onFilterInput(this.value)" title="Instantly filter the items shown below">
                             </div>
+                            <div class="text-xs text-[var(--text-muted)] whitespace-nowrap" id="dir-stats">—</div>
                         </div>
-                    </section>
-
-                    <section class="panel-card">
-                        <div class="p-4 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2">
-                            <h2 class="text-sm font-semibold flex items-center gap-2">
-                                <i data-lucide="eye" class="w-4 h-4 text-[var(--accent-cyan)]"></i>
-                                Preview
-                            </h2>
-                            <button class="text-[var(--text-muted)] hover:text-[var(--text-primary)]" onclick="closePreview()" title="Close preview">
-                                <i data-lucide="x" class="w-3.5 h-3.5"></i>
-                            </button>
+                    </div>
+                    <div class="items-scroll" id="items-scroll">
+                        <div id="dnd-overlay">Drop files or folders to upload</div>
+                        <div id="items-list" class="min-w-[560px]">
+                            <div class="empty-state">Loading…</div>
                         </div>
-                        <div id="preview-pane" class="preview-pane m-3 empty-state">
-                            Click a file to preview.
-                        </div>
-                    </section>
-                </div>
+                    </div>
+                    <div class="px-4 py-2 border-t border-[var(--border-subtle)] text-[11px] text-[var(--text-muted)] flex items-center gap-3 flex-wrap">
+                        <span><kbd class="key">double-click</kbd> open</span>
+                        <span><kbd class="key">Del</kbd> delete</span>
+                        <span><kbd class="key">F2</kbd> rename</span>
+                        <span><kbd class="key">Ctrl</kbd>+<kbd class="key">A/C/X/V</kbd> select / copy / cut / paste</span>
+                        <span class="ml-auto" id="clip-info"></span>
+                    </div>
+                </section>
             </div>
+
+            <aside class="panel-card hidden" id="preview-panel">
+                <div class="p-4 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2">
+                    <h2 class="text-sm font-semibold flex items-center gap-2">
+                        <i data-lucide="eye" class="w-4 h-4 text-[var(--accent-cyan)]"></i>
+                        Preview
+                    </h2>
+                    <button class="text-[var(--text-muted)] hover:text-[var(--text-primary)]" onclick="togglePreviewPane()" title="Close preview">
+                        <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                    </button>
+                </div>
+                <div id="preview-pane" class="preview-pane m-3 empty-state">
+                    Click a file to preview.
+                </div>
+            </aside>
         </div>
     </main>
+
+    <div id="ctx-menu" class="ctx-menu" style="display:none"></div>
+
+    <div id="upload-panel" class="panel-card p-3" style="display:none">
+        <div class="flex items-center justify-between mb-2">
+            <h3 class="text-sm font-semibold flex items-center gap-2">
+                <i data-lucide="upload-cloud" class="w-4 h-4 text-[var(--accent-blue)]"></i>
+                <span id="upload-title">Uploads</span>
+            </h3>
+            <div class="flex items-center gap-1">
+                <button class="text-[var(--text-muted)] hover:text-[var(--text-primary)]" id="upload-collapse" onclick="toggleUploadPanel()" title="Minimize">
+                    <i data-lucide="minus" class="w-3.5 h-3.5"></i>
+                </button>
+                <button class="text-[var(--text-muted)] hover:text-[var(--text-primary)]" onclick="clearFinishedUploads()" title="Clear finished">
+                    <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                </button>
+            </div>
+        </div>
+        <div id="upload-overall" class="text-xs text-[var(--text-muted)] mb-2"></div>
+        <div id="upload-list" class="space-y-2 overflow-y-auto" style="max-height:40dvh"></div>
+    </div>
 
     <div class="modal-backdrop" id="modal-perm" onclick="if(event.target===this) closePerm()">
         <div class="modal">
@@ -308,7 +475,7 @@
                 <i data-lucide="lock" class="w-5 h-5 text-[var(--accent-yellow)]"></i>
                 Change permissions
             </h3>
-            <p class="text-xs text-[var(--text-secondary)] mb-2" id="perm-path">—</p>
+            <p class="text-xs text-[var(--text-secondary)] mb-2 font-mono" id="perm-path">—</p>
             <input id="perm-mode" class="text-input" placeholder="0644" value="0644">
             <div id="perm-error" class="text-xs text-[var(--accent-red)] mt-2 hidden"></div>
             <div class="flex justify-end gap-2 mt-4">
@@ -318,17 +485,79 @@
         </div>
     </div>
 
+    <div class="modal-backdrop" id="modal-prompt" onclick="if(event.target===this) closePrompt()">
+        <div class="modal">
+            <h3 class="text-lg font-semibold mb-3" id="prompt-title">Name</h3>
+            <p class="text-xs text-[var(--text-secondary)] mb-2 font-mono break-all" id="prompt-sub"></p>
+            <input id="prompt-input" class="text-input" value="">
+            <div id="prompt-error" class="text-xs text-[var(--accent-red)] mt-2 hidden"></div>
+            <div class="flex justify-end gap-2 mt-4">
+                <button class="btn" onclick="closePrompt()">Cancel</button>
+                <button class="btn btn-primary" id="prompt-ok" onclick="submitPrompt()">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="modal-props" onclick="if(event.target===this) closeProps()">
+        <div class="modal">
+            <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
+                <i data-lucide="info" class="w-5 h-5 text-[var(--accent-cyan)]"></i>
+                Properties
+            </h3>
+            <dl class="prop-grid" id="props-body"></dl>
+            <div class="flex justify-end gap-2 mt-4">
+                <button class="btn" onclick="closeProps()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="modal-viewer" onclick="if(event.target===this) closeViewer()">
+        <div class="modal modal-wide p-0 overflow-hidden">
+            <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-[var(--border-subtle)]">
+                <h3 class="text-sm font-semibold font-mono truncate" id="viewer-title">—</h3>
+                <div class="flex items-center gap-1 flex-shrink-0">
+                    <button class="btn btn-icon" id="viewer-download" title="Download">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <button class="btn btn-icon" onclick="closeViewer()" title="Close (Esc)">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="viewer-body p-4" id="viewer-body">
+                <div class="empty-state">Loading…</div>
+            </div>
+        </div>
+    </div>
+
     <div class="toast-container" id="toast-container"></div>
 
-    <input type="file" id="upload-input" style="display:none" onchange="doUpload(this.files)">
+    <input type="file" id="upload-input" style="display:none" multiple onchange="queueChosenFiles(this)">
+    <input type="file" id="upload-folder-input" style="display:none" webkitdirectory onchange="queueChosenFiles(this, true)">
 
     <script>
+        // ------------------------------------------------------------------
+        // State
+        // ------------------------------------------------------------------
         let currentPath = '.';
-        let treeCache = null;
+        let entries = [];            // raw entries for the current view
+        let viewMode = 'dir';        // 'dir' | 'search'
+        let searchScope = 'cwd';     // 'cwd' | 'global'
         let searchTimeout = null;
-        let selected = new Set();  // full home-relative paths of selected items
-        let searchScope = 'cwd';  // 'cwd' | 'global' — drives the /api/files/search?path= value
-        let searchActive = false; // true while a search result list is shown
+        let selected = new Set();    // full home-relative paths
+        let lastClickedIndex = -1;   // for shift-range selection
+        let clipboard = null;        // {mode: 'copy'|'cut', paths: [...]}
+        let showHidden = false;
+        let view = 'list';           // 'list' | 'grid'
+        let sortSpec = 'name-asc';   // key-dir
+        let filterText = '';
+        let previewVisible = false;
+        let treeExpanded = new Set(['.']);  // home-relative dir paths, expanded in tree
+        let treeChildren = {};       // path -> [{name, path, hasKids?}] dir-only cache
+        let uploadJobs = [];         // upload manager queue
+        let uploadPanelMin = false;
+        let activeUploads = 0;
+        const MAX_PARALLEL_UPLOADS = 3;
 
         function api(url, opts = {}) {
             return fetch(url, {
@@ -351,6 +580,20 @@
             return String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
         }
 
+        // Escaper for values placed inside a double-quoted HTML
+        // attribute as a single-quoted JS string
+        // (onclick="fn('…')"). Escaping only quotes is NOT enough:
+        // an unescaped `"` breaks out of the attribute entirely
+        // (stored XSS via a crafted filename).
+        function escapeAttr(s) {
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/'/g, "\\'");
+        }
+
         function humanizeSize(bytes) {
             const n = Number(bytes) || 0;
             if (n < 1024) return n + ' B';
@@ -360,6 +603,55 @@
             return v.toFixed(1) + ' EB';
         }
 
+        function fmtDate(epoch) {
+            if (!epoch) return '—';
+            const d = new Date(Number(epoch) * 1000);
+            return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+
+        function formatMode(m) {
+            const s = ['---', '--x', '-w-', '-wx', 'r--', 'r-x', 'rw-', 'rwx'];
+            m = Number(m) || 0;
+            return s[(m >> 6) & 7] + s[(m >> 3) & 7] + s[m & 7];
+        }
+
+        function joinPath(parent, name) {
+            if (parent === '.' || !parent) return name;
+            return parent + '/' + name;
+        }
+
+        function parentOf(path) {
+            if (!path || path === '.') return null;
+            const i = path.lastIndexOf('/');
+            return i < 0 ? '.' : path.slice(0, i);
+        }
+
+        function fileIcon(name, isDir, isLink) {
+            if (isDir) return { icon: isLink ? 'link' : 'folder', color: 'var(--accent-blue)' };
+            const ext = (name.split('.').pop() || '').toLowerCase();
+            if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(ext))
+                return { icon: 'image', color: 'var(--accent-green)' };
+            if (['mp4', 'webm', 'mov', 'mkv', 'avi'].includes(ext))
+                return { icon: 'film', color: 'var(--accent-purple)' };
+            if (['mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(ext))
+                return { icon: 'music', color: 'var(--accent-purple)' };
+            if (ext === 'pdf') return { icon: 'file-text', color: 'var(--accent-red)' };
+            if (ext === 'zip' || ext === 'tar' || ext === 'gz' || ext === '7z' || ext === 'rar')
+                return { icon: 'archive', color: 'var(--accent-orange)' };
+            if (['txt', 'md', 'log', 'json', 'yaml', 'yml', 'xml', 'csv'].includes(ext))
+                return { icon: 'file-text', color: 'var(--text-secondary)' };
+            if (['py', 'js', 'ts', 'sh', 'go', 'rs', 'java', 'c', 'cpp', 'html', 'css'].includes(ext))
+                return { icon: 'file-code', color: 'var(--accent-cyan)' };
+            return { icon: 'file', color: 'var(--accent-yellow)' };
+        }
+
+        function isImageName(name) {
+            return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico'].includes((name.split('.').pop() || '').toLowerCase());
+        }
+
+        // ------------------------------------------------------------------
+        // Breadcrumb + navigation
+        // ------------------------------------------------------------------
         function buildBreadcrumb() {
             const wrap = document.getElementById('breadcrumb');
             wrap.innerHTML = '';
@@ -382,6 +674,7 @@
                 const el = document.createElement('span');
                 el.className = 'crumb' + (i === crumbs.length - 1 ? ' current' : '');
                 el.textContent = c.label;
+                el.title = c.path;
                 el.onclick = () => navigateTo(c.path);
                 wrap.appendChild(el);
             });
@@ -389,242 +682,538 @@
                 currentPath === '.' ? '~' : currentPath.split('/').pop();
         }
 
-        function loadTree() {
-            api('/api/files/tree?path=.&depth=2').then(({ status, data }) => {
-                if (status >= 400) { toast(data.error || 'HTTP ' + status, 'error'); return; }
-                treeCache = data;
-                renderTree(data.entries || [], null);
-            }).catch(err => {
-                toast('failed to load tree: ' + (err && err.message ? err.message : err), 'error');
-                document.getElementById('tree').innerHTML = '<div class="empty-state">Could not reach the server.</div>';
-            });
-        }
-
-        function renderTree(entries, parentPath) {
-            const wrap = document.getElementById('tree');
-            if (!entries.length) {
-                wrap.innerHTML = '<div class="empty-state">Empty</div>';
-                return;
-            }
-            const rows = entries.filter(e => e.is_dir).map(e => {
-                const fullPath = parentPath ? parentPath + '/' + e.name : e.name;
-                return `<div class="tree-row" data-path="${escapeHtml(fullPath)}">
-                    <i data-lucide="folder" class="w-3.5 h-3.5 text-[var(--accent-blue)] flex-shrink-0"></i>
-                    <span class="name" title="${escapeHtml(e.name)}">${escapeHtml(e.name)}</span>
-                </div>`;
-            }).join('');
-            wrap.innerHTML = rows;
-            // Wire up clicks
-            wrap.querySelectorAll('.tree-row').forEach(row => {
-                row.onclick = () => {
-                    wrap.querySelectorAll('.tree-row').forEach(r => r.classList.remove('current'));
-                    row.classList.add('current');
-                    navigateTo(row.dataset.path);
-                };
-            });
-            lucide.createIcons();
-        }
-
-        function loadDir(path) {
-            api('/api/files?path=' + encodeURIComponent(path))
-                .then(({ status, data }) => {
-                    if (status >= 400) { toast(data.error || 'HTTP ' + status, 'error'); return; }
-                    renderItems(data);
-                })
-                .catch(err => {
-                    toast('failed to load directory: ' + (err && err.message ? err.message : err), 'error');
-                    document.getElementById('items-list').innerHTML = '<div class="empty-state">Could not reach the server.</div>';
-                });
-        }
-
-        function renderItems(data) {
-            const wrap = document.getElementById('items-list');
-            const items = data.files || [];
-            if (!items.length) {
-                wrap.innerHTML = '<div class="empty-state">Empty directory</div>';
-                document.getElementById('dir-stats').textContent = '0 items';
-                return;
-            }
-            const files = items.filter(i => !i.is_dir).length;
-            const dirs = items.length - files;
-            document.getElementById('dir-stats').textContent =
-                `${items.length} item${items.length === 1 ? '' : 's'} (${dirs} dir, ${files} file)`;
-            const rows = items.map(it => {
-                // Search results carry their home-relative path; plain
-                // directory rows only have names. Using the name alone
-                // for search hits would navigate/zip/delete the WRONG
-                // file (joined onto the current directory).
-                const full = it.path || joinPath(currentPath, it.name);
-                const isSel = selected.has(full);
-                const checked = isSel ? 'checked' : '';
-                const icon = it.is_dir ? 'folder' : 'file';
-                const color = it.is_dir ? 'var(--accent-blue)' : 'var(--accent-yellow)';
-                const click = it.is_dir
-                    ? `navigateTo('${escapeAttr(full)}')`
-                    : `previewFile('${escapeAttr(full)}')`;
-                return `<div class="item-row ${isSel ? 'selected' : ''}" onclick="${click}">
-                    <input type="checkbox" ${checked} onclick="event.stopPropagation(); toggleSelect('${escapeAttr(full)}', this.checked)" class="accent-[var(--accent-blue)]">
-                    <span class="item-name" title="${escapeHtml(it.name)}">
-                        <i data-lucide="${icon}" class="w-3.5 h-3.5 inline ${it.is_dir ? 'text-[var(--accent-blue)]' : ''}" style="color:${it.is_dir ? 'var(--accent-blue)' : 'var(--accent-yellow)'}"></i>
-                        ${escapeHtml(it.name)}
-                    </span>
-                    <span class="item-mode">${it.is_dir ? 'd' : '-'}${formatMode(it.mode)}</span>
-                    <span class="item-size">${it.is_dir ? '—' : humanizeSize(it.size)}</span>
-                    <button class="text-[var(--text-muted)] hover:text-[var(--accent-yellow)]" onclick="event.stopPropagation(); openPerm('${escapeAttr(full)}', '${it.mode}')" title="chmod">
-                        <i data-lucide="lock" class="w-3.5 h-3.5"></i>
-                    </button>
-                </div>`;
-            }).join('');
-            wrap.innerHTML = rows;
-            lucide.createIcons();
-            updateButtons();
-        }
-
-        function formatMode(m) {
-            // rwxrwxrwx
-            const s = ['---', '--x', '-w-', '-wx', 'r--', 'r-x', 'rw-', 'rwx'];
-            const u = (m >> 6) & 7, g = (m >> 3) & 7, o = m & 7;
-            return s[u] + s[g] + s[o];
-        }
-
-        function joinPath(parent, name) {
-            if (parent === '.' || !parent) return name;
-            return parent + '/' + name;
-        }
-
-        // Escaper for values placed inside a double-quoted HTML
-        // attribute as a single-quoted JS string
-        // (onclick="fn('…')"). Escaping only quotes is NOT enough:
-        // an unescaped `"` breaks out of the attribute entirely
-        // (stored XSS via a crafted filename).
-        function escapeAttr(s) {
-            return String(s)
-                .replace(/&/g, '&amp;')
-                .replace(/"/g, '&quot;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/'/g, "\\'");
-        }
-
         function navigateTo(path) {
             currentPath = path;
             selected.clear();
-            searchActive = false;
+            lastClickedIndex = -1;
+            viewMode = 'dir';
             document.getElementById('search-input').value = '';
-            closePreview();
+            document.getElementById('filter-input').value = '';
+            filterText = '';
             buildBreadcrumb();
             loadDir(path);
+            expandTreeTo(path);
+            markTreeCurrent();
         }
 
-        function toggleSelect(path, on) {
-            if (on) selected.add(path);
-            else selected.delete(path);
-            // Re-render to update checkbox state
-            if (searchActive) doSearch(document.getElementById('search-input').value);
-            else loadDir(currentPath);
+        function goUp() {
+            const p = parentOf(currentPath);
+            if (p !== null) navigateTo(p);
         }
 
-        function updateButtons() {
-            document.getElementById('btn-zip').disabled = selected.size === 0;
-            document.getElementById('btn-delete').disabled = selected.size === 0;
+        function refreshAll() {
+            treeChildren = {};
+            loadTree(true);
+            if (viewMode === 'dir') loadDir(currentPath);
+            else doSearch(document.getElementById('search-input').value);
         }
 
-        function closePreview() {
-            document.getElementById('preview-pane').innerHTML =
-                '<div class="empty-state">Click a file to preview.</div>';
+        // ------------------------------------------------------------------
+        // Tree (lazy, expandable)
+        // ------------------------------------------------------------------
+        function loadTree(force) {
+            if (force) treeChildren = {};
+            const wrap = document.getElementById('tree');
+            if (!Object.keys(treeChildren).length && !force) {
+                wrap.innerHTML = '<div class="empty-state">Loading…</div>';
+            }
+            fetchKids('.').then(kids => {
+                treeChildren['.'] = kids;
+                renderTree();
+            }).catch(err => {
+                toast('failed to load tree: ' + (err && err.message ? err.message : err), 'error');
+                wrap.innerHTML = '<div class="empty-state">Could not reach the server.</div>';
+            });
         }
 
-        function previewFile(path) {
-            const pane = document.getElementById('preview-pane');
-            pane.innerHTML = '<div class="empty-state">Loading…</div>';
-            api('/api/files/preview?path=' + encodeURIComponent(path))
+        // Fetch direct child DIRECTORIES of a path (files filtered out here).
+        function fetchKids(path) {
+            if (treeChildren[path]) return Promise.resolve(treeChildren[path]);
+            return fetch('/api/files?path=' + encodeURIComponent(path), { credentials: 'same-origin' })
+                .then(r => r.json().then(j => ({ status: r.status, data: j })))
                 .then(({ status, data }) => {
-                    if (status >= 400) {
-                        pane.innerHTML = `<div class="text-[var(--accent-red)] text-xs">${escapeHtml(data.error || 'HTTP ' + status)}</div>`;
-                        return;
-                    }
-                    if (data.kind === 'text') {
-                        const truncated = data.truncated ? '\n\n[... truncated, file is ' + humanizeSize(data.size) + ']' : '';
-                        const tooBig = data.too_large_for_inline_text ? '\n\n[File is large; consider downloading it instead.]' : '';
-                        const empty = !data.content;
-                        const body = empty
-                            ? '<div class="text-[var(--text-muted)] text-xs italic">empty file</div>'
-                            : escapeHtml(data.content || '');
-                        pane.innerHTML = `<div class="text-xs text-[var(--text-muted)] mb-2 flex items-center gap-2"><i data-lucide="file-text" class="w-3 h-3"></i>${escapeHtml(data.name)} · ${humanizeSize(data.size)}${data.encoding && data.encoding !== 'utf-8' ? ' · ' + escapeHtml(data.encoding) : ''}</div><div class="preview-text">${body}${escapeHtml(truncated)}${escapeHtml(tooBig)}</div>`;
-                    } else if (data.kind === 'image') {
-                        pane.innerHTML = `<div class="text-xs text-[var(--text-muted)] mb-2 flex items-center gap-2"><i data-lucide="image" class="w-3 h-3"></i>${escapeHtml(data.name)} · ${humanizeSize(data.size)} · ${escapeHtml(data.mime)}</div><img class="preview-image" src="data:${escapeHtml(data.mime)};base64,${data.data_b64}" alt="${escapeHtml(data.name)}">`;
-                    } else if (data.kind === 'pdf') {
-                        pane.innerHTML = `<div class="text-xs text-[var(--text-muted)] mb-2 flex items-center gap-2"><i data-lucide="file-text" class="w-3 h-3"></i>${escapeHtml(data.name)} · ${humanizeSize(data.size)}</div><embed src="data:application/pdf;base64,${data.data_b64}" type="application/pdf" width="100%" height="480px">`;
-                    } else if (data.kind === 'audio') {
-                        pane.innerHTML = `<div class="text-xs text-[var(--text-muted)] mb-2 flex items-center gap-2"><i data-lucide="music" class="w-3 h-3"></i>${escapeHtml(data.name)} · ${humanizeSize(data.size)} · ${escapeHtml(data.mime || 'audio')}</div><audio controls class="w-full" src="/api/files/download?path=${encodeURIComponent(path)}">Your browser does not support audio playback.</audio>`;
-                    } else if (data.kind === 'video') {
-                        pane.innerHTML = `<div class="text-xs text-[var(--text-muted)] mb-2 flex items-center gap-2"><i data-lucide="film" class="w-3 h-3"></i>${escapeHtml(data.name)} · ${humanizeSize(data.size)} · ${escapeHtml(data.mime || 'video')}</div><video controls class="preview-image" src="/api/files/download?path=${encodeURIComponent(path)}">Your browser does not support video playback.</video>`;
-                    } else {
-                        pane.innerHTML = `<div class="empty-state">${escapeHtml(data.name)}<br><span class="text-[var(--text-muted)] text-xs">${humanizeSize(data.size)} · ${escapeHtml(data.mime || data.kind)}</span><br><a class="text-[var(--accent-blue)] underline" href="/api/files/download?path=${encodeURIComponent(path)}">Download</a></div>`;
-                    }
-                    lucide.createIcons();
+                    if (status >= 400) throw new Error((data && data.error) || ('HTTP ' + status));
+                    const kids = (data.files || [])
+                        .filter(e => e.is_dir && (showHidden || !e.name.startsWith('.')))
+                        .map(e => ({ name: e.name, path: joinPath(path, e.name) }))
+                        .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+                    treeChildren[path] = kids;
+                    return kids;
                 });
         }
 
-        function uploadFile() {
-            document.getElementById('upload-input').click();
+        function renderTree() {
+            const wrap = document.getElementById('tree');
+            wrap.innerHTML = '';
+            const rootKids = treeChildren['.'] || [];
+            const root = document.createElement('div');
+            const rootTwisty = treeExpanded.has('.') ? 'open' : '';
+            root.innerHTML =
+                `<div class="tree-row ${currentPath === '.' ? 'current' : ''}" data-tpath=".">` +
+                `<span class="tree-twisty ${rootTwisty}" data-twisty="."><i data-lucide="chevron-right" class="w-3.5 h-3.5"></i></span>` +
+                `<i data-lucide="home" class="w-3.5 h-3.5 text-[var(--accent-blue)] flex-shrink-0"></i>` +
+                `<span class="name">~</span></div>` +
+                `<div class="tree-children" data-kids="."></div>`;
+            wrap.appendChild(root);
+            renderTreeKids(root.querySelector('[data-kids="."]'), '.', rootKids);
+            wireTreeRow(root.querySelector('[data-tpath="."]'), '.');
+            wireTwisty(root.querySelector('[data-twisty="."]'), '.');
+            lucide.createIcons();
         }
 
-        const UPLOAD_CHUNK_SIZE = 2 * 1024 * 1024; // 2MB — matches Laranode chunk pattern
-        async function uploadSingle(file, path) {
-            if (file.size <= UPLOAD_CHUNK_SIZE) {
-                const fd = new FormData();
-                fd.append('file', file);
-                fd.append('path', path);
-                const r = await fetch('/api/files/upload', { method: 'POST', body: fd, credentials: 'same-origin' });
-                const j = await r.json();
-                if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
-                return j.filename || file.name;
-            }
-            const totalChunks = Math.ceil(file.size / UPLOAD_CHUNK_SIZE);
-            for (let i = 0; i < totalChunks; i++) {
-                const chunk = file.slice(i * UPLOAD_CHUNK_SIZE, (i + 1) * UPLOAD_CHUNK_SIZE);
-                const fd = new FormData();
-                fd.append('file', chunk, file.name + '.part');
-                fd.append('path', path);
-                fd.append('chunkIndex', String(i));
-                fd.append('totalChunks', String(totalChunks));
-                fd.append('originalName', file.name);
-                const r = await fetch('/api/files/upload', { method: 'POST', body: fd, credentials: 'same-origin' });
-                const j = await r.json();
-                if (!r.ok) throw new Error((j.files && j.files[0] && j.files[0].error) || j.error || ('HTTP ' + r.status));
-            }
-            return file.name;
-        }
-        async function doUpload(files) {
-            if (!files || !files.length) return;
-            try {
-                for (const f of files) {
-                    toast('Uploading ' + f.name + (f.size > UPLOAD_CHUNK_SIZE ? ' (chunked)…' : '…'), 'info', 2500);
-                    const name = await uploadSingle(f, currentPath);
-                    toast('Uploaded ' + name, 'success');
+        function renderTreeKids(container, parentPath, kids) {
+            container.innerHTML = '';
+            if (treeExpanded.has(parentPath)) {
+                if (!kids.length) {
+                    container.innerHTML = '<div class="text-[11px] text-[var(--text-muted)] px-2 py-1">empty</div>';
+                    return;
                 }
-                loadDir(currentPath);
-            } catch (e) {
-                toast(e.message || 'upload failed', 'error');
+                for (const k of kids) {
+                    const row = document.createElement('div');
+                    const open = treeExpanded.has(k.path);
+                    row.innerHTML =
+                        `<div class="tree-row ${currentPath === k.path ? 'current' : ''}" data-tpath="${escapeAttr(k.path)}">` +
+                        `<span class="tree-twisty ${open ? 'open' : ''}" data-twisty="${escapeAttr(k.path)}"><i data-lucide="chevron-right" class="w-3.5 h-3.5"></i></span>` +
+                        `<i data-lucide="folder" class="w-3.5 h-3.5 text-[var(--accent-blue)] flex-shrink-0"></i>` +
+                        `<span class="name" title="${escapeAttr(k.name)}">${escapeHtml(k.name)}</span></div>` +
+                        `<div class="tree-children" data-kids="${escapeAttr(k.path)}" style="${open ? '' : 'display:none'}"></div>`;
+                    container.appendChild(row);
+                    const trow = row.querySelector('[data-tpath]');
+                    wireTreeRow(trow, k.path);
+                    wireTwisty(row.querySelector('[data-twisty]'), k.path);
+                    if (open) {
+                        const kc = row.querySelector('[data-kids]');
+                        fetchKids(k.path).then(kk => renderTreeKids(kc, k.path, kk)).catch(() => {
+                            kc.innerHTML = '<div class="text-[11px] text-[var(--accent-red)] px-2 py-1">unreadable</div>';
+                        });
+                    }
+                }
+                lucide.createIcons();
             }
-            document.getElementById('upload-input').value = '';
+        }
+
+        function wireTreeRow(el, path) {
+            el.onclick = () => navigateTo(path);
+        }
+
+        function wireTwisty(el, path) {
+            el.onclick = (e) => {
+                e.stopPropagation();
+                toggleTreeNode(path);
+            };
+        }
+
+        function toggleTreeNode(path) {
+            if (treeExpanded.has(path)) {
+                treeExpanded.delete(path);
+            } else {
+                treeExpanded.add(path);
+                fetchKids(path).catch(err => toast(err.message || 'unreadable', 'error'));
+            }
+            renderTree();
+        }
+
+        function collapseTree() {
+            treeExpanded = new Set(['.']);
+            renderTree();
+        }
+
+        // Expand every ancestor of path so the current dir is visible.
+        function expandTreeTo(path) {
+            treeExpanded.add('.');
+            if (path && path !== '.') {
+                const parts = path.split('/');
+                let cur = '';
+                for (const p of parts) {
+                    if (!p) continue;
+                    cur = cur ? cur + '/' + p : p;
+                    treeExpanded.add(cur);
+                }
+            }
+            // Ensure each expanded level's children are loaded, then render.
+            const needed = [...treeExpanded];
+            (function next(i) {
+                if (i >= needed.length) { renderTree(); return; }
+                fetchKids(needed[i]).then(() => next(i + 1)).catch(() => next(i + 1));
+            })(0);
+        }
+
+        function markTreeCurrent() {
+            document.querySelectorAll('#tree .tree-row').forEach(r => {
+                r.classList.toggle('current', r.dataset.tpath === currentPath);
+            });
+        }
+
+        // ------------------------------------------------------------------
+        // Center panel: load / sort / filter / views
+        // ------------------------------------------------------------------
+        function loadDir(path) {
+            const wrap = document.getElementById('items-list');
+            api('/api/files?path=' + encodeURIComponent(path))
+                .then(({ status, data }) => {
+                    if (status >= 400) { toast(data.error || 'HTTP ' + status, 'error'); return; }
+                    viewMode = 'dir';
+                    entries = (data.files || []).map(e => ({
+                        name: e.name,
+                        path: joinPath(data.current_path === '.' ? '.' : data.current_path, e.name),
+                        is_dir: e.is_dir,
+                        is_link: !!e.is_link,
+                        size: e.size,
+                        mode: e.mode,
+                        modified: e.modified,
+                    }));
+                    lastClickedIndex = -1;
+                    renderCenter();
+                })
+                .catch(err => {
+                    toast('failed to load directory: ' + (err && err.message ? err.message : err), 'error');
+                    wrap.innerHTML = '<div class="empty-state">Could not reach the server.</div>';
+                });
+        }
+
+        function visibleEntries() {
+            let out = entries.slice();
+            if (!showHidden) out = out.filter(e => !e.name.startsWith('.'));
+            if (filterText) {
+                const q = filterText.toLowerCase();
+                out = out.filter(e => e.name.toLowerCase().includes(q));
+            }
+            const [key, dir] = sortSpec.split('-');
+            const mul = dir === 'desc' ? -1 : 1;
+            const val = (e) => key === 'name' ? e.name.toLowerCase()
+                : key === 'size' ? (e.is_dir ? -1 : Number(e.size) || 0)
+                : key === 'modified' ? (Number(e.modified) || 0)
+                : (e.is_dir ? '0-dir' : (e.name.split('.').pop() || '').toLowerCase() + e.name.toLowerCase());
+            out.sort((a, b) => {
+                if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;  // dirs first, always
+                const va = val(a), vb = val(b);
+                return (va < vb ? -1 : va > vb ? 1 : 0) * mul;
+            });
+            return out;
+        }
+
+        function renderCenter() {
+            const items = visibleEntries();
+            const files = items.filter(i => !i.is_dir).length;
+            const dirs = items.length - files;
+            const scopeNote = viewMode === 'search' ? 'match' + (items.length === 1 ? '' : 'es') : null;
+            document.getElementById('dir-stats').textContent = scopeNote
+                ? `${items.length} ${scopeNote}`
+                : `${items.length} item${items.length === 1 ? '' : 's'} (${dirs} dir, ${files} file)`;
+            const wrap = document.getElementById('items-list');
+            if (!items.length) {
+                wrap.innerHTML = `<div class="empty-state">${filterText ? 'No items match the filter.' : viewMode === 'search' ? 'No matches.' : 'Empty directory'}</div>`;
+                updateSelUI();
+                return;
+            }
+            wrap.innerHTML = view === 'list' ? listHTML(items) : gridHTML(items);
+            wireItems(wrap, items);
+            lucide.createIcons();
+            updateSelUI();
+        }
+
+        function listHTML(items) {
+            const [key, dir] = sortSpec.split('-');
+            const arrow = (k) => key === k ? (dir === 'asc' ? ' ↑' : ' ↓') : '';
+            let h = `<div class="col-header"><span></span><span></span>` +
+                `<span class="sortable" data-sort="name">Name${arrow('name')}</span>` +
+                `<span class="sortable text-right" data-sort="size">Size${arrow('size')}</span>` +
+                `<span class="sortable text-right" data-sort="modified">Modified${arrow('modified')}</span>` +
+                `<span>Mode</span></div>`;
+            h += items.map((it, i) => {
+                const isSel = selected.has(it.path);
+                const fi = fileIcon(it.name, it.is_dir, it.is_link);
+                return `<div class="item-row ${isSel ? 'selected' : ''}" data-idx="${i}" data-path="${escapeAttr(it.path)}">` +
+                    `<input type="checkbox" ${isSel ? 'checked' : ''} data-check="${i}" class="accent-[var(--accent-blue)]" title="Select">` +
+                    `<i data-lucide="${fi.icon}" class="w-4 h-4 flex-shrink-0" style="color:${fi.color}"></i>` +
+                    `<span class="item-name" title="${escapeAttr(it.name)}${it.is_link ? ' (symlink)' : ''}">${escapeHtml(it.name)}${it.is_link ? '<span class="text-[10px] text-[var(--text-muted)]">⇄</span>' : ''}</span>` +
+                    `<span class="item-meta text-right">${it.is_dir ? '—' : humanizeSize(it.size)}</span>` +
+                    `<span class="item-meta text-right">${fmtDate(it.modified)}</span>` +
+                    `<span class="item-mode">${it.is_dir ? 'd' : '-'}${formatMode(it.mode)}</span>` +
+                    `</div>`;
+            }).join('');
+            return h;
+        }
+
+        function gridHTML(items) {
+            return `<div class="tile-grid">` + items.map((it, i) => {
+                const isSel = selected.has(it.path);
+                const fi = fileIcon(it.name, it.is_dir, it.is_link);
+                const thumb = (!it.is_dir && isImageName(it.name))
+                    ? `<img class="tile-thumb" loading="lazy" src="/api/files/download?path=${encodeURIComponent(it.path)}" alt="">`
+                    : `<i data-lucide="${fi.icon}" class="w-10 h-10" style="color:${fi.color}"></i>`;
+                return `<div class="tile ${isSel ? 'selected' : ''}" data-idx="${i}" data-path="${escapeAttr(it.path)}">` +
+                    `<input type="checkbox" ${isSel ? 'checked' : ''} data-check="${i}" class="accent-[var(--accent-blue)] self-start" title="Select" style="margin:-0.25rem 0 0 -0.25rem">` +
+                    `<div class="tile-icon">${thumb}</div>` +
+                    `<div class="tile-name" title="${escapeAttr(it.name)}">${escapeHtml(it.name)}</div>` +
+                    `<div class="item-meta">${it.is_dir ? (it.is_link ? 'link' : 'folder') : humanizeSize(it.size)}</div>` +
+                    `</div>`;
+            }).join('') + `</div>`;
+        }
+
+        function wireItems(wrap, items) {
+            wrap.querySelectorAll('[data-sort]').forEach(el => {
+                el.onclick = () => cycleSort(el.dataset.sort);
+            });
+            const clickRow = (el, i, e) => {
+                if (e.target.matches('input[type=checkbox]')) return;  // handled below
+                const path = items[i].path;
+                if (e.shiftKey && lastClickedIndex >= 0) {
+                    const [a, b] = [Math.min(lastClickedIndex, i), Math.max(lastClickedIndex, i)];
+                    for (let k = a; k <= b; k++) selected.add(items[k].path);
+                } else if (e.ctrlKey || e.metaKey) {
+                    selected.has(path) ? selected.delete(path) : selected.add(path);
+                    lastClickedIndex = i;
+                } else {
+                    selected.clear();
+                    selected.add(path);
+                    lastClickedIndex = i;
+                }
+                renderCenter();
+                autoPreview();
+            };
+            wrap.querySelectorAll('[data-idx]').forEach(el => {
+                const i = Number(el.dataset.idx);
+                el.onclick = (e) => clickRow(el, i, e);
+                el.ondblclick = () => openItem(items[i]);
+                el.oncontextmenu = (e) => { e.preventDefault(); selectForMenu(items[i].path); showCtx(e.clientX, e.clientY, 'item'); };
+            });
+            wrap.querySelectorAll('[data-check]').forEach(cb => {
+                cb.onclick = (e) => {
+                    e.stopPropagation();
+                    const i = Number(cb.dataset.check);
+                    const path = items[i].path;
+                    cb.checked ? selected.add(path) : selected.delete(path);
+                    lastClickedIndex = i;
+                    renderCenter();
+                    autoPreview();
+                };
+            });
+        }
+
+        function openItem(it) {
+            if (it.is_dir) navigateTo(it.path);
+            else openViewer(it.path, it.name);
+        }
+
+        function selectForMenu(path) {
+            if (!selected.has(path)) {
+                selected.clear();
+                selected.add(path);
+                renderCenter();
+            }
+        }
+
+        function setView(v) {
+            view = v;
+            const on = 'px-2.5 py-1.5 text-xs bg-[var(--accent-blue)] text-white';
+            const off = 'px-2.5 py-1.5 text-xs bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]';
+            document.getElementById('view-list').className = v === 'list' ? on : off;
+            document.getElementById('view-grid').className = v === 'grid' ? on : off;
+            renderCenter();
+        }
+
+        function cycleSort(key) {
+            const [k, d] = sortSpec.split('-');
+            sortSpec = (k === key && d === 'asc') ? key + '-desc'
+                : (k === key) ? key + '-asc'
+                : key === 'name' ? 'name-asc'
+                : key === 'size' ? 'size-desc'
+                : key === 'modified' ? 'modified-desc' : 'type-asc';
+            document.getElementById('sort-select').value = sortSpec;
+            renderCenter();
+        }
+
+        function setSort(spec) {
+            sortSpec = spec;
+            renderCenter();
+        }
+
+        function onFilterInput(v) {
+            filterText = v.trim();
+            renderCenter();
+        }
+
+        function toggleHidden() {
+            showHidden = !showHidden;
+            document.getElementById('btn-hidden').classList.toggle('active', showHidden);
+            document.getElementById('btn-hidden').title = showHidden ? 'Hide hidden files' : 'Show hidden files';
+            loadTree(true);
+            renderCenter();
+        }
+
+        function togglePreviewPane() {
+            previewVisible = !previewVisible;
+            const grid = document.getElementById('main-grid');
+            const panel = document.getElementById('preview-panel');
+            document.getElementById('btn-previewpane').classList.toggle('active', previewVisible);
+            if (previewVisible) {
+                grid.className = 'grid grid-cols-1 xl:grid-cols-[280px_1fr_360px] gap-4';
+                panel.classList.remove('hidden');
+                autoPreview();
+            } else {
+                grid.className = 'grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4';
+                panel.classList.add('hidden');
+            }
+        }
+
+        function autoPreview() {
+            if (!previewVisible) return;
+            if (selected.size === 1) {
+                const path = [...selected][0];
+                const it = entries.find(e => e.path === path);
+                if (it && !it.is_dir) { previewFile(path); return; }
+            }
+            closePreview();
+        }
+
+        // ------------------------------------------------------------------
+        // Selection UI + clipboard
+        // ------------------------------------------------------------------
+        function updateSelUI() {
+            const n = selected.size;
+            document.getElementById('btn-zip').disabled = n === 0;
+            document.getElementById('btn-delete').disabled = n === 0;
+            document.getElementById('btn-paste').disabled = !clipboard;
+            document.getElementById('sel-info').textContent = n ? `${n} selected` : '';
+            document.getElementById('clip-info').textContent = clipboard
+                ? `${clipboard.mode === 'cut' ? 'Cut' : 'Copied'} ${clipboard.paths.length} item(s) — navigate, then Paste`
+                : '';
+        }
+
+        function selectAllVisible() {
+            visibleEntries().forEach(e => selected.add(e.path));
+            renderCenter();
+        }
+
+        function copySelected() {
+            if (!selected.size) return;
+            clipboard = { mode: 'copy', paths: [...selected] };
+            updateSelUI();
+            toast(`Copied ${clipboard.paths.length} item(s) — navigate, then Paste`, 'info');
+        }
+
+        function cutSelected() {
+            if (!selected.size) return;
+            clipboard = { mode: 'cut', paths: [...selected] };
+            updateSelUI();
+            toast(`Cut ${clipboard.paths.length} item(s) — navigate, then Paste`, 'info');
+        }
+
+        function pasteClipboard() {
+            if (!clipboard) return;
+            const dest = (viewMode === 'dir') ? currentPath
+                : (selected.size ? (parentOf([...selected][0]) || '.') : '.');
+            const route = clipboard.mode === 'cut' ? '/api/files/move' : '/api/files/copy';
+            api(route, { method: 'POST', body: JSON.stringify({ paths: clipboard.paths, dest }) })
+                .then(({ status, data }) => {
+                    if (status >= 400) { toast(data.error || 'HTTP ' + status, 'error'); return; }
+                    const done = data.moved ?? data.copied ?? 0;
+                    const failed = data.failed ?? 0;
+                    toast(`${clipboard.mode === 'cut' ? 'Moved' : 'Copied'} ${done}/${done + failed} → ${dest}`, failed ? 'info' : 'success');
+                    if (clipboard.mode === 'cut' && failed === 0) clipboard = null;
+                    selected.clear();
+                    refreshAll();
+                });
+        }
+
+        function copyPath() {
+            if (selected.size !== 1) return;
+            const p = [...selected][0];
+            (navigator.clipboard ? navigator.clipboard.writeText(p) : Promise.reject())
+                .then(() => toast('Path copied', 'success'))
+                .catch(() => toast(p, 'info', 6000));
+        }
+
+        // ------------------------------------------------------------------
+        // File operations
+        // ------------------------------------------------------------------
+        let promptCb = null;
+        function openPrompt(title, sub, initial, cb) {
+            document.getElementById('prompt-title').textContent = title;
+            document.getElementById('prompt-sub').textContent = sub || '';
+            const inp = document.getElementById('prompt-input');
+            inp.value = initial || '';
+            document.getElementById('prompt-error').classList.add('hidden');
+            document.getElementById('modal-prompt').classList.add('open');
+            promptCb = cb;
+            setTimeout(() => { inp.focus(); inp.select(); }, 50);
+        }
+        function closePrompt() {
+            document.getElementById('modal-prompt').classList.remove('open');
+            promptCb = null;
+        }
+        function submitPrompt() {
+            const v = document.getElementById('prompt-input').value;
+            if (promptCb) promptCb(v);
+        }
+        document.getElementById('prompt-input').addEventListener('keydown', e => {
+            if (e.key === 'Enter') submitPrompt();
+        });
+
+        function promptMkdir() {
+            if (viewMode !== 'dir') { toast('Navigate into a directory first', 'info'); return; }
+            openPrompt('New folder', 'in ' + (currentPath === '.' ? '~' : currentPath), '', (name) => {
+                name = (name || '').trim();
+                if (!name) {
+                    document.getElementById('prompt-error').textContent = 'Name is required';
+                    document.getElementById('prompt-error').classList.remove('hidden');
+                    return;
+                }
+                api('/api/files/mkdir', { method: 'POST', body: JSON.stringify({ path: currentPath, name }) })
+                    .then(({ status, data }) => {
+                        if (status >= 400) {
+                            document.getElementById('prompt-error').textContent = data.error || 'HTTP ' + status;
+                            document.getElementById('prompt-error').classList.remove('hidden');
+                            return;
+                        }
+                        closePrompt();
+                        toast('Created ' + data.name, 'success');
+                        refreshAll();
+                    });
+            });
+        }
+
+        function promptRename() {
+            if (selected.size !== 1) { toast('Select exactly one item to rename', 'info'); return; }
+            const old = [...selected][0];
+            const base = old.split('/').pop();
+            openPrompt('Rename', old, base, (name) => {
+                name = (name || '').trim();
+                if (!name || name === base) { closePrompt(); return; }
+                api('/api/files/rename', { method: 'POST', body: JSON.stringify({ path: old, name }) })
+                    .then(({ status, data }) => {
+                        if (status >= 400) {
+                            document.getElementById('prompt-error').textContent = data.error || 'HTTP ' + status;
+                            document.getElementById('prompt-error').classList.remove('hidden');
+                            return;
+                        }
+                        closePrompt();
+                        selected.clear();
+                        selected.add(data.path);
+                        toast('Renamed to ' + data.name, 'success');
+                        refreshAll();
+                    });
+            });
         }
 
         async function deleteSelected() {
             if (!selected.size) return;
             if (!await uiConfirm(`Delete ${selected.size} item(s)?`, 'This cannot be undone.', true)) return;
             const paths = [...selected];
-            api('/api/files/bulk-delete', {
-                method: 'POST',
-                body: JSON.stringify({ paths }),
-            }).then(({ status, data }) => {
-                if (status >= 400) { toast(data.error || 'HTTP ' + status, 'error'); return; }
-                toast(`Deleted ${data.deleted}/${data.deleted + data.failed}`, data.failed ? 'info' : 'success');
-                selected.clear();
-                loadDir(currentPath);
-                loadTree();
-            });
+            api('/api/files/bulk-delete', { method: 'POST', body: JSON.stringify({ paths }) })
+                .then(({ status, data }) => {
+                    if (status >= 400) { toast(data.error || 'HTTP ' + status, 'error'); return; }
+                    toast(`Deleted ${data.deleted}/${data.deleted + data.failed}`, data.failed ? 'info' : 'success');
+                    selected.clear();
+                    refreshAll();
+                });
+        }
+
+        function downloadSelected() {
+            if (selected.size !== 1) return;
+            const p = [...selected][0];
+            window.open('/api/files/download?path=' + encodeURIComponent(p), '_blank');
         }
 
         function downloadZip() {
@@ -648,16 +1237,40 @@
             }).catch(e => toast(e.message || 'zip failed', 'error'));
         }
 
+        function openProps() {
+            if (selected.size !== 1) return;
+            const p = [...selected][0];
+            const it = entries.find(e => e.path === p);
+            const name = p.split('/').pop();
+            const rows = [
+                ['Name', name],
+                ['Path', p],
+                ['Type', it ? (it.is_dir ? 'Directory' : 'File') + (it.is_link ? ' (symlink)' : '') : '—'],
+                ['Size', it ? (it.is_dir ? '—' : humanizeSize(it.size) + ` (${Number(it.size) || 0} bytes)`) : '—'],
+                ['Modified', it ? fmtDate(it.modified) : '—'],
+                ['Mode', it ? ('d-'[it.is_dir ? 0 : 1] || '') + formatMode(it.mode) + ` (${(Number(it.mode) || 0).toString(8)})` : '—'],
+            ];
+            document.getElementById('props-body').innerHTML = rows.map(([k, v]) =>
+                `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('');
+            document.getElementById('modal-props').classList.add('open');
+        }
+        function closeProps() {
+            document.getElementById('modal-props').classList.remove('open');
+        }
+
         function openPerm(path, currentMode) {
             document.getElementById('perm-path').textContent = path;
-            // currentMode arrives as a decimal string ('420'); parse
-            // first — String.toString(8) ignores the radix and would
-            // show "0420" instead of "0644".
             const dec = parseInt(currentMode, 10);
             document.getElementById('perm-mode').value =
                 '0' + (Number.isFinite(dec) ? dec.toString(8) : '644');
             document.getElementById('perm-error').classList.add('hidden');
             document.getElementById('modal-perm').classList.add('open');
+        }
+        function promptChmod() {
+            if (selected.size !== 1) { toast('Select exactly one item', 'info'); return; }
+            const p = [...selected][0];
+            const it = entries.find(e => e.path === p);
+            openPerm(p, String(it ? it.mode : '644'));
         }
         function closePerm() {
             document.getElementById('modal-perm').classList.remove('open');
@@ -665,24 +1278,196 @@
         function submitPerm() {
             const mode = document.getElementById('perm-mode').value.trim();
             const path = document.getElementById('perm-path').textContent;
-            api('/api/files/chmod', {
-                method: 'POST',
-                body: JSON.stringify({ path, mode }),
-            }).then(({ status, data }) => {
-                if (status >= 400) {
-                    document.getElementById('perm-error').textContent = data.error || 'HTTP ' + status;
-                    document.getElementById('perm-error').classList.remove('hidden');
-                    return;
-                }
-                closePerm();
-                toast(`Mode set to ${data.mode_str}`, 'success');
-                loadDir(currentPath);
+            api('/api/files/chmod', { method: 'POST', body: JSON.stringify({ path, mode }) })
+                .then(({ status, data }) => {
+                    if (status >= 400) {
+                        document.getElementById('perm-error').textContent = data.error || 'HTTP ' + status;
+                        document.getElementById('perm-error').classList.remove('hidden');
+                        return;
+                    }
+                    closePerm();
+                    toast(`Mode set to ${data.mode_str}`, 'success');
+                    refreshAll();
+                });
+        }
+
+        // ------------------------------------------------------------------
+        // Context menu
+        // ------------------------------------------------------------------
+        function hideCtx() {
+            document.getElementById('ctx-menu').style.display = 'none';
+        }
+        document.addEventListener('click', hideCtx);
+
+        function ctxItem(icon, label, hint, fn, danger, disabled) {
+            return `<button class="ctx-item ${danger ? 'danger' : ''}" ${disabled ? 'disabled' : ''} data-ctx="${fn}">` +
+                `<i data-lucide="${icon}" class="w-3.5 h-3.5"></i>${escapeHtml(label)}` +
+                (hint ? `<span class="ctx-hint">${escapeHtml(hint)}</span>` : '') + `</button>`;
+        }
+
+        function showCtx(x, y, kind) {
+            const menu = document.getElementById('ctx-menu');
+            const n = selected.size;
+            const single = n === 1 ? [...selected][0] : null;
+            const singleIt = single ? entries.find(e => e.path === single) : null;
+            const singleFile = singleIt && !singleIt.is_dir;
+            let h = '';
+            if (kind === 'item') {
+                if (singleIt && singleIt.is_dir)
+                    h += ctxItem('folder-open', 'Open', '↵↵', 'ctxOpen');
+                else if (singleFile)
+                    h += ctxItem('eye', 'Open viewer', '↵↵', 'ctxViewer');
+                if (singleFile || (singleIt && singleIt.is_dir))
+                    h += ctxItem('download', singleFile ? 'Download' : 'Zip download', '', singleFile ? 'ctxDownload' : 'ctxZip');
+                h += `<div class="ctx-sep"></div>`;
+                h += ctxItem('pencil', 'Rename', 'F2', 'ctxRename', false, n !== 1);
+                h += ctxItem('copy', 'Copy', 'Ctrl+C', 'ctxCopy', false, n === 0);
+                h += ctxItem('scissors', 'Cut', 'Ctrl+X', 'ctxCut', false, n === 0);
+                if (singleIt && singleIt.is_dir)
+                    h += ctxItem('clipboard-paste', 'Paste into folder', '', 'ctxPasteInto', false, !clipboard);
+                h += ctxItem('archive', 'Download as zip', '', 'ctxZip', false, n === 0);
+                h += `<div class="ctx-sep"></div>`;
+                h += ctxItem('lock', 'Permissions…', '', 'ctxChmod', false, n !== 1);
+                h += ctxItem('link', 'Copy path', '', 'ctxCopyPath', false, n !== 1);
+                h += ctxItem('info', 'Properties', '', 'ctxProps', false, n !== 1);
+                h += `<div class="ctx-sep"></div>`;
+                h += ctxItem('trash-2', `Delete${n > 1 ? ` (${n})` : ''}`, 'Del', 'ctxDelete', true, n === 0);
+            } else {
+                h += ctxItem('folder-plus', 'New folder', '', 'ctxMkdir');
+                h += ctxItem('upload', 'Upload files here', '', 'ctxUpload');
+                h += ctxItem('folder-up', 'Upload folder here', '', 'ctxUploadFolder');
+                h += ctxItem('clipboard-paste', 'Paste', 'Ctrl+V', 'ctxPaste', false, !clipboard);
+                h += `<div class="ctx-sep"></div>`;
+                h += ctxItem('check-square', 'Select all', 'Ctrl+A', 'ctxSelectAll');
+                h += ctxItem('refresh-cw', 'Refresh', '', 'ctxRefresh');
+            }
+            menu.innerHTML = h;
+            menu.style.display = 'block';
+            const r = menu.getBoundingClientRect();
+            menu.style.left = Math.min(x, window.innerWidth - r.width - 8) + 'px';
+            menu.style.top = Math.min(y, window.innerHeight - r.height - 8) + 'px';
+            lucide.createIcons();
+            menu.querySelectorAll('[data-ctx]').forEach(b => {
+                b.onclick = (e) => { e.stopPropagation(); hideCtx(); ctxAction(b.dataset.ctx); };
             });
         }
 
+        function ctxAction(a) {
+            const single = selected.size === 1 ? [...selected][0] : null;
+            const it = single ? entries.find(e => e.path === single) : null;
+            if (a === 'ctxOpen' && it && it.is_dir) navigateTo(it.path);
+            else if (a === 'ctxViewer' && it && !it.is_dir) openViewer(it.path, it.name);
+            else if (a === 'ctxDownload') downloadSelected();
+            else if (a === 'ctxRename') promptRename();
+            else if (a === 'ctxCopy') copySelected();
+            else if (a === 'ctxCut') cutSelected();
+            else if (a === 'ctxPaste') pasteClipboard();
+            else if (a === 'ctxPasteInto' && it && it.is_dir) pasteInto(it.path);
+            else if (a === 'ctxZip') downloadZip();
+            else if (a === 'ctxChmod') promptChmod();
+            else if (a === 'ctxCopyPath') copyPath();
+            else if (a === 'ctxProps') openProps();
+            else if (a === 'ctxDelete') deleteSelected();
+            else if (a === 'ctxMkdir') promptMkdir();
+            else if (a === 'ctxUpload') uploadFiles();
+            else if (a === 'ctxUploadFolder') uploadFolder();
+            else if (a === 'ctxSelectAll') selectAllVisible();
+            else if (a === 'ctxRefresh') refreshAll();
+        }
+
+        function pasteInto(dirPath) {
+            if (!clipboard) return;
+            const route = clipboard.mode === 'cut' ? '/api/files/move' : '/api/files/copy';
+            api(route, { method: 'POST', body: JSON.stringify({ paths: clipboard.paths, dest: dirPath }) })
+                .then(({ status, data }) => {
+                    if (status >= 400) { toast(data.error || 'HTTP ' + status, 'error'); return; }
+                    const done = data.moved ?? data.copied ?? 0;
+                    toast(`${clipboard.mode === 'cut' ? 'Moved' : 'Copied'} ${done} → ${dirPath}`, data.failed ? 'info' : 'success');
+                    if (clipboard.mode === 'cut' && !data.failed) clipboard = null;
+                    selected.clear();
+                    refreshAll();
+                });
+        }
+
+        // ------------------------------------------------------------------
+        // Preview pane + viewer modal
+        // ------------------------------------------------------------------
+        function closePreview() {
+            document.getElementById('preview-pane').innerHTML =
+                '<div class="empty-state">Click a file to preview.</div>';
+        }
+
+        function previewFile(path) {
+            const pane = document.getElementById('preview-pane');
+            pane.innerHTML = '<div class="empty-state">Loading…</div>';
+            api('/api/files/preview?path=' + encodeURIComponent(path))
+                .then(({ status, data }) => {
+                    if (status >= 400) {
+                        pane.innerHTML = `<div class="text-[var(--accent-red)] text-xs">${escapeHtml(data.error || 'HTTP ' + status)}</div>`;
+                        return;
+                    }
+                    pane.innerHTML = previewHTML(data, path, false);
+                    lucide.createIcons();
+                });
+        }
+
+        function previewHTML(data, path, inViewer) {
+            const dl = `/api/files/download?path=${encodeURIComponent(path)}`;
+            if (data.kind === 'text') {
+                const truncated = data.truncated ? '\n\n[... truncated, file is ' + humanizeSize(data.size) + ']' : '';
+                const tooBig = data.too_large_for_inline_text ? '\n\n[File is large; consider downloading it instead.]' : '';
+                const empty = !data.content;
+                const body = empty
+                    ? '<div class="text-[var(--text-muted)] text-xs italic">empty file</div>'
+                    : escapeHtml(data.content || '');
+                return `<div class="text-xs text-[var(--text-muted)] mb-2 flex items-center gap-2"><i data-lucide="file-text" class="w-3 h-3"></i>${escapeHtml(data.name)} · ${humanizeSize(data.size)}${data.encoding && data.encoding !== 'utf-8' ? ' · ' + escapeHtml(data.encoding) : ''}</div><div class="preview-text">${body}${escapeHtml(truncated)}${escapeHtml(tooBig)}</div>`;
+            } else if (data.kind === 'image') {
+                // Large images stream from the download endpoint instead
+                // of a base64 blob; small ones use the inline preview.
+                const src = data.truncated ? dl : `data:${escapeHtml(data.mime)};base64,${data.data_b64}`;
+                return `<div class="text-xs text-[var(--text-muted)] mb-2 flex items-center gap-2"><i data-lucide="image" class="w-3 h-3"></i>${escapeHtml(data.name)} · ${humanizeSize(data.size)} · ${escapeHtml(data.mime)}</div><img class="preview-image" style="${inViewer ? 'max-height:70dvh' : ''}" src="${src}" alt="${escapeHtml(data.name)}">`;
+            } else if (data.kind === 'pdf') {
+                const src = data.truncated ? dl : `data:application/pdf;base64,${data.data_b64}`;
+                return `<div class="text-xs text-[var(--text-muted)] mb-2 flex items-center gap-2"><i data-lucide="file-text" class="w-3 h-3"></i>${escapeHtml(data.name)} · ${humanizeSize(data.size)}</div><embed src="${src}" type="application/pdf" width="100%" height="${inViewer ? '70dvh' : '480px'}">`;
+            } else if (data.kind === 'audio') {
+                return `<div class="text-xs text-[var(--text-muted)] mb-2 flex items-center gap-2"><i data-lucide="music" class="w-3 h-3"></i>${escapeHtml(data.name)} · ${humanizeSize(data.size)} · ${escapeHtml(data.mime || 'audio')}</div><audio controls class="w-full" preload="metadata" src="${dl}">Your browser does not support audio playback.</audio>`;
+            } else if (data.kind === 'video') {
+                return `<div class="text-xs text-[var(--text-muted)] mb-2 flex items-center gap-2"><i data-lucide="film" class="w-3 h-3"></i>${escapeHtml(data.name)} · ${humanizeSize(data.size)} · ${escapeHtml(data.mime || 'video')}</div><video controls class="preview-image" style="${inViewer ? 'max-height:70dvh' : ''}" preload="metadata" src="${dl}">Your browser does not support video playback.</video>`;
+            }
+            return `<div class="empty-state">${escapeHtml(data.name)}<br><span class="text-[var(--text-muted)] text-xs">${humanizeSize(data.size)} · ${escapeHtml(data.mime || data.kind)}</span><br><a class="text-[var(--accent-blue)] underline" href="${dl}">Download</a></div>`;
+        }
+
+        let viewerPath = null;
+        function openViewer(path, name) {
+            viewerPath = path;
+            document.getElementById('viewer-title').textContent = name || path.split('/').pop();
+            document.getElementById('viewer-body').innerHTML = '<div class="empty-state">Loading…</div>';
+            document.getElementById('modal-viewer').classList.add('open');
+            document.getElementById('viewer-download').onclick = () =>
+                window.open('/api/files/download?path=' + encodeURIComponent(path), '_blank');
+            api('/api/files/preview?path=' + encodeURIComponent(path))
+                .then(({ status, data }) => {
+                    if (status >= 400) {
+                        document.getElementById('viewer-body').innerHTML =
+                            `<div class="text-[var(--accent-red)] text-sm">${escapeHtml(data.error || 'HTTP ' + status)}</div>`;
+                        return;
+                    }
+                    document.getElementById('viewer-body').innerHTML = previewHTML(data, path, true);
+                    lucide.createIcons();
+                });
+        }
+        function closeViewer() {
+            // Stop any playing media when the modal closes.
+            document.getElementById('viewer-body').innerHTML = '';
+            document.getElementById('modal-viewer').classList.remove('open');
+            viewerPath = null;
+        }
+
+        // ------------------------------------------------------------------
+        // Search (server-side filename search)
+        // ------------------------------------------------------------------
         function setSearchScope(scope) {
             searchScope = scope;
-            // Toggle the two-pill button styling.
             document.querySelectorAll('#search-scope button').forEach(b => {
                 const active = b.dataset.scope === scope;
                 b.className = 'px-2.5 py-1.5 text-xs font-semibold ' + (
@@ -691,8 +1476,6 @@
                         : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 );
             });
-            // Re-run the current search with the new scope so the
-            // user sees the result set update immediately.
             const q = document.getElementById('search-input').value.trim();
             if (q) doSearch(q);
         }
@@ -705,46 +1488,367 @@
         function doSearch(q) {
             const wrap = document.getElementById('items-list');
             if (!q || !q.trim()) {
-                searchActive = false;
                 loadDir(currentPath);
                 return;
             }
-            searchActive = true;
-            // cwd  → path = currentPath (matches the directory the
-            //         user is looking at; subdirs are included
-            //         because the backend's search() is recursive)
-            // global → path = '.' (search the entire $HOME)
+            viewMode = 'search';
             const searchPath = searchScope === 'global' ? '.' : currentPath;
+            wrap.innerHTML = '<div class="empty-state">Searching…</div>';
             api('/api/files/search?q=' + encodeURIComponent(q) + '&path=' + encodeURIComponent(searchPath))
                 .then(({ status, data }) => {
                     if (status >= 400) {
                         wrap.innerHTML = '<div class="empty-state">Search failed: ' + escapeHtml(data.error || 'HTTP ' + status) + '</div>';
                         return;
                     }
-                    if (!data.matches || !data.matches.length) {
-                        wrap.innerHTML = '<div class="empty-state">No matches in ' + (searchScope === 'global' ? 'home' : 'cwd') + ' for "' + escapeHtml(q) + '"</div>';
-                        document.getElementById('dir-stats').textContent = '0 matches';
-                        return;
-                    }
-                    const items = (data.matches || []).map(m => ({
+                    // Matches carry their home-relative path — using the
+                    // name alone would open/zip/delete the WRONG file.
+                    entries = (data.matches || []).map(m => ({
                         name: m.path.split('/').pop(),
                         path: m.path,
                         is_dir: m.is_dir,
+                        is_link: !!m.is_link,
                         size: m.size,
                         mode: m.mode,
                         modified: m.mtime,
                     }));
-                    renderItems({ files: items });
+                    lastClickedIndex = -1;
+                    renderCenter();
                 });
         }
 
-        document.addEventListener('keydown', e => {
-            if (e.key === 'Escape') closePerm();
+        // ------------------------------------------------------------------
+        // Resumable upload manager (Drive-style)
+        // ------------------------------------------------------------------
+        const UPLOAD_CHUNK = 8 * 1024 * 1024;   // 8 MiB per PUT — the steady-state RAM cost
+        const UPLOAD_RETRIES = 5;
+
+        function fpOf(file, destDir, subpath) {
+            // Fingerprint for cross-reload resume: same name+size+mtime
+            // dropped in the same place continues the old session.
+            return [destDir, subpath || '', file.name, file.size, file.lastModified].join('|');
+        }
+
+        function loadSessionId(fp) {
+            try { return localStorage.getItem('ssm-upload:' + fp) || null; } catch (e) { return null; }
+        }
+        function saveSessionId(fp, id) {
+            try { localStorage.setItem('ssm-upload:' + fp, id); } catch (e) { /* private mode */ }
+        }
+        function dropSessionId(fp) {
+            try { localStorage.removeItem('ssm-upload:' + fp); } catch (e) { /* private mode */ }
+        }
+
+        function uploadFiles() {
+            document.getElementById('upload-input').click();
+        }
+        function uploadFolder() {
+            document.getElementById('upload-folder-input').click();
+        }
+
+        function queueChosenFiles(input, isFolder) {
+            const files = [...(input.files || [])];
+            input.value = '';
+            if (!files.length) return;
+            enqueueFiles(files.map(f => ({
+                file: f,
+                // Folder uploads preserve structure: webkitRelativePath
+                // is "topdir/sub/file.ext" — the first segment becomes
+                // part of the destination, the rest is the subpath.
+                subpath: (isFolder && f.webkitRelativePath)
+                    ? f.webkitRelativePath.split('/').slice(0, -1).join('/')
+                    : '',
+                display: (isFolder && f.webkitRelativePath) ? f.webkitRelativePath : f.name,
+            })));
+        }
+
+        // Drag & drop (with recursive folder traversal).
+        const scrollBox = () => document.getElementById('items-scroll');
+        let dndDepth = 0;
+        document.addEventListener('dragenter', e => {
+            if (!e.dataTransfer || ![...e.dataTransfer.types].includes('Files')) return;
+            const box = document.getElementById('items-scroll').getBoundingClientRect();
+            if (e.clientX < box.left || e.clientX > box.right || e.clientY < box.top || e.clientY > box.bottom) return;
+            dndDepth++;
+            document.getElementById('dnd-overlay').classList.add('show');
+        });
+        document.addEventListener('dragleave', e => {
+            if (!e.dataTransfer || ![...e.dataTransfer.types].includes('Files')) return;
+            // Leaving the window entirely (relatedTarget null) always
+            // clears — child-element enter/leave noise can't strand it.
+            if (!e.relatedTarget || --dndDepth <= 0) { dndDepth = 0; document.getElementById('dnd-overlay').classList.remove('show'); }
+        });
+        document.addEventListener('dragover', e => { if ([...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
+        document.addEventListener('drop', async e => {
+            if (![...(e.dataTransfer.types || [])].includes('Files')) return;
+            e.preventDefault();
+            dndDepth = 0;
+            document.getElementById('dnd-overlay').classList.remove('show');
+            const box = document.getElementById('items-scroll').getBoundingClientRect();
+            if (e.clientX < box.left || e.clientX > box.right || e.clientY < box.top || e.clientY > box.bottom) return;
+            const items = [...(e.dataTransfer.items || [])].filter(i => i.kind === 'file');
+            if (!items.length) return;
+            const out = [];
+            for (const it of items) {
+                const entry = it.webkitGetAsEntry && it.webkitGetAsEntry();
+                if (entry) await collectEntry(entry, '', out);
+                else if (it.getAsFile()) out.push({ file: it.getAsFile(), subpath: '', display: it.getAsFile().name });
+            }
+            if (out.length) enqueueFiles(out);
         });
 
+        function collectEntry(entry, base, out) {
+            return new Promise(resolve => {
+                if (entry.isFile) {
+                    entry.file(f => { out.push({ file: f, subpath: base, display: (base ? base + '/' : '') + f.name }); resolve(); }, () => resolve());
+                } else if (entry.isDirectory) {
+                    const dirReader = entry.createReader();
+                    const sub = base ? base + '/' + entry.name : entry.name;
+                    const readAll = () => dirReader.readEntries(batch => {
+                        if (!batch.length) { resolve(); return; }
+                        Promise.all(batch.map(e => collectEntry(e, sub, out))).then(readAll);
+                    }, () => resolve());
+                    readAll();
+                } else resolve();
+            });
+        }
+
+        function enqueueFiles(list) {
+            const destDir = viewMode === 'dir' ? currentPath : '.';
+            for (const { file, subpath, display } of list) {
+                uploadJobs.push({
+                    file, subpath, display: display || file.name,
+                    destDir, fp: fpOf(file, destDir, subpath),
+                    sessionId: null, received: 0, size: file.size,
+                    state: 'queued',   // queued|active|paused|done|failed|cancelled
+                    error: null, retries: 0, startedAt: null,
+                });
+            }
+            document.getElementById('upload-panel').style.display = 'flex';
+            uploadPanelMin = false;
+            renderUploads();
+            pumpUploads();
+        }
+
+        function renderUploads() {
+            const list = document.getElementById('upload-list');
+            const total = uploadJobs.reduce((a, j) => a + j.size, 0);
+            const done = uploadJobs.reduce((a, j) => a + Math.min(j.received, j.size), 0);
+            document.getElementById('upload-overall').textContent = uploadJobs.length
+                ? `${humanizeSize(done)} / ${humanizeSize(total)} · ${uploadJobs.filter(j => j.state === 'done').length}/${uploadJobs.length} files`
+                : '';
+            document.getElementById('upload-title').textContent =
+                `Uploads → ${uploadJobs.some(j => j.state === 'active') ? 'uploading…' : 'idle'}`;
+            list.innerHTML = uploadJobs.map((j, i) => {
+                const pct = j.size ? Math.round(j.received / j.size * 100) : 100;
+                const cls = j.state === 'done' ? 'done' : j.state === 'failed' || j.state === 'cancelled' ? 'failed' : j.state === 'paused' ? 'paused' : '';
+                const status = j.state === 'done' ? 'done'
+                    : j.state === 'failed' ? ('failed: ' + (j.error || 'error'))
+                    : j.state === 'cancelled' ? 'cancelled'
+                    : j.state === 'paused' ? `paused at ${pct}%`
+                    : `${pct}% · ${humanizeSize(j.received)} / ${humanizeSize(j.size)}`;
+                const pauseBtn = (j.state === 'active' || j.state === 'queued')
+                    ? `<button class="text-[var(--text-muted)] hover:text-[var(--accent-yellow)]" data-uact="pause:${i}" title="Pause"><i data-lucide="pause" class="w-3.5 h-3.5"></i></button>`
+                    : (j.state === 'paused' || j.state === 'failed')
+                    ? `<button class="text-[var(--text-muted)] hover:text-[var(--accent-green)]" data-uact="resume:${i}" title="Resume"><i data-lucide="play" class="w-3.5 h-3.5"></i></button>`
+                    : '';
+                const cancelBtn = (j.state === 'done' || j.state === 'cancelled') ? '' :
+                    `<button class="text-[var(--text-muted)] hover:text-[var(--accent-red)]" data-uact="cancel:${i}" title="Cancel"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>`;
+                return `<div class="text-xs"><div class="flex items-center gap-2 mb-1">` +
+                    `<span class="font-mono truncate flex-1" title="${escapeAttr(j.display)} → ${escapeAttr(joinPath(j.destDir, j.subpath))}">${escapeHtml(j.display)}</span>` +
+                    `${pauseBtn}${cancelBtn}</div>` +
+                    `<div class="upload-bar ${cls}"><div style="width:${pct}%"></div></div>` +
+                    `<div class="text-[var(--text-muted)] mt-0.5">${escapeHtml(status)}</div></div>`;
+            }).join('') || '<div class="empty-state">No uploads.</div>';
+            list.querySelectorAll('[data-uact]').forEach(b => {
+                const [act, idx] = b.dataset.uact.split(':');
+                b.onclick = () => uploadAction(Number(idx), act);
+            });
+            lucide.createIcons();
+        }
+
+        function uploadAction(i, act) {
+            const j = uploadJobs[i];
+            if (!j) return;
+            if (act === 'pause' && (j.state === 'active' || j.state === 'queued')) {
+                j.state = 'paused';
+                renderUploads();
+            } else if (act === 'resume' && (j.state === 'paused' || j.state === 'failed')) {
+                j.state = 'queued'; j.error = null; j.retries = 0;
+                renderUploads();
+                pumpUploads();
+            } else if (act === 'cancel' && !['done', 'cancelled'].includes(j.state)) {
+                j.state = 'cancelled';
+                if (j.sessionId) fetch('/api/files/uploads/' + j.sessionId, { method: 'DELETE', credentials: 'same-origin' }).catch(() => {});
+                dropSessionId(j.fp);
+                renderUploads();
+                pumpUploads();
+            }
+        }
+
+        function toggleUploadPanel() {
+            uploadPanelMin = !uploadPanelMin;
+            document.getElementById('upload-list').style.display = uploadPanelMin ? 'none' : '';
+            document.getElementById('upload-overall').style.display = uploadPanelMin ? 'none' : '';
+        }
+
+        function clearFinishedUploads() {
+            uploadJobs = uploadJobs.filter(j => !['done', 'cancelled'].includes(j.state));
+            if (!uploadJobs.length) document.getElementById('upload-panel').style.display = 'none';
+            renderUploads();
+        }
+
+        function pumpUploads() {
+            // Keep up to MAX_PARALLEL_UPLOADS files in flight; each file
+            // uploads its chunks sequentially. Blob.slice() never copies
+            // the whole file — steady-state RAM is one 8 MiB chunk.
+            while (activeUploads < MAX_PARALLEL_UPLOADS) {
+                const next = uploadJobs.find(j => j.state === 'queued');
+                if (!next) return;
+                next.state = 'active';
+                activeUploads++;
+                runJob(next).finally(() => {
+                    activeUploads--;
+                    renderUploads();
+                    // Refresh the listing when a batch fully settles.
+                    if (!uploadJobs.some(j => j.state === 'queued' || j.state === 'active')) {
+                        if (viewMode === 'dir') loadDir(currentPath);
+                        loadTree(true);
+                    }
+                    pumpUploads();
+                });
+            }
+            renderUploads();
+        }
+
+        async function runJob(j) {
+            try {
+                if (!j.sessionId) {
+                    // Cross-reload resume: a previous session for the same
+                    // fingerprint continues where it stopped.
+                    const old = loadSessionId(j.fp);
+                    if (old) {
+                        const st = await api('/api/files/uploads/' + old);
+                        if (st.ok && st.data.size === j.size) {
+                            j.sessionId = old;
+                            j.received = st.data.received;
+                        } else dropSessionId(j.fp);
+                    }
+                }
+                if (!j.sessionId) {
+                    if (j.state !== 'active') return;
+                    const init = await api('/api/files/uploads', {
+                        method: 'POST',
+                        body: JSON.stringify({ name: j.file.name, size: j.size, path: j.destDir, subpath: j.subpath || undefined }),
+                    });
+                    if (!init.ok) throw new Error(init.data.error || ('HTTP ' + init.status));
+                    j.sessionId = init.data.id;
+                    j.received = init.data.received || 0;
+                    saveSessionId(j.fp, j.sessionId);
+                    j.startedAt = Date.now();
+                } else if (j.received === 0) {
+                    // Re-sync after pause/cancel-resume within this session.
+                    const st = await api('/api/files/uploads/' + j.sessionId);
+                    if (st.ok) j.received = st.data.received;
+                }
+                renderUploads();
+                while (j.received < j.size) {
+                    if (j.state !== 'active') return;  // paused / cancelled
+                    const end = Math.min(j.received + UPLOAD_CHUNK, j.size);
+                    const blob = j.file.slice(j.received, end);
+                    let r;
+                    try {
+                        r = await fetch('/api/files/uploads/' + j.sessionId + '?offset=' + j.received, {
+                            method: 'PUT', body: blob, credentials: 'same-origin',
+                        });
+                    } catch (netErr) {
+                        throw new Error('network error — will retry');
+                    }
+                    if (r.status === 409) {
+                        // Server is authoritative: re-sync and continue,
+                        // never restart.
+                        const b = await r.json();
+                        j.received = b.received ?? j.received;
+                        j.retries = 0;
+                        renderUploads();
+                        continue;
+                    }
+                    if (!r.ok) {
+                        const b = await r.json().catch(() => ({}));
+                        throw new Error(b.error || ('HTTP ' + r.status));
+                    }
+                    const b = await r.json();
+                    j.received = b.received;
+                    j.retries = 0;
+                    renderUploads();
+                }
+                if (j.state !== 'active') return;
+                const fin = await api('/api/files/uploads/' + j.sessionId + '/complete', { method: 'POST', body: '{}' });
+                if (!fin.ok) throw new Error(fin.data.error || ('HTTP ' + fin.status));
+                j.state = 'done';
+                dropSessionId(j.fp);
+                toast('Uploaded ' + j.display, 'success');
+            } catch (e) {
+                if (j.state !== 'active') return;  // paused/cancelled mid-flight
+                j.retries++;
+                if (j.retries > UPLOAD_RETRIES) {
+                    j.state = 'failed';
+                    j.error = e.message || 'upload failed';
+                    toast(`Failed ${j.display}: ${j.error}`, 'error');
+                } else {
+                    // Back off, re-sync the offset, keep going.
+                    await new Promise(res => setTimeout(res, 1000 * Math.pow(2, j.retries - 1)));
+                    if (j.state !== 'active') return;
+                    try {
+                        const st = await api('/api/files/uploads/' + j.sessionId);
+                        if (st.ok) j.received = st.data.received;
+                    } catch (syncErr) { /* next loop iteration retries */ }
+                    j.retries--;  // sync succeeded — this round doesn't count
+                    return runJob(j);
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Keyboard
+        // ------------------------------------------------------------------
+        document.addEventListener('keydown', e => {
+            const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName || '');
+            if (e.key === 'Escape') {
+                if (document.getElementById('modal-viewer').classList.contains('open')) closeViewer();
+                else if (document.getElementById('modal-prompt').classList.contains('open')) closePrompt();
+                else if (document.getElementById('modal-props').classList.contains('open')) closeProps();
+                else if (document.getElementById('modal-perm').classList.contains('open')) closePerm();
+                else { hideCtx(); selected.clear(); renderCenter(); }
+                return;
+            }
+            if (typing) return;
+            if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelected(); }
+            else if (e.key === 'F2') { e.preventDefault(); promptRename(); }
+            else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); selectAllVisible(); }
+            else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') { copySelected(); }
+            else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x') { cutSelected(); }
+            else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') { pasteClipboard(); }
+            else if (e.key === 'Enter' && selected.size === 1) {
+                const p = [...selected][0];
+                const it = entries.find(x => x.path === p);
+                if (it) openItem(it);
+            }
+        });
+
+        // Background right-click on the listing area.
+        document.getElementById('items-scroll').addEventListener('contextmenu', e => {
+            if (e.target.closest('[data-idx]')) return;  // row handler shows the item menu
+            e.preventDefault();
+            showCtx(e.clientX, e.clientY, 'bg');
+        });
+
+        // ------------------------------------------------------------------
+        // Init
+        // ------------------------------------------------------------------
+        setView('list');
         lucide.createIcons();
         buildBreadcrumb();
-        loadTree();
+        loadTree(true);
         loadDir('.');
     </script>
 </body>

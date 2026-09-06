@@ -1484,6 +1484,79 @@ field). Backend chroot/caps already sound.
 Full suite: 855 passed (pre-existing alert_log failure
 excluded); secrets clean.
 
+### Route 16b — Files, full explorer + Drive-style uploads  [x]
+
+The old page was a 3-pane viewer with a root-only tree
+and single-shot uploads. Rebuilt into a real explorer:
+
+**Tree that actually trees.** Lazy per-directory expand /
+collapse in place (twisty + name-click navigate), auto-
+expands to the current dir, collapse-all, current-dir
+highlight. Verified live: 83 rows collapse to 1 and back.
+
+**Standard center panel.** List + grid views (image thumbs
+lazy-load), sort by name/size/newest/oldest/type with
+header click, instant client filter, hidden-files toggle,
+symlink badges, modified-date column, breadcrumb, Up,
+background right-click menu. Shift-range / Ctrl-toggle /
+checkbox selection, `Del` `F2` `Ctrl+A/C/X/V` `Enter`
+`Esc` shortcuts, selection counter.
+
+**Full CRUD.** New-folder + rename prompt modals, copy /
+cut / paste (toolbar + context menu + `Paste into folder`,
+cross-device move falls back to streamed copy+unlink),
+properties dialog, copy-path, per-item chmod/permissions,
+bulk zip + delete. New backend routes: `POST
+/api/files/{mkdir,rename,move,copy}` (all chrooted,
+per-path result lists, dir-into-itself refused).
+
+**Viewers.** Double-click / Enter opens a modal: text
+(with truncation + encoding notes), image (inline ≤10 MB,
+streamed above), audio/video (native tags streaming from
+the download endpoint — seeking may restart the stream
+since `send_file` doesn't do ranges), PDF (embed ≤10 MB),
+binary → download. Preview pane is now a toggle instead
+of a permanent third column.
+
+**Resumable uploads that survive 100 GB on 4 GB RAM.**
+New protocol (`POST /api/files/uploads` init → `PUT
+.../<id>?offset=` chunks → `POST .../complete`, plus
+status + cancel): client declares size up front, server
+preallocates a sparse staging file (instant, reserves
+space) and streams each 8 MiB chunk to disk in 1 MiB
+blocks — steady-state RAM is one block, not the file.
+Offset mismatch is a 409 carrying the server's `received`
+so the client re-syncs instead of restarting; sessions
+persist as JSON sidecars (resume survives server
+restarts, stale swept after 48 h); free-space checked at
+init (fail fast, not at 99%); optional sha256 finalize;
+file appears under its real name only on complete via
+atomic rename. UI: Drive-style bottom-right queue with
+per-file progress, pause / resume / cancel, auto-retry
+(5x exponential), 3 files in parallel, folder upload
+(`webkitdirectory` + dropped-folder traversal preserving
+structure via `subpath`), drag-and-drop overlay,
+cross-reload resume via fingerprinted session ids in
+localStorage.
+
+**Proven live:** 1 GiB upload with a simulated drop at
+50% — status re-sync, 409 offset correction, no partial
+under the real name, sha256-identical finalize. UI:
+1.5 KB + 9 MB + 40 MB + 4x20 MB uploads, pause/resume/
+cancel, rename, viewer, clipboard, properties, hostile
+`xss-'"><img>` filename (zero injected nodes, correct
+selection — rows are wired via listeners, no inline
+`onclick` at all anymore).
+
+Backend: `app/file_explorer.py` (`init_upload`,
+`append_chunk`, `upload_status`, `complete_upload`,
+`cancel_upload`, `sweep_stale_uploads`, `mkdir`,
+`rename`, `move`, `copy`); 15 new tests in
+`tests/test_files_resumable.py` (unit + route level).
+
+**Verified live** (zero JS errors, `node --check` clean).
+Full suite: 871 passed; secrets clean.
+
 ### Next route: (to be picked — `/plugins` is next in line)
 
 ---
