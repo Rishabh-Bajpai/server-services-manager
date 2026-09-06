@@ -1596,6 +1596,33 @@ zip, unauthenticated route).
 **Verified live** (zero JS errors, `node --check` clean).
 Full suite: 879 passed; secrets clean.
 
+### Route 16d — restored opening + in-browser editor  [x]
+
+The rebuild had regressed the basics: single click only
+selected (folders wouldn't open from the view), every
+click re-rendered the list (destroying the row under the
+cursor, so double-click never fired), the preview pane
+hid by default, and there was no editor at all. Fixed:
+
+- **Click a folder → opens it; click a file → previews
+  it** (classic behaviour). Checkboxes / Ctrl / Shift
+  still select. Double-click opens the viewer; Enter
+  opens; tree untouched.
+- **In-place selection** (`refreshSelection` toggles
+  classes + checkboxes on the live DOM) — no more
+  re-render per click, scroll position kept, double-click
+  survives. Proven live: same DOM node before/after
+  checkbox click.
+- **Preview pane visible by default** again (toggle kept).
+- **Editor**: `POST /api/files/save` + `save_text()` —
+  editable-allowlist gate, 1 MB cap, atomic write
+  preserving mode bits, activity-logged. Modal with
+  `Ctrl+S`, Edit buttons in viewer + context menu.
+  Proven live: edited `notes.txt` round-tripped to disk.
+
+3 new tests (save round-trip + mode, guards, route).
+Full suite: 882 passed; secrets clean.
+
 ### Next route: (to be picked — `/plugins` is next in line)
 
 ---

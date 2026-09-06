@@ -3150,6 +3150,31 @@ def api_files_uploads_complete(session_id):
     return jsonify(out)
 
 
+@app.route('/api/files/save', methods=['POST'])
+@openapi_mod.describe(
+    summary="Save text content to a file (editor)",
+    description=(
+        "Body: `{path, content}`. Gated by the editable-type "
+        "allowlist (binaries rejected), 1 MB cap, atomic write "
+        "preserving mode bits."
+    ),
+    tag="Files",
+)
+def api_files_save():
+    payload = request.get_json(silent=True) or {}
+    try:
+        out = file_explorer.save_text(
+            payload.get("path", ""), payload.get("content", ""),
+        )
+    except file_explorer.FileExplorerError as e:
+        return _files_err(e)
+    activity.log(
+        "files.save", target=out["path"], status="ok",
+        detail=f"{out['size']} bytes", ip=request.remote_addr or "",
+    )
+    return jsonify(out)
+
+
 @app.route('/api/files/uploads/<session_id>', methods=['DELETE'])
 @openapi_mod.describe(
     summary="Cancel a resumable upload",

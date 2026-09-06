@@ -425,6 +425,52 @@ def test_zip_skips_fifo(home):
     assert len(data) > 0  # returned instead of hanging on the fifo
 
 
+def test_save_text_round_trip(home):
+    import stat as _stat
+
+    _home, _sessions = home
+    p = os.path.join(_home, "edit.txt")
+    open(p, "w").write("v1")
+    os.chmod(p, 0o600)
+    out = fe.save_text("edit.txt", "v2\nline2\n")
+    assert out["path"] == "edit.txt"
+    assert open(p).read() == "v2\nline2\n"
+    assert _stat.S_IMODE(os.lstat(p).st_mode) == 0o600  # mode preserved
+
+
+def test_save_text_guards(home):
+    import stat as _stat
+
+    _home, _sessions = home
+    open(os.path.join(_home, "pic.png"), "wb").write(b"\x89PNG-not-really")
+    with pytest.raises(fe.FileExplorerError) as exc:
+        fe.save_text("pic.png", "nope")
+    assert exc.value.code == "not_editable"
+    os.mkdir(os.path.join(_home, "d"))
+    with pytest.raises(fe.FileExplorerError):
+        fe.save_text("d", "nope")
+    with pytest.raises(fe.FileExplorerError):
+        fe.save_text("../evil.txt", "nope")
+    with pytest.raises(fe.FileExplorerError) as exc2:
+        fe.save_text("missing.txt", "nope")
+    assert exc2.value.code == "not_found"
+    open(os.path.join(_home, "ok.txt"), "w").write("x")
+    with pytest.raises(fe.FileExplorerError) as exc3:
+        fe.save_text("ok.txt", "x" * (fe._EDIT_SAVE_MAX + 1))
+    assert exc3.value.code == "too_large"
+
+
+def test_route_save(tmp_path, monkeypatch):
+    client = _route_client(tmp_path, monkeypatch)
+    (tmp_path / "n.txt").write_text("a")
+    r = client.post("/api/files/save", json={"path": "n.txt", "content": "b"})
+    assert r.status_code == 200
+    assert (tmp_path / "n.txt").read_text() == "b"
+    (tmp_path / "b.bin").write_bytes(b"\x00\x01")
+    r = client.post("/api/files/save", json={"path": "b.bin", "content": "x"})
+    assert r.status_code == 400
+
+
 def test_unauthenticated_upload_status_rejected(tmp_path, monkeypatch):
     import server
 

@@ -422,7 +422,8 @@
                         </div>
                     </div>
                     <div class="px-4 py-2 border-t border-[var(--border-subtle)] text-[11px] text-[var(--text-muted)] flex items-center gap-3 flex-wrap">
-                        <span><kbd class="key">double-click</kbd> open</span>
+                        <span><kbd class="key">click</kbd> folder opens · file previews</span>
+                        <span><kbd class="key">double-click</kbd> viewer</span>
                         <span><kbd class="key">Del</kbd> delete</span>
                         <span><kbd class="key">F2</kbd> rename</span>
                         <span><kbd class="key">Ctrl</kbd>+<kbd class="key">A/C/X/V</kbd> select / copy / cut / paste</span>
@@ -498,6 +499,26 @@
         </div>
     </div>
 
+    <div class="modal-backdrop" id="modal-edit" onclick="if(event.target===this) closeEditor()">
+        <div class="modal modal-wide p-0 overflow-hidden">
+            <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-[var(--border-subtle)]">
+                <h3 class="text-sm font-semibold flex items-center gap-2 min-w-0">
+                    <i data-lucide="pencil" class="w-4 h-4 text-[var(--accent-green)] flex-shrink-0"></i>
+                    <span class="font-mono truncate" id="edit-path">—</span>
+                </h3>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    <span class="text-[11px] text-[var(--text-muted)]" id="edit-info"></span>
+                    <button class="btn" onclick="closeEditor()">Cancel</button>
+                    <button class="btn btn-primary" onclick="saveEditor()">Save</button>
+                </div>
+            </div>
+            <div class="p-4">
+                <textarea id="edit-area" class="text-input font-mono" style="min-height:50dvh;white-space:pre" spellcheck="false"></textarea>
+                <div id="edit-error" class="text-xs text-[var(--accent-red)] mt-2 hidden"></div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-backdrop" id="modal-props" onclick="if(event.target===this) closeProps()">
         <div class="modal">
             <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
@@ -516,6 +537,9 @@
             <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-[var(--border-subtle)]">
                 <h3 class="text-sm font-semibold font-mono truncate" id="viewer-title">—</h3>
                 <div class="flex items-center gap-1 flex-shrink-0">
+                    <button class="btn btn-icon" id="viewer-edit" style="display:none" title="Edit as text">
+                        <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                    </button>
                     <button class="btn btn-icon" id="viewer-download" title="Download">
                         <i data-lucide="download" class="w-3.5 h-3.5"></i>
                     </button>
@@ -551,7 +575,8 @@
         let view = 'list';           // 'list' | 'grid'
         let sortSpec = 'name-asc';   // key-dir
         let filterText = '';
-        let previewVisible = false;
+        let previewVisible = true;   // the classic single-click preview pane
+        let displayedItems = [];     // items currently rendered (for in-place selection)
         let treeExpanded = new Set(['.']);  // home-relative dir paths, expanded in tree
         let treeChildren = {};       // path -> [{name, path, hasKids?}] dir-only cache
         let uploadJobs = [];         // upload manager queue
@@ -912,8 +937,26 @@
                 return;
             }
             wrap.innerHTML = view === 'list' ? listHTML(items) : gridHTML(items);
+            displayedItems = items;
             wireItems(wrap, items);
             lucide.createIcons();
+            updateSelUI();
+        }
+
+        // In-place selection refresh: toggles classes + checkboxes on
+        // the live DOM instead of re-rendering. Re-rendering on every
+        // click destroys the row under the cursor (killing double-click
+        // and losing scroll position).
+        function refreshSelection() {
+            const wrap = document.getElementById('items-list');
+            wrap.querySelectorAll('[data-idx]').forEach(el => {
+                const it = displayedItems[Number(el.dataset.idx)];
+                if (!it) return;
+                const on = selected.has(it.path);
+                el.classList.toggle('selected', on);
+                const cb = el.querySelector('input[type=checkbox]');
+                if (cb) cb.checked = on;
+            });
             updateSelUI();
         }
 
@@ -962,24 +1005,29 @@
             });
             const clickRow = (el, i, e) => {
                 if (e.target.matches('input[type=checkbox]')) return;  // handled below
-                const path = items[i].path;
-                if (e.shiftKey && lastClickedIndex >= 0) {
-                    // Clamp: the list may have shrunk (filter/sort)
-                    // since lastClickedIndex was recorded — never
-                    // index past the end (was a TypeError crash).
-                    const lo = Math.max(0, Math.min(lastClickedIndex, items.length - 1));
-                    const [a, b] = [Math.min(lo, i), Math.max(lo, i)];
-                    for (let k = a; k <= b; k++) { if (items[k]) selected.add(items[k].path); }
-                } else if (e.ctrlKey || e.metaKey) {
-                    selected.has(path) ? selected.delete(path) : selected.add(path);
-                    lastClickedIndex = i;
+                const it = items[i];
+                const path = it.path;
+                if ((e.shiftKey || e.ctrlKey || e.metaKey) && lastClickedIndex >= 0 && lastClickedIndex < items.length) {
+                    if (e.shiftKey) {
+                        const [a, b] = [Math.min(lastClickedIndex, i), Math.max(lastClickedIndex, i)];
+                        for (let k = a; k <= b; k++) { if (items[k]) selected.add(items[k].path); }
+                    } else {
+                        selected.has(path) ? selected.delete(path) : selected.add(path);
+                        lastClickedIndex = i;
+                    }
+                    refreshSelection();
+                    autoPreview();
+                } else if (it.is_dir) {
+                    // Plain click on a folder opens it (classic
+                    // behaviour); use checkbox / Ctrl for selecting.
+                    navigateTo(path);
                 } else {
                     selected.clear();
                     selected.add(path);
                     lastClickedIndex = i;
+                    refreshSelection();
+                    autoPreview();
                 }
-                renderCenter();
-                autoPreview();
             };
             wrap.querySelectorAll('[data-idx]').forEach(el => {
                 const i = Number(el.dataset.idx);
@@ -994,7 +1042,7 @@
                     const path = items[i].path;
                     cb.checked ? selected.add(path) : selected.delete(path);
                     lastClickedIndex = i;
-                    renderCenter();
+                    refreshSelection();
                     autoPreview();
                 };
             });
@@ -1009,7 +1057,7 @@
             if (!selected.has(path)) {
                 selected.clear();
                 selected.add(path);
-                renderCenter();
+                refreshSelection();
             }
         }
 
@@ -1054,12 +1102,12 @@
             renderCenter();
         }
 
-        function togglePreviewPane() {
-            previewVisible = !previewVisible;
+        function setPreviewPane(v) {
+            previewVisible = v;
             const grid = document.getElementById('main-grid');
             const panel = document.getElementById('preview-panel');
-            document.getElementById('btn-previewpane').classList.toggle('active', previewVisible);
-            if (previewVisible) {
+            document.getElementById('btn-previewpane').classList.toggle('active', v);
+            if (v) {
                 grid.className = 'grid grid-cols-1 xl:grid-cols-[280px_1fr_360px] gap-4';
                 panel.classList.remove('hidden');
                 autoPreview();
@@ -1067,6 +1115,9 @@
                 grid.className = 'grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4';
                 panel.classList.add('hidden');
             }
+        }
+        function togglePreviewPane() {
+            setPreviewPane(!previewVisible);
         }
 
         function autoPreview() {
@@ -1095,7 +1146,7 @@
 
         function selectAllVisible() {
             visibleEntries().forEach(e => selected.add(e.path));
-            renderCenter();
+            refreshSelection();
         }
 
         function copySelected() {
@@ -1331,6 +1382,8 @@
                     h += ctxItem('eye', 'Open viewer', '↵↵', 'ctxViewer');
                 if (singleFile || (singleIt && singleIt.is_dir))
                     h += ctxItem('download', singleFile ? 'Download' : 'Zip download', '', singleFile ? 'ctxDownload' : 'ctxZip');
+                if (singleFile)
+                    h += ctxItem('pencil', 'Edit', '', 'ctxEdit');
                 h += `<div class="ctx-sep"></div>`;
                 h += ctxItem('pencil', 'Rename', 'F2', 'ctxRename', false, n !== 1);
                 h += ctxItem('copy', 'Copy', 'Ctrl+C', 'ctxCopy', false, n === 0);
@@ -1369,6 +1422,7 @@
             const it = single ? entries.find(e => e.path === single) : null;
             if (a === 'ctxOpen' && it && it.is_dir) navigateTo(it.path);
             else if (a === 'ctxViewer' && it && !it.is_dir) openViewer(it.path, it.name);
+            else if (a === 'ctxEdit' && it && !it.is_dir) openEditor(it.path);
             else if (a === 'ctxDownload') downloadSelected();
             else if (a === 'ctxRename') promptRename();
             else if (a === 'ctxCopy') copySelected();
@@ -1449,6 +1503,64 @@
             return `<div class="empty-state">${escapeHtml(data.name)}<br><span class="text-[var(--text-muted)] text-xs">${humanizeSize(data.size)} · ${escapeHtml(data.mime || data.kind)}</span><br><a class="text-[var(--accent-blue)] underline" href="${dl}">Download</a></div>`;
         }
 
+        let editPath = null;
+        function openEditor(path) {
+            editPath = path;
+            document.getElementById('edit-path').textContent = path;
+            document.getElementById('edit-area').value = '';
+            document.getElementById('edit-info').textContent = 'loading…';
+            document.getElementById('edit-error').classList.add('hidden');
+            document.getElementById('modal-edit').classList.add('open');
+            setTimeout(() => document.getElementById('edit-area').focus(), 50);
+            api('/api/files/preview?path=' + encodeURIComponent(path))
+                .then(({ status, data }) => {
+                    if (status >= 400) {
+                        document.getElementById('edit-error').textContent = data.error || 'HTTP ' + status;
+                        document.getElementById('edit-error').classList.remove('hidden');
+                        document.getElementById('edit-info').textContent = '';
+                        return;
+                    }
+                    if (data.kind !== 'text' || !data.content && data.size > 0) {
+                        document.getElementById('edit-error').textContent = 'Only text files can be edited.';
+                        document.getElementById('edit-error').classList.remove('hidden');
+                        document.getElementById('edit-info').textContent = '';
+                        return;
+                    }
+                    if (data.too_large_for_inline_text) {
+                        document.getElementById('edit-error').textContent = `File is ${humanizeSize(data.size)} — too large for the browser editor; use SSH.`;
+                        document.getElementById('edit-error').classList.remove('hidden');
+                        document.getElementById('edit-info').textContent = '';
+                        return;
+                    }
+                    document.getElementById('edit-area').value = data.content || '';
+                    document.getElementById('edit-info').textContent =
+                        `${humanizeSize(data.size)}${data.encoding && data.encoding !== 'utf-8' ? ' · ' + data.encoding : ''}`;
+                });
+        }
+        function closeEditor() {
+            document.getElementById('modal-edit').classList.remove('open');
+            editPath = null;
+        }
+        function saveEditor() {
+            if (!editPath) return;
+            const content = document.getElementById('edit-area').value;
+            api('/api/files/save', { method: 'POST', body: JSON.stringify({ path: editPath, content }) })
+                .then(({ status, data }) => {
+                    if (status >= 400) {
+                        document.getElementById('edit-error').textContent = data.error || 'HTTP ' + status;
+                        document.getElementById('edit-error').classList.remove('hidden');
+                        return;
+                    }
+                    const saved = editPath;
+                    closeEditor();
+                    toast(`Saved ${saved} (${humanizeSize(data.size)})`, 'success');
+                    refreshAll();
+                    // Keep the viewer + preview pane in sync when open.
+                    if (viewerPath === saved) openViewer(saved, saved.split('/').pop());
+                    else if (previewVisible && selected.has(saved)) previewFile(saved);
+                });
+        }
+
         let viewerPath = null;
         function openViewer(path, name) {
             viewerPath = path;
@@ -1457,6 +1569,9 @@
             document.getElementById('modal-viewer').classList.add('open');
             document.getElementById('viewer-download').onclick = () =>
                 window.open('/api/files/download?path=' + encodeURIComponent(path), '_blank');
+            const editBtn = document.getElementById('viewer-edit');
+            editBtn.style.display = 'none';
+            editBtn.onclick = () => openEditor(path);
             api('/api/files/preview?path=' + encodeURIComponent(path))
                 .then(({ status, data }) => {
                     if (status >= 400) {
@@ -1466,6 +1581,13 @@
                     }
                     document.getElementById('viewer-body').innerHTML = previewHTML(data, path, true);
                     lucide.createIcons();
+                    // Offer editing only for server-approved text types.
+                    if (data.kind === 'text' && !data.too_large_for_inline_text) {
+                        api('/api/files/editable-types?path=' + encodeURIComponent(path))
+                            .then(({ status: s2, data: d2 }) => {
+                                if (s2 < 400 && d2.editable) editBtn.style.display = '';
+                            });
+                    }
                 });
         }
         function closeViewer() {
@@ -1840,11 +1962,16 @@
             const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName || '');
             if (e.key === 'Escape') {
                 if (document.getElementById('modal-viewer').classList.contains('open')) closeViewer();
+                else if (document.getElementById('modal-edit').classList.contains('open')) closeEditor();
                 else if (document.getElementById('modal-prompt').classList.contains('open')) closePrompt();
                 else if (document.getElementById('modal-props').classList.contains('open')) closeProps();
                 else if (document.getElementById('modal-perm').classList.contains('open')) closePerm();
                 else { hideCtx(); selected.clear(); renderCenter(); }
                 return;
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's'
+                && document.getElementById('modal-edit').classList.contains('open')) {
+                e.preventDefault(); saveEditor(); return;
             }
             if (typing) return;
             if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelected(); }
@@ -1871,6 +1998,7 @@
         // Init
         // ------------------------------------------------------------------
         setView('list');
+        setPreviewPane(true);  // classic layout: tree + list + preview
         lucide.createIcons();
         buildBreadcrumb();
         loadTree(true);

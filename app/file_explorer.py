@@ -387,6 +387,69 @@ def resolve_api_path(path: str) -> str:
     return _resolve(path)
 
 
+# Cap on bytes accepted by ``save_text()`` — matches the inline
+# text preview cap so anything you can read you can write back.
+_EDIT_SAVE_MAX = 1 * 1024 * 1024  # 1 MB
+
+
+def save_text(path: str, content: str) -> Dict[str, Any]:
+    """Overwrite a text file from the in-browser editor.
+
+    Gated by the same editable allowlist as the editor UI
+    (binaries can't be corrupted by a text save). Writes to a
+    pid-unique temp file in the same directory + atomic rename,
+    preserving the original mode bits (``os.replace`` would
+    otherwise reset them to the umask default).
+    """
+    target = _resolve(path)
+    if not os.path.lexists(target):
+        raise FileExplorerError("not_found", f"path not found: {path}")
+    if os.path.isdir(target) and not os.path.islink(target):
+        raise FileExplorerError("not_a_file", f"not a file: {path}")
+    if not is_editable_path(target):
+        raise FileExplorerError(
+            "not_editable", "this file type is not editable as text",
+        )
+    if not isinstance(content, str):
+        raise FileExplorerError("invalid_content", "content must be a string")
+    try:
+        data = content.encode("utf-8")
+    except (UnicodeEncodeError, ValueError) as e:
+        raise FileExplorerError("invalid_content", f"content is not valid text: {e}")
+    if len(data) > _EDIT_SAVE_MAX:
+        raise FileExplorerError(
+            "too_large",
+            f"content exceeds {_EDIT_SAVE_MAX // (1024 * 1024)} MB cap; "
+            "edit large files over SSH instead",
+        )
+    try:
+        old_mode = stat.S_IMODE(os.lstat(target).st_mode)
+    except OSError:
+        old_mode = 0o644
+    tmp = f"{target}.edit-{os.getpid()}.tmp"
+    try:
+        with open(tmp, "wb") as f:
+            f.write(data)
+            f.flush()
+            try:
+                os.fsync(f.fileno())
+            except OSError:
+                pass
+        os.chmod(tmp, old_mode)
+        os.replace(tmp, target)
+    except OSError as e:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise FileExplorerError("save_failed", f"could not save: {e}")
+    try:
+        size = os.path.getsize(target)
+    except OSError:
+        size = len(data)
+    return {"path": os.path.relpath(target, home_dir()), "size": size}
+
+
 def classify_api_path(path: str) -> str:
     """Public wrapper for route handlers: classify an absolute path.
 
