@@ -86,8 +86,11 @@ def list_entries(
     clauses: List[str] = []
     args: list = []
     if action:
-        clauses.append("action = ?")
-        args.append(action)
+        # Substring match (not exact): badges render uppercase via
+        # CSS while values are stored lowercase, so users type what
+        # they see. SQLite LIKE is ASCII case-insensitive.
+        clauses.append("action LIKE ?")
+        args.append(f"%{action}%")
     if target:
         clauses.append("target LIKE ?")
         args.append(f"%{target}%")
