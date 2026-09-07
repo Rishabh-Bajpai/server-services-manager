@@ -11,6 +11,7 @@ If the socket is missing or unreadable, ``is_available()`` returns
 """
 import logging
 import os
+import re
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -28,6 +29,31 @@ class DockerError(Exception):
     def __init__(self, message: str, code: str = "error"):
         super().__init__(message)
         self.code = code
+
+
+# Docker emits RFC 3339 timestamps with up to nanosecond precision
+# (e.g. "2024-01-15T10:30:00.123456789Z"), but datetime.fromisoformat
+# on Python < 3.11 accepts at most 6 fractional digits. Truncate any
+# longer fraction to microseconds first so parsing works on 3.10 too.
+_RFC3339_FRAC_RE = re.compile(r"(\.\d{6})\d+")
+
+
+def _parse_rfc3339_ts(raw: str) -> Optional[float]:
+    """Parse a Docker RFC 3339 timestamp to a Unix timestamp.
+
+    Returns None when missing or unparseable; naive datetimes are
+    assumed to be UTC.
+    """
+    if not raw or not isinstance(raw, str):
+        return None
+    s = _RFC3339_FRAC_RE.sub(r"\1", raw.strip().replace("Z", "+00:00"))
+    try:
+        dt = datetime.fromisoformat(s)
+    except (ValueError, TypeError):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.timestamp()
 
 
 @dataclass
@@ -324,14 +350,7 @@ def list_images() -> List[dict]:
             # have to redo the work — and fall back to None when
             # unparseable so the UI can show "—".
             created_raw = img.attrs.get("Created", "")
-            created_ts = None
-            if created_raw:
-                try:
-                    s = created_raw.replace("Z", "+00:00")
-                    dt = datetime.fromisoformat(s)
-                    created_ts = dt.timestamp() if dt.tzinfo else dt.replace(tzinfo=timezone.utc).timestamp()
-                except (ValueError, TypeError):
-                    created_ts = None
+            created_ts = _parse_rfc3339_ts(created_raw) if created_raw else None
             out.append({
                 "id": (img.id or "").replace("sha256:", "")[:12],
                 "full_id": img.id or "",
@@ -530,13 +549,11 @@ def _attrs_to_container(attrs: dict) -> Container:
     image = attrs.get("Config", {}).get("Image", "") or ""
     image_id = (attrs.get("Image") or "").replace("sha256:", "")[:12]
     created = attrs.get("Created", "") or ""
-    try:
-        # Docker uses ISO 8601 with sub-second precision
-        from datetime import datetime
-        dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
-        created_ts = int(dt.timestamp())
-    except Exception:  # noqa: BLE001
-        created_ts = 0
+    # Docker uses ISO 8601 with sub-second precision (up to
+    # nanoseconds); _parse_rfc3339_ts truncates to microseconds so
+    # this also works on Python 3.10.
+    _ts = _parse_rfc3339_ts(created)
+    created_ts = int(_ts) if _ts is not None else 0
     ports = _format_ports(attrs.get("NetworkSettings", {}).get("Ports", {}) or {})
     labels = attrs.get("Config", {}).get("Labels", {}) or {}
     mounts = _format_mounts(attrs.get("Mounts", []) or [])
