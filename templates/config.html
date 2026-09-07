@@ -114,7 +114,16 @@
             actions=actions,
             current='/config',
         ) }}
-<main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+{% set subheader %}
+    <span class="text-xs text-[var(--text-muted)]">Validates <span class="font-mono">config.yaml</span> (programs, commands, notifiers) and shows the effective config with secrets redacted. Hand-edits apply on restart.</span>
+    <span class="flex-1"></span>
+    <button onclick="load()" class="btn" title="Re-validate the file on disk">
+        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+        <span class="hidden sm:inline">Re-validate</span>
+    </button>
+{% endset %}
+{{ ui.subheader(subheader) }}
+<main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6 space-y-4">
             <section class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div class="status-card">
                     <div class="label">Status</div>
@@ -131,14 +140,9 @@
             </section>
 
             <section class="panel-card p-4">
-                <div class="flex items-center justify-between mb-3">
-                    <div>
-                        <div class="text-sm font-semibold">Validation</div>
-                        <div class="text-xs text-[var(--text-muted)] font-mono mt-1 break-all" id="path-text">Loading…</div>
-                    </div>
-                    <button onclick="load()" class="btn">
-                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Re-validate
-                    </button>
+                <div class="mb-3">
+                    <div class="text-sm font-semibold">Validation</div>
+                    <div class="text-xs text-[var(--text-muted)] font-mono mt-1 break-all" id="path-text">Loading…</div>
                 </div>
                 <div id="status-message" class="mb-3"></div>
                 <div id="error-list" class="space-y-2"></div>

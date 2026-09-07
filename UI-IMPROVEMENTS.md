@@ -1720,7 +1720,36 @@ errors are code-server's own asset noise: missing vsda
 wasm + iframe autofocus block).
 Full suite: 882 passed; secrets clean.
 
-### Next route: (to be picked — `/plugins` is next in line)
+### Route 18 — Plugins (`/plugins`)  [x]
+
+Smallest of the remaining three: width to measured 90%,
+Refresh moved to a new subheader with a one-line purpose
+statement, teaching empty state + writing guide already
+solid. Verified live (0/0 stats, empty state, zero JS
+errors). No backend changes.
+
+### Route 19 — Alerts (`/alerts`)  [x]
+
+Width to measured 90% + a purpose line under the header.
+Empty log with no filters now teaches instead of shrugging:
+setup explainer with an ntfy YAML example and links to
+`/notifications` + `/config`. Error paths added (fetch
+failures toasted + rendered instead of eternal skeletons),
+Pause/Resume for the 30s auto-refresh. Verified live on
+the empty log (explainer, pause toggle, zero JS errors).
+
+### Route 20 — Config (`/config`)  [x]
+
+Width to measured 90%, Re-validate moved to a new
+subheader with a purpose line (validates config.yaml,
+secrets redacted, hand-edits apply on restart). Verified
+live: VALID, 0 errors, password correctly redacted in the
+effective-config view. No backend changes.
+
+Full suite: 882 passed (one flaky
+`test_fanout_with_logging_runs_in_parallel` failure in a
+single full run; module green in isolation and full suite
+green on re-run); secrets clean.
 
 ---
 
