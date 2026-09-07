@@ -1780,6 +1780,42 @@ green on re-run); secrets clean.
 
 ---
 
+## Responsive pass (mobile 390px / tablet 768px, desktop untouched)
+
+Audited every route at 390px and 768px with click tests; fixed:
+
+- Tables squeezed to zero width on phones because the shared
+  macro rule set `min-width: 0` and won the cascade
+  (`60cb4e5`); tables now scroll inside their wrappers.
+- Hamburger fired twice per tap (`onclick` + `onTouchStart`,
+  which HTML lowercases into a real listener): tap closed the
+  menu as fast as it opened, so it only survived long-press.
+  `onclick` only + 40px target now (`1faae9f`).
+- `bg-[var(--bg-card)]/60|95` emits invalid CSS from the
+  Tailwind CDN (computed fully transparent): sticky header,
+  subheader and mobile menu are solid now. Decorative
+  `accent-*/10` tint chips are transparent too, but that is the
+  long-standing desktop look — left alone on purpose.
+- `title="Health & Notifications"` double-escaped; activity
+  action filter exact+case-sensitive while badges show
+  uppercase (`d8a0926`); cluster About `<pre>` forced 512px
+  page width (`9da09b8`); monitor hostname mid-word split
+  (`b19d40d`).
+- New `ui.desktop_notice()` banner (narrow screens only,
+  dismissible, desktop never sees it), applied to `/code`.
+
+Verified fitting at 390px: all form modals (service, palette,
+SSH key, backup create, peer add, firewall rule), files
+context menu (viewport-clamped) + transfer panels, log
+results (inner x-scroll), terminals, all docker views.
+Tablet sweep: zero page overflow on all 19 routes.
+
+Known lab gap: verification runs Chromium emulation, not
+Firefox Android — touch-only and engine-specific quirks need
+on-device reports (route + symptom + screenshot).
+
+---
+
 ## Deferred
 
 These were considered but pushed for later:
