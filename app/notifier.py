@@ -196,7 +196,9 @@ def build_notifier(spec: dict) -> Optional[Notifier]:
                 port=spec.get("port", 587),
                 username=spec.get("username", ""),
                 password=spec.get("password", ""),
-                from_addr=spec.get("from", spec.get("username", "")),
+                # "from_addr" is the documented key (schema + example);
+                # bare "from" kept for backward compat, then username.
+                from_addr=spec.get("from_addr", spec.get("from", spec.get("username", ""))),
                 to_addrs=spec.get("to", []),
                 use_tls=spec.get("use_tls", True),
             )

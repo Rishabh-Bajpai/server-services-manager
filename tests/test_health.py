@@ -396,6 +396,17 @@ class TestBuildNotifiers:
         })
         assert isinstance(n, EmailNotifier)
 
+    def test_builds_email_honors_from_addr(self):
+        # Regression: the documented "from_addr" key was silently
+        # ignored in favor of "from"/username, so configured senders
+        # never took effect.
+        n = build_notifier({
+            "type": "email", "host": "smtp.x", "to": ["a@b"],
+            "from_addr": "ssm@example.com", "username": "u",
+        })
+        assert isinstance(n, EmailNotifier)
+        assert n.from_addr == "ssm@example.com"
+
     def test_unknown_type(self):
         assert build_notifier({"type": "carrier-pigeon"}) is None
 
