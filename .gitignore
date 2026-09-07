@@ -46,3 +46,4 @@ tools/secrets.txt
 
 # Playwright MCP debug files (browser screenshots / session snapshots)
 .playwright-mcp/
+taste.md
