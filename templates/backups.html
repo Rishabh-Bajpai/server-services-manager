@@ -157,6 +157,14 @@
     {% import "_macros.html" as ui %}
     {% set actions %}
     {% endset %}
+    {% set page_info %}
+        <p style="margin-bottom:0.75rem">Automatic <strong>safety copies</strong> of your folders and databases, stored on this machine's own disk.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li>Each job copies a folder (or database dump) <strong>on a schedule</strong> — daily, hourly, whatever you pick.</li>
+            <li><strong>Retention</strong> is how many old copies to keep; older ones are deleted automatically so the disk doesn't fill up.</li>
+            <li>The <strong>How to restore</strong> guide at the top explains getting your files back when you need them.</li>
+        </ul>
+        {% endset %}
     {{ ui.header(
         title="Backups",
         icon="archive",
@@ -164,6 +172,7 @@
         badge_html='<span class="badge badge-blue">local disk</span>',
         actions=actions,
         current='/backups',
+        info=page_info,
     ) }}
     {% set subheader %}
         <button id="live-btn" class="btn" onclick="toggleLive()" title="Pause live auto-refresh (freezes rows so clicks don't shift)">

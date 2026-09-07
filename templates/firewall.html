@@ -158,6 +158,14 @@
     {% import "_macros.html" as ui %}
     {% set actions %}
     {% endset %}
+    {% set page_info %}
+        <p style="margin-bottom:0.75rem">A firewall is the machine's <strong>bouncer</strong>: it decides which network traffic gets in. This page shows and edits those rules.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li><strong>Add rule</strong> opens a port or address (for example, letting a web server be reachable). Each rule can be removed again with one click.</li>
+            <li><strong>Default incoming/outgoing</strong> is the fallback answer when no rule matches — normally "deny in, allow out".</li>
+            <li>Everything here changes real network access and needs your password. If the page shows <strong>limited status</strong>, unlock the full view first.</li>
+        </ul>
+        {% endset %}
     {{ ui.header(
         title="Firewall",
         icon="shield",
@@ -165,6 +173,7 @@
         badge_id="backend-badge",
         actions=actions,
         current='/firewall',
+        info=page_info,
     ) }}
     {% set subheader %}
         <button class="btn" onclick="loadStatus()" title="Reload status and rules from the firewall">

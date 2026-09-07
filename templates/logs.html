@@ -149,12 +149,21 @@
     {% import "_macros.html" as ui %}
     {% set actions %}
     {% endset %}
+    {% set page_info %}
+        <p style="margin-bottom:0.75rem">When something breaks, the answer is usually in a <strong>log</strong> — the diary programs keep about what they did. This page searches those diaries.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li>Pick a <strong>managed program</strong> (Dashboard services) or any <strong>system unit</strong>, set how far back to look, and hit <strong>Search</strong>.</li>
+            <li><strong>Match text</strong> filters to lines containing your words; <strong>Load more</strong> pulls older entries.</li>
+            <li>For plain files on disk (like <strong>/var/log/syslog</strong>), open them from the <strong>Files</strong> page instead.</li>
+        </ul>
+        {% endset %}
     {{ ui.header(
         title="Log Search",
         icon="file-text",
         icon_color="var(--accent-blue)",
         actions=actions,
         current='/logs',
+        info=page_info,
     ) }}
     {% set subheader %}
         <div class="ctl-group">

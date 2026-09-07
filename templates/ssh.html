@@ -197,6 +197,13 @@
     {% import "_macros.html" as ui %}
     {% set actions %}
     {% endset %}
+    {% set page_info %}
+        <p style="margin-bottom:0.75rem">Controls <strong>who can log into this machine remotely</strong> without a password. Each entry is one trusted key, usually one per person or device.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li><strong>Add Key</strong> pastes in a new public key (the one starting with <strong>ssh-ed25519</strong> or <strong>ssh-rsa</strong>). Duplicates are rejected.</li>
+            <li>Removing a key <strong>instantly revokes</strong> that access. The page refuses to delete your very last key so you can't lock yourself out by accident.</li>
+        </ul>
+        {% endset %}
     {{ ui.header(
         title="SSH Keys",
         icon="key-round",
@@ -204,6 +211,7 @@
         badge_id="count-badge",
         actions=actions,
         current='/ssh',
+        info=page_info,
     ) }}
     {% set subheader %}
         <input id="filter-input" class="text-input" style="max-width: 260px" placeholder="Filter by fingerprint or comment…" oninput="renderList()">

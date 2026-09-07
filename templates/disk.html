@@ -230,6 +230,14 @@
     {% import "_macros.html" as ui %}
     {% set actions %}
     {% endset %}
+    {% set page_info %}
+        <p style="margin-bottom:0.75rem">Finds out <strong>what is eating your disk space</strong>. The colored mosaic (treemap) makes big folders obvious at a glance — bigger box, more space.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li>Click a box or a row to <strong>go inside</strong> that folder; the arrow button or breadcrumb takes you back up.</li>
+            <li><strong>Depth 1/2/3</strong> controls how many levels deep it scans; <strong>Top 20</strong> lists the biggest items anywhere below.</li>
+            <li>Scans can take a few seconds on big disks — the spinner means it's still measuring.</li>
+        </ul>
+        {% endset %}
     {{ ui.header(
         title="Disk Usage",
         icon="pie-chart",
@@ -237,6 +245,7 @@
         badge_id="depth-badge",
         actions=actions,
         current='/disk',
+        info=page_info,
     ) }}
     {% set subheader %}
         <button class="btn" onclick="navigateUp()" title="Go to parent directory" style="padding:0.5rem 0.625rem">
