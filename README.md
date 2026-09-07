@@ -16,6 +16,28 @@
 
 ---
 
+<p align="center">
+  <img src="resources/overview.svg" alt="Server Services Manager — capability overview" width="100%"/>
+</p>
+
+## Everything, in one tab
+
+| Run | Observe | Manage | Develop |
+|-----|---------|--------|---------|
+| Managed services (auto-restart, timers, CPU/mem limits, autostart) | Live system monitor (CPU/mem/net/disk charts) | Any systemd unit (start/stop/edit + log streaming) | **Full VS Code in the browser** (see below) |
+| Health checks (HTTP/TCP/cmd) + ntfy/webhook/Telegram/email alerts | Log search across services + journal | Docker, cron, firewall, packages, backups | File explorer (previews, resumable uploads) |
+| Scheduled tasks, activity log, plugins, open API | Alert-delivery log, disk treemap, SSH keys, cluster | Control panel + command palette + terminal | Config UI, API docs |
+
+### Full VS Code, built in — the big one
+
+`bash install-code-server.sh` once (user-level, no root), and `/code` gives you
+a complete VS Code Server inside the app: same password you already log in with,
+Office Viewer extension for `.docx/.xlsx/.pptx`, Normal/Wide/Fullscreen levels,
+and one-click jumps from any file in `/files`. Reachable over LAN/Tailscale.
+Desktop browser recommended for real editing; phones get a "best on desktop" notice instead of a broken UI.
+
+---
+
 ## Features
 
 ### Service Management
