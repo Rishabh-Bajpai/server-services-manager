@@ -284,16 +284,16 @@
         info=page_info,
     ) }}
     {% set subheader %}
-        <button class="tab-button active" data-view="containers" onclick="switchView('containers')">
+        <button class="tab-button active" data-view="containers" onclick="switchView('containers')" title="List all containers">
             <i data-lucide="container" class="w-3.5 h-3.5"></i> Containers
         </button>
-        <button class="tab-button" data-view="stacks" onclick="switchView('stacks')">
+        <button class="tab-button" data-view="stacks" onclick="switchView('stacks')" title="Group containers by project">
             <i data-lucide="layers" class="w-3.5 h-3.5"></i> Stacks
         </button>
-        <button class="tab-button" data-view="images" onclick="switchView('images')">
+        <button class="tab-button" data-view="images" onclick="switchView('images')" title="Container blueprints stored locally">
             <i data-lucide="hard-drive" class="w-3.5 h-3.5"></i> Images
         </button>
-        <button class="tab-button" data-view="daemon" onclick="switchView('daemon')">
+        <button class="tab-button" data-view="daemon" onclick="switchView('daemon')" title="Docker engine status and version">
             <i data-lucide="server" class="w-3.5 h-3.5"></i> Daemon
         </button>
         <span id="view-count" class="text-xs text-[var(--text-muted)] font-mono"></span>
@@ -316,10 +316,10 @@
         <div id="bulk-bar" class="panel-card p-3 mb-4 items-center gap-2 text-sm" style="display:none">
             <span id="bulk-count" class="font-semibold text-[var(--accent-cyan)] whitespace-nowrap">0 selected</span>
             <span class="flex-1"></span>
-            <button class="btn" onclick="bulkAction('start')"><i data-lucide="play" class="w-3.5 h-3.5"></i> Start</button>
-            <button class="btn" onclick="bulkAction('stop')"><i data-lucide="square" class="w-3.5 h-3.5"></i> Stop</button>
-            <button class="btn" onclick="bulkAction('restart')"><i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> Restart</button>
-            <button class="btn" onclick="clearSelection()"><i data-lucide="x" class="w-3.5 h-3.5"></i> Clear</button>
+            <button class="btn" onclick="bulkAction('start')" title="Start all selected containers"><i data-lucide="play" class="w-3.5 h-3.5"></i> Start</button>
+            <button class="btn" onclick="bulkAction('stop')" title="Stop all selected containers"><i data-lucide="square" class="w-3.5 h-3.5"></i> Stop</button>
+            <button class="btn" onclick="bulkAction('restart')" title="Restart all selected containers"><i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> Restart</button>
+            <button class="btn" onclick="clearSelection()" title="Unselect everything"><i data-lucide="x" class="w-3.5 h-3.5"></i> Clear</button>
         </div>
         <div id="view-containers" class="grid grid-cols-1 gap-4">
             <section>
@@ -330,11 +330,11 @@
                             <input id="search" type="text" class="search-input" placeholder="Filter by name or image..." oninput="renderRows()">
                         </div>
                         <div id="state-tabs" class="flex items-center gap-1">
-                            <button class="tab-button active" data-state="all" onclick="setStateFilter('all')">All</button>
-                            <button class="tab-button" data-state="running" onclick="setStateFilter('running')">Running</button>
-                            <button class="tab-button" data-state="stopped" onclick="setStateFilter('stopped')">Stopped</button>
-                            <button class="tab-button" data-state="paused" onclick="setStateFilter('paused')">Paused</button>
-                            <button class="tab-button" data-state="restarting" onclick="setStateFilter('restarting')">Restarting</button>
+                            <button class="tab-button active" data-state="all" onclick="setStateFilter('all')" title="Show containers in any state">All</button>
+                            <button class="tab-button" data-state="running" onclick="setStateFilter('running')" title="Show running containers only">Running</button>
+                            <button class="tab-button" data-state="stopped" onclick="setStateFilter('stopped')" title="Show stopped containers only">Stopped</button>
+                            <button class="tab-button" data-state="paused" onclick="setStateFilter('paused')" title="Show paused containers only">Paused</button>
+                            <button class="tab-button" data-state="restarting" onclick="setStateFilter('restarting')" title="Show restarting containers only">Restarting</button>
                         </div>
                         <span id="row-count" class="text-xs text-[var(--text-muted)] font-mono whitespace-nowrap"></span>
                     </div>
@@ -370,29 +370,29 @@
                             </button>
                         </div>
                         <div class="flex flex-wrap gap-1.5 mt-3">
-                            <button id="btn-start" class="btn" onclick="lifecycle('start')">
+                            <button id="btn-start" class="btn" onclick="lifecycle('start')" title="Start this container">
                                 <i data-lucide="play" class="w-3.5 h-3.5"></i> Start
                             </button>
-                            <button id="btn-stop" class="btn" onclick="lifecycle('stop')">
+                            <button id="btn-stop" class="btn" onclick="lifecycle('stop')" title="Stop this container">
                                 <i data-lucide="square" class="w-3.5 h-3.5"></i> Stop
                             </button>
-                            <button id="btn-restart" class="btn" onclick="lifecycle('restart')">
+                            <button id="btn-restart" class="btn" onclick="lifecycle('restart')" title="Restart this container">
                                 <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> Restart
                             </button>
-                            <button id="btn-remove" class="btn btn-danger" onclick="confirmRemove()">
+                            <button id="btn-remove" class="btn btn-danger" onclick="confirmRemove()" title="Delete this container (asks first)">
                                 <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Remove
                             </button>
                         </div>
                     </div>
 
                     <div class="border-b border-[var(--border-subtle)] px-2 flex gap-0.5">
-                        <button class="tab-button active" data-tab="details" onclick="switchTab('details')">
+                        <button class="tab-button active" data-tab="details" onclick="switchTab('details')" title="Container settings and network">
                             <i data-lucide="info" class="w-3.5 h-3.5"></i> Details
                         </button>
-                        <button class="tab-button" data-tab="stats" onclick="switchTab('stats')">
+                        <button class="tab-button" data-tab="stats" onclick="switchTab('stats')" title="Live CPU, memory, and network use">
                             <i data-lucide="activity" class="w-3.5 h-3.5"></i> Stats
                         </button>
-                        <button class="tab-button" data-tab="logs" onclick="switchTab('logs')">
+                        <button class="tab-button" data-tab="logs" onclick="switchTab('logs')" title="What the container is printing">
                             <i data-lucide="terminal" class="w-3.5 h-3.5"></i> Logs
                         </button>
                     </div>
@@ -411,7 +411,7 @@
                         <div id="tab-logs" class="hidden">
                             <div class="flex items-center justify-between mb-2 text-xs">
                                 <div class="flex items-center gap-2">
-                                    <button id="btn-logs-toggle" class="btn" onclick="toggleLogStream()">
+                                    <button id="btn-logs-toggle" class="btn" onclick="toggleLogStream()" title="Start or pause the live log feed">
                                         <i data-lucide="play" class="w-3 h-3"></i> <span id="btn-logs-toggle-label">Start</span>
                                     </button>
                                     <label class="flex items-center gap-1.5 text-[var(--text-muted)] cursor-pointer">
@@ -419,7 +419,7 @@
                                         Follow
                                     </label>
                                 </div>
-                                <button class="btn" onclick="clearLogs()">
+                                <button class="btn" onclick="clearLogs()" title="Empty the visible log view">
                                     <i data-lucide="trash" class="w-3 h-3"></i> Clear
                                 </button>
                             </div>
@@ -453,7 +453,7 @@
                 <div class="p-4 border-b border-[var(--border-subtle)] flex items-center gap-3 flex-wrap">
                     <span class="text-sm font-semibold">Docker daemon</span>
                     <span class="flex-1"></span>
-                    <button class="btn btn-danger" onclick="restartDaemon()">
+                    <button class="btn btn-danger" onclick="restartDaemon()" title="Restart the Docker engine itself (all containers pause briefly)">
                         <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> Restart Docker
                     </button>
                 </div>
@@ -507,8 +507,8 @@
                 Also remove anonymous volumes
             </label>
             <div class="flex gap-2 justify-end">
-                <button class="btn" onclick="closeRemoveModal()">Cancel</button>
-                <button class="btn btn-danger" onclick="executeRemove()">
+                <button class="btn" onclick="closeRemoveModal()" title="Keep the container">Cancel</button>
+                <button class="btn btn-danger" onclick="executeRemove()" title="Delete the container now">
                     <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Remove
                 </button>
             </div>

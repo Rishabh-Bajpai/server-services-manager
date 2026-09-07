@@ -387,20 +387,20 @@
         ) }}
 {% set subheader %}
         <div id="type-tabs" class="flex flex-wrap items-center gap-1.5">
-            <button class="filter-tab active" data-type="all"><i data-lucide="layers" class="w-3.5 h-3.5"></i><span>All</span></button>
-            <button class="filter-tab" data-type="service"><i data-lucide="cog" class="w-3.5 h-3.5"></i><span>Service</span></button>
-            <button class="filter-tab" data-type="timer"><i data-lucide="timer" class="w-3.5 h-3.5"></i><span>Timer</span></button>
-            <button class="filter-tab" data-type="socket"><i data-lucide="plug" class="w-3.5 h-3.5"></i><span>Socket</span></button>
-            <button class="filter-tab" data-type="path"><i data-lucide="file-search" class="w-3.5 h-3.5"></i><span>Path</span></button>
-            <button class="filter-tab" data-type="mount"><i data-lucide="hard-drive" class="w-3.5 h-3.5"></i><span>Mount</span></button>
+            <button class="filter-tab active" data-type="all" title="Show all unit types"><i data-lucide="layers" class="w-3.5 h-3.5"></i><span>All</span></button>
+            <button class="filter-tab" data-type="service" title="Show services only"><i data-lucide="cog" class="w-3.5 h-3.5"></i><span>Service</span></button>
+            <button class="filter-tab" data-type="timer" title="Show timers only"><i data-lucide="timer" class="w-3.5 h-3.5"></i><span>Timer</span></button>
+            <button class="filter-tab" data-type="socket" title="Show sockets only"><i data-lucide="plug" class="w-3.5 h-3.5"></i><span>Socket</span></button>
+            <button class="filter-tab" data-type="path" title="Show path units only"><i data-lucide="file-search" class="w-3.5 h-3.5"></i><span>Path</span></button>
+            <button class="filter-tab" data-type="mount" title="Show mounts only"><i data-lucide="hard-drive" class="w-3.5 h-3.5"></i><span>Mount</span></button>
         </div>
         <div id="state-tabs" class="flex flex-wrap items-center gap-1.5">
-            <button class="filter-tab active" data-state="all">All</button>
-            <button class="filter-tab" data-state="active"><span class="state-dot state-running"></span><span>Active</span></button>
-            <button class="filter-tab" data-state="running"><span class="state-dot state-running"></span><span>Running</span></button>
-            <button class="filter-tab" data-state="inactive"><span class="state-dot state-stopped"></span><span>Inactive</span></button>
-            <button class="filter-tab" data-state="static"><span class="state-dot state-static"></span><span>Static</span></button>
-            <button class="filter-tab" data-state="failed"><span class="state-dot state-failed"></span><span>Failed</span></button>
+            <button class="filter-tab active" data-state="all" title="Show units in any state">All</button>
+            <button class="filter-tab" data-state="active" title="Show active units only"><span class="state-dot state-running"></span><span>Active</span></button>
+            <button class="filter-tab" data-state="running" title="Show running units only"><span class="state-dot state-running"></span><span>Running</span></button>
+            <button class="filter-tab" data-state="inactive" title="Show inactive units only"><span class="state-dot state-stopped"></span><span>Inactive</span></button>
+            <button class="filter-tab" data-state="static" title="Show static units only"><span class="state-dot state-static"></span><span>Static</span></button>
+            <button class="filter-tab" data-state="failed" title="Show failed units only"><span class="state-dot state-failed"></span><span>Failed</span></button>
         </div>
         <div class="relative flex-1 min-w-[12rem]">
             <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"></i>
@@ -472,10 +472,10 @@
         </div>
 
         <div class="flex items-center gap-1 px-4 border-b border-[var(--border-subtle)] overflow-x-auto">
-            <button class="tab-btn active" data-tab="overview">Overview</button>
-            <button class="tab-btn" data-tab="dependencies">Dependencies</button>
-            <button class="tab-btn" data-tab="unit-file">Unit File</button>
-            <button class="tab-btn" data-tab="logs">Logs</button>
+            <button class="tab-btn active" data-tab="overview" title="Status, actions, and key details">Overview</button>
+            <button class="tab-btn" data-tab="dependencies" title="What this unit needs, and what needs it">Dependencies</button>
+            <button class="tab-btn" data-tab="unit-file" title="The unit's settings file">Unit File</button>
+            <button class="tab-btn" data-tab="logs" title="Live log output for this unit">Logs</button>
         </div>
 
         <div class="flex-1 overflow-y-auto">
@@ -488,16 +488,16 @@
                         <span id="panel-badge-override" class="badge badge-purple" style="display:none">override</span>
                     </div>
                     <div class="grid grid-cols-2 gap-2">
-                        <button id="btn-start" onclick="handleAction('start')" class="row-action-btn start" style="height:auto;padding:0.5rem;width:auto;display:inline-flex;gap:0.375rem">
+                        <button id="btn-start" onclick="handleAction('start')" title="Start this unit now" class="row-action-btn start" style="height:auto;padding:0.5rem;width:auto;display:inline-flex;gap:0.375rem">
                             <i data-lucide="play" class="w-3.5 h-3.5"></i><span>Start</span>
                         </button>
-                        <button id="btn-stop" onclick="handleAction('stop')" class="row-action-btn stop" style="height:auto;padding:0.5rem;width:auto;display:inline-flex;gap:0.375rem">
+                        <button id="btn-stop" onclick="handleAction('stop')" title="Stop this unit now" class="row-action-btn stop" style="height:auto;padding:0.5rem;width:auto;display:inline-flex;gap:0.375rem">
                             <i data-lucide="square" class="w-3.5 h-3.5"></i><span>Stop</span>
                         </button>
-                        <button id="btn-restart" onclick="handleAction('restart')" class="row-action-btn restart" style="height:auto;padding:0.5rem;width:auto;display:inline-flex;gap:0.375rem">
+                        <button id="btn-restart" onclick="handleAction('restart')" title="Restart this unit now" class="row-action-btn restart" style="height:auto;padding:0.5rem;width:auto;display:inline-flex;gap:0.375rem">
                             <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i><span>Restart</span>
                         </button>
-                        <button id="btn-reload" onclick="handleAction('reload')" class="row-action-btn" style="height:auto;padding:0.5rem;width:auto;display:inline-flex;gap:0.375rem">
+                        <button id="btn-reload" onclick="handleAction('reload')" title="Reload this unit's settings without stopping it" class="row-action-btn" style="height:auto;padding:0.5rem;width:auto;display:inline-flex;gap:0.375rem">
                             <i data-lucide="refresh-ccw" class="w-3.5 h-3.5"></i><span>Reload</span>
                         </button>
                     </div>
@@ -509,10 +509,10 @@
                 <div class="panel-section">
                     <div class="panel-label">Toggle at boot</div>
                     <div class="flex items-center gap-2">
-                        <button id="btn-enable" onclick="handleAction('enable')" class="row-action-btn" style="height:auto;padding:0.5rem 0.75rem;width:auto;display:inline-flex;gap:0.375rem">
+                        <button id="btn-enable" onclick="handleAction('enable')" title="Start this unit automatically at boot" class="row-action-btn" style="height:auto;padding:0.5rem 0.75rem;width:auto;display:inline-flex;gap:0.375rem">
                             <i data-lucide="check" class="w-3.5 h-3.5"></i><span>Enable</span>
                         </button>
-                        <button id="btn-disable" onclick="handleAction('disable')" class="row-action-btn" style="height:auto;padding:0.5rem 0.75rem;width:auto;display:inline-flex;gap:0.375rem">
+                        <button id="btn-disable" onclick="handleAction('disable')" title="Do not start this unit at boot" class="row-action-btn" style="height:auto;padding:0.5rem 0.75rem;width:auto;display:inline-flex;gap:0.375rem">
                             <i data-lucide="x" class="w-3.5 h-3.5"></i><span>Disable</span>
                         </button>
                     </div>
@@ -555,7 +555,7 @@
                     <div class="flex items-center justify-between mb-2">
                         <div class="panel-label" style="margin-bottom:0">Dependency graph</div>
                         <div class="flex items-center gap-1">
-                            <select id="graph-depth" class="text-xs bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-md px-2 py-1 text-[var(--text-primary)] outline-none">
+                            <select id="graph-depth" title="How many dependency levels to show" class="text-xs bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-md px-2 py-1 text-[var(--text-primary)] outline-none">
                                 <option value="1">depth 1</option>
                                 <option value="2" selected>depth 2</option>
                                 <option value="3">depth 3</option>
@@ -637,8 +637,8 @@
             <input type="password" id="auth-password" placeholder="Sudo password..." autocomplete="off">
             <p id="auth-error" class="text-xs text-[var(--accent-red)] mb-2" style="display:none"></p>
             <div class="modal-actions">
-                <button class="btn-cancel" onclick="closeAuth()">Cancel</button>
-                <button class="btn-primary" id="auth-execute">Confirm</button>
+                <button class="btn-cancel" onclick="closeAuth()" title="Close without doing anything">Cancel</button>
+                <button class="btn-primary" id="auth-execute" title="Run with the entered password">Confirm</button>
             </div>
         </div>
     </div>
@@ -652,8 +652,8 @@
             <input type="password" id="edit-password" placeholder="Sudo password to save..." autocomplete="off">
             <p id="edit-error" class="text-xs text-[var(--accent-red)] mb-2" style="display:none"></p>
             <div class="modal-actions">
-                <button class="btn-cancel" onclick="closeEdit()">Cancel</button>
-                <button class="btn-primary" id="edit-save">Save &amp; reload</button>
+                <button class="btn-cancel" onclick="closeEdit()" title="Close without saving">Cancel</button>
+                <button class="btn-primary" id="edit-save" title="Save settings and reload the unit">Save &amp; reload</button>
             </div>
         </div>
     </div>
