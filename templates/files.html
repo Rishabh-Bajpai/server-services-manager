@@ -324,12 +324,21 @@
     {% import "_macros.html" as ui %}
     {% set actions %}
     {% endset %}
+    {% set page_info %}
+        <p style="margin-bottom:0.75rem">Your <strong>home folder on this machine</strong>, browsable from the browser. You can't leave home — everything stays inside it for safety.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li>Click a folder to enter it; double-click (or the eye button) to <strong>preview</strong> a file — text, images, PDFs, even audio and video.</li>
+            <li><strong>Upload</strong> big files safely: progress is shown, pauses survive page changes, and interrupted uploads resume where they stopped.</li>
+            <li>Select files for <strong>copy / cut / paste, zip, delete, or rename</strong> (F2). The <strong>VS Code</strong> button opens a file for real editing.</li>
+        </ul>
+        {% endset %}
     {{ ui.header(
         title="Files",
         icon="folder-open",
         icon_color="var(--accent-yellow)",
         actions=actions,
         current='/files',
+        info=page_info,
     ) }}
     {% set subheader %}
         <div class="flex items-center gap-1.5 flex-wrap w-full">

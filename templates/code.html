@@ -119,12 +119,21 @@
     {% import "_macros.html" as ui %}
     {% set actions %}
     {% endset %}
+    {% set page_info %}
+        <p style="margin-bottom:0.75rem">A <strong>complete code editor running in your browser</strong> — the same VS Code many developers use daily, editing files directly on this machine.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li>It logs in with <strong>the same password</strong> as this app (synced automatically), and can open Word/Excel-style documents too.</li>
+            <li><strong>Normal / Wide / Full</strong> give the editor more room; F11 is true fullscreen, Esc steps back out.</li>
+            <li>Real editing wants a <strong>keyboard and a wide screen</strong> — on a phone this page says so instead of pretending otherwise.</li>
+        </ul>
+        {% endset %}
     {{ ui.header(
         title="VS Code",
         icon="code",
         icon_color="var(--accent-blue)",
         actions=actions,
         current='/code',
+        info=page_info,
     ) }}
     {% set subheader %}
         <div class="flex items-center gap-1.5 flex-wrap w-full">

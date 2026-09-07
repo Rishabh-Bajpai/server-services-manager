@@ -107,12 +107,21 @@
     {% import "_macros.html" as ui %}
 {% set actions %}
 {% endset %}
+{% set page_info %}
+        <p style="margin-bottom:0.75rem">The manager's <strong>settings file, checked and displayed</strong>. This is what the app actually understood from your config.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li><strong>VALID</strong> means everything parses. Warnings explain what was ignored or defaulted — read them before wondering why something doesn't work.</li>
+            <li>Passwords and tokens are shown as <strong>***</strong> here, so this page is safe to look at over someone's shoulder.</li>
+            <li>To change settings, edit <strong>config.yaml</strong> (or use the Dashboard UI) and restart — this page itself never edits anything.</li>
+        </ul>
+        {% endset %}
 {{ ui.header(
             title="Configuration",
             icon="file-cog",
             icon_color="var(--accent-blue)",
             actions=actions,
             current='/config',
+            info=page_info,
         ) }}
 {% set subheader %}
     <span class="text-xs text-[var(--text-muted)]">Validates <span class="font-mono">config.yaml</span> (programs, commands, notifiers) and shows the effective config with secrets redacted. Hand-edits apply on restart.</span>

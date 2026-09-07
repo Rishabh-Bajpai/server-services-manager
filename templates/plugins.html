@@ -96,12 +96,20 @@
     {% import "_macros.html" as ui %}
 {% set actions %}
 {% endset %}
+{% set page_info %}
+        <p style="margin-bottom:0.75rem"><strong>Extra powers for the manager</strong>, written as small Python files. A plugin can add its own pages, background jobs, or reactions to events.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li>This page shows which plugins were <strong>found and loaded</strong>. A broken one is skipped with a logged reason — it can never take the app down.</li>
+            <li>To add one, drop a <strong>.py file</strong> into the shown folder and restart the manager. The writing guide at the bottom shows the 10-line shape.</li>
+        </ul>
+        {% endset %}
 {{ ui.header(
             title="Plugins",
             icon="plug",
             icon_color="var(--accent-purple)",
             actions=actions,
             current='/plugins',
+            info=page_info,
         ) }}
 {% set subheader %}
     <span class="text-xs text-[var(--text-muted)]">Python files that run inside the app with full access — this page shows what is installed and whether each one loads.</span>

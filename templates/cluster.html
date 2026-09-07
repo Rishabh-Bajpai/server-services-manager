@@ -181,6 +181,14 @@
     {% import "_macros.html" as ui %}
     {% set actions %}
     {% endset %}
+    {% set page_info %}
+        <p style="margin-bottom:0.75rem">If you run this manager on <strong>more than one machine</strong>, this page links them so you can hop between them.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li><strong>Add Peer</strong> registers another machine (address + shared secret). The dot shows whether it's reachable right now.</li>
+            <li>Opening a peer <strong>logs you in there automatically</strong> — no second password — using the shared secret.</li>
+            <li>Nothing is broadcast automatically. With no peers added, this page simply stays empty. One machine is the normal case.</li>
+        </ul>
+        {% endset %}
     {{ ui.header(
         title="Cluster",
         icon="network",
@@ -188,6 +196,7 @@
         badge_id="enabled-badge",
         actions=actions,
         current='/cluster',
+        info=page_info,
     ) }}
     {% set subheader %}
         <button class="btn" onclick="probeAll(this)" title="Probe reachability">
