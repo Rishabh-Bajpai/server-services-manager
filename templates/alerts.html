@@ -215,6 +215,10 @@
             <i data-lucide="download" class="w-3.5 h-3.5"></i>
             <span class="hidden sm:inline">Export CSV</span>
         </a>
+        <button class="btn" id="btn-pause" onclick="togglePause()" title="Pause the 30s auto-refresh">
+            <i data-lucide="pause" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline" id="pause-label">Pause</span>
+        </button>
         <button class="btn" onclick="loadAll()">
             <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
             <span class="hidden sm:inline">Refresh</span>
@@ -222,7 +226,8 @@
     {% endset %}
     {{ ui.subheader(subheader) }}
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+    <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6 space-y-4">
+        <div class="text-xs text-[var(--text-muted)]">Every notification the app sends (health transitions, program state changes) is logged here with its channel, recipient, result, and latency — so a silent channel is debuggable instead of mysterious.</div>
         <section id="summary-cards" class="grid grid-cols-2 sm:grid-cols-5 gap-3"></section>
 
         <section class="panel-card">
@@ -305,7 +310,18 @@
         if (ch === 'email') return 'badge-orange';
         return 'badge-gray';
     }
-    function api(path) { return fetch(path).then(r => r.json()); }
+    function api(path) {
+        return fetch(path).then(r => {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        });
+    }
+    let paused = false;
+    let lastTotal = null;  // total deliveries in range (for the setup explainer)
+    function togglePause() {
+        paused = !paused;
+        document.getElementById('pause-label').textContent = paused ? 'Resume' : 'Pause';
+    }
 
     function setRange(r, btn) {
         range = r;
@@ -319,13 +335,23 @@
     }
 
     function loadAll() {
+        if (paused) return;
         loadSummary();
         loadEvents();
     }
 
     function loadSummary() {
         api('/api/alerts/stats?' + (sinceQuery() ? sinceQuery().slice(1) : ''))
-            .then(d => renderSummary(d));
+            .then(d => {
+                lastTotal = (d.summary || {}).total || 0;
+                renderSummary(d);
+            })
+            .catch(e => {
+                document.getElementById('summary-cards').innerHTML =
+                    `<div class="summary-card"><div class="summary-label">Error</div><div class="text-xs text-[var(--accent-red)]">Could not load stats: ${escAttr(e.message)}</div></div>`;
+                document.getElementById('channel-stats').innerHTML =
+                    `<div class="empty-state text-sm text-[var(--accent-red)]">Could not load channel stats.</div>`;
+            });
     }
 
     function renderSummary(d) {
@@ -394,14 +420,38 @@
         const service = document.getElementById('filter-service').value.trim();
         if (service) params.set('service', service);
 
-        api('/api/alerts/events?' + params.toString()).then(d => renderEvents(d.events || []));
+        api('/api/alerts/events?' + params.toString())
+            .then(d => renderEvents(d.events || []))
+            .catch(e => {
+                document.getElementById('events-tbody').innerHTML =
+                    `<tr><td colspan="7"><div class="empty-state text-[var(--accent-red)]">Failed to load events: ${escAttr(e.message)}</div></td></tr>`;
+                toast('Failed to load events: ' + e.message, 'error');
+            });
+    }
+
+    function filtersActive() {
+        return range !== 'all'
+            || document.getElementById('filter-channel').value !== ''
+            || document.getElementById('filter-success').value !== ''
+            || document.getElementById('filter-service').value.trim() !== '';
     }
 
     function renderEvents(rows) {
         const tbody = document.getElementById('events-tbody');
         document.getElementById('event-count').textContent = rows.length + ' events';
         if (!rows.length) {
-            tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">No deliveries match these filters.</div></td></tr>`;
+            // Teach, don't just shrug: an empty log with no filters means
+            // no notifier is configured yet — show how to get first blood.
+            if (!filtersActive() && (lastTotal === 0 || lastTotal === null)) {
+                tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state" style="text-align:left;max-width:640px;margin:0 auto">
+                    <div class="font-semibold text-[var(--text-primary)] mb-1">No notifications have been sent yet.</div>
+                    <div class="text-xs mb-2">This log fills when a health check flips or a program changes state <em>and</em> a notifier is configured. Add one to <code class="font-mono">config.yaml</code>, restart, and trigger a transition (e.g. stop a program with a health check):</div>
+                    <pre class="font-mono text-[11px] bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded p-3 overflow-x-auto text-left">notifications:\n  - type: ntfy\n    topic: my-alerts</pre>
+                    <div class="text-xs mt-2">Live status lives on <a class="text-[var(--accent-blue)] underline" href="/notifications">/notifications</a>; validator on <a class="text-[var(--accent-blue)] underline" href="/config">/config</a>.</div>
+                </div></td></tr>`;
+            } else {
+                tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">No deliveries match these filters.</div></td></tr>`;
+            }
             return;
         }
         tbody.innerHTML = rows.map(r => {
