@@ -560,6 +560,19 @@
         </div>
     </div>
 
+    <div id="download-panel" class="panel-card p-3" style="display:none;position:fixed;right:1rem;bottom:1rem;z-index:90;width:min(26rem,calc(100vw - 2rem))">
+        <div class="flex items-center justify-between mb-2">
+            <h3 class="text-sm font-semibold flex items-center gap-2">
+                <i data-lucide="download-cloud" class="w-4 h-4 text-[var(--accent-green)]"></i>
+                Downloads
+            </h3>
+            <button class="text-[var(--text-muted)] hover:text-[var(--text-primary)]" onclick="clearFinishedDownloads()" title="Clear finished">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+            </button>
+        </div>
+        <div id="download-list" class="space-y-2 overflow-y-auto" style="max-height:40dvh"></div>
+    </div>
+
     <div class="toast-container" id="toast-container"></div>
 
     <input type="file" id="upload-input" style="display:none" multiple onchange="queueChosenFiles(this)">
@@ -1291,31 +1304,155 @@
                 });
         }
 
+        // Buffering a whole file to show progress costs RAM, so files
+        // above this go straight to the browser's own download manager
+        // (which has its own progress UI and streams to disk).
+        const DOWNLOAD_BUFFER_MAX = 512 * 1024 * 1024;  // 512 MiB
+        let downloadJobs = [];
+
         function downloadSelected() {
             if (selected.size !== 1) return;
             const p = [...selected][0];
-            window.open('/api/files/download?path=' + encodeURIComponent(p), '_blank');
+            const url = '/api/files/download?path=' + encodeURIComponent(p);
+            fetchDownload(
+                (signal) => fetch(url, { credentials: 'same-origin', signal }),
+                p.split('/').pop(),
+                url);  // plain-GET fallback for the anchor path
         }
 
         function downloadZip() {
             if (!selected.size) return;
             const paths = [...selected];
-            fetch('/api/files/zip', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ paths }),
-                credentials: 'same-origin',
-            }).then(r => {
-                if (!r.ok) return r.json().then(j => { throw new Error(j.error || 'HTTP ' + r.status); });
-                return r.blob();
-            }).then(blob => {
+            fetchDownload(
+                (signal) => fetch('/api/files/zip', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ paths }),
+                    credentials: 'same-origin',
+                    signal,
+                }),
+                'selection.zip',
+                null);  // no anchor fallback: the zip only exists in this POST
+        }
+
+        // Stream a fetch response to a file with progress + cancel.
+        // Small enough → buffered with a progress bar; too big or
+        // unknown size (and a plain-GET fallback url exists) → handed
+        // to the browser download manager instead of OOMing the tab.
+        async function fetchDownload(makeRequest, filename, fallbackUrl) {
+            const ctrl = new AbortController();
+            const job = { name: filename, received: 0, total: 0, state: 'active', error: null, ctrl };
+            downloadJobs.push(job);
+            showDownloadPanel();
+            renderDownloads();
+            try {
+                const r = await makeRequest(ctrl.signal);
+                if (!r.ok) {
+                    const j = await r.json().catch(() => ({}));
+                    throw new Error(j.error || ('HTTP ' + r.status));
+                }
+                const len = Number(r.headers.get('Content-Length') || 0);
+                job.total = len;
+                if ((!len || len > DOWNLOAD_BUFFER_MAX) && fallbackUrl) {
+                    job.state = 'done';
+                    job.note = 'handed to browser';
+                    renderDownloads();
+                    const a = document.createElement('a');
+                    a.href = fallbackUrl; a.download = filename;
+                    document.body.appendChild(a); a.click(); a.remove();
+                    toast(`Large download handed to the browser (${humanizeSize(len)})`, 'info');
+                    setTimeout(() => removeDownload(job), 6000);
+                    return;
+                }
+                if (!r.body || !r.body.getReader) throw new Error('streaming unsupported');
+                const reader = r.body.getReader();
+                const parts = [];
+                for (;;) {
+                    if (ctrl.signal.aborted) throw new DOMException('aborted', 'AbortError');
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    parts.push(value);
+                    job.received += value.length;
+                    renderDownloads();
+                }
+                const blob = new Blob(parts);
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
-                a.href = url; a.download = 'selection.zip';
-                a.click();
-                setTimeout(() => URL.revokeObjectURL(url), 1000);
-                toast('Zip downloaded', 'success');
-            }).catch(e => toast(e.message || 'zip failed', 'error'));
+                a.href = url; a.download = filename;
+                document.body.appendChild(a); a.click(); a.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 5000);
+                job.state = 'done';
+                toast('Downloaded ' + filename, 'success');
+                setTimeout(() => removeDownload(job), 6000);
+            } catch (e) {
+                if (e && e.name === 'AbortError') {
+                    job.state = 'cancelled';
+                    try { ctrl.abort(); } catch (abortedErr) { /* already aborting */ }
+                } else {
+                    job.state = 'failed';
+                    job.error = (e && e.message) || 'download failed';
+                    toast('Download failed: ' + job.error, 'error');
+                }
+            }
+            renderDownloads();
+        }
+
+        function removeDownload(job) {
+            downloadJobs = downloadJobs.filter(j => j !== job);
+            renderDownloads();
+        }
+
+        function clearFinishedDownloads() {
+            downloadJobs = downloadJobs.filter(j => j.state === 'active');
+            renderDownloads();
+        }
+
+        function showDownloadPanel() {
+            const p = document.getElementById('download-panel');
+            p.style.display = 'block';
+            // Stack above the upload panel when both are visible.
+            const up = document.getElementById('upload-panel');
+            if (up && up.style.display !== 'none') {
+                p.style.bottom = (up.getBoundingClientRect().height + 32) + 'px';
+            } else {
+                p.style.bottom = '1rem';
+            }
+            lucide.createIcons();
+        }
+
+        function renderDownloads() {
+            const panel = document.getElementById('download-panel');
+            if (!downloadJobs.length) { panel.style.display = 'none'; return; }
+            panel.style.display = 'block';
+            const list = document.getElementById('download-list');
+            list.innerHTML = downloadJobs.map((j) => {
+                const i = downloadJobs.indexOf(j);
+                const pct = j.total ? Math.round(j.received / j.total * 100) : 0;
+                const cls = j.state === 'done' ? 'done' : (j.state === 'failed' || j.state === 'cancelled') ? 'failed' : '';
+                const status = j.state === 'done' ? (j.note || 'done')
+                    : j.state === 'failed' ? ('failed: ' + (j.error || 'error'))
+                    : j.state === 'cancelled' ? 'cancelled'
+                    : j.total ? `${pct}% · ${humanizeSize(j.received)} / ${humanizeSize(j.total)}`
+                    : `${humanizeSize(j.received)} …`;
+                const cancelBtn = j.state === 'active'
+                    ? `<button class="text-[var(--text-muted)] hover:text-[var(--accent-red)]" data-dact="cancel:${i}" title="Cancel"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>` : '';
+                return `<div class="text-xs"><div class="flex items-center gap-2 mb-1">` +
+                    `<i data-lucide="download" class="w-3.5 h-3.5 text-[var(--accent-green)] flex-shrink-0"></i>` +
+                    `<span class="font-mono truncate flex-1" title="${escapeAttr(j.name)}">${escapeHtml(j.name)}</span>` +
+                    `${cancelBtn}</div>` +
+                    `<div class="upload-bar ${cls}"><div style="width:${pct}%"></div></div>` +
+                    `<div class="text-[var(--text-muted)] mt-0.5">${escapeHtml(status)}</div></div>`;
+            }).join('');
+            list.querySelectorAll('[data-dact]').forEach(b => {
+                const [act, idx] = b.dataset.dact.split(':');
+                b.onclick = () => {
+                    const j = downloadJobs[Number(idx)];
+                    if (j && act === 'cancel' && j.state === 'active') {
+                        try { j.ctrl.abort(); } catch (e) { /* noop */ }
+                    }
+                };
+            });
+            lucide.createIcons();
         }
 
         function openProps() {
@@ -1527,8 +1664,12 @@
             document.getElementById('viewer-title').textContent = name || path.split('/').pop();
             document.getElementById('viewer-body').innerHTML = '<div class="empty-state">Loading…</div>';
             document.getElementById('modal-viewer').classList.add('open');
-            document.getElementById('viewer-download').onclick = () =>
-                window.open('/api/files/download?path=' + encodeURIComponent(path), '_blank');
+            document.getElementById('viewer-download').onclick = () => {
+                const url = '/api/files/download?path=' + encodeURIComponent(path);
+                fetchDownload(
+                    (signal) => fetch(url, { credentials: 'same-origin', signal }),
+                    path.split('/').pop(), url);
+            };
             // Editing lives in /code now: offer a jump there for text.
             const codeBtn = document.getElementById('viewer-code');
             codeBtn.style.display = 'none';
@@ -1959,6 +2100,18 @@
             }
         }
         window.addEventListener('resize', fitPanels);
+
+        // Navigating away aborts in-flight fetch transfers (uploads AND
+        // downloads) — the browser gives us no background alternative.
+        // Paused uploads are safe to leave (sessions persist server-side
+        // and resume when the file is re-added), so only live transfers
+        // trigger the warning. Terminals need no guard: their shells
+        // keep running server-side and reattach by id on return.
+        window.addEventListener('beforeunload', (e) => {
+            const busyUp = uploadJobs.some(j => j.state === 'queued' || j.state === 'active');
+            const busyDown = downloadJobs.some(j => j.state === 'active');
+            if (busyUp || busyDown) { e.preventDefault(); e.returnValue = ''; }
+        });
 
         // ------------------------------------------------------------------
         // Init

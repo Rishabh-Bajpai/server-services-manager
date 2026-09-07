@@ -173,3 +173,54 @@ class TestTerminalManager:
         mgr.close("a")
         mock_sess.close.assert_called_once()
         assert "a" not in mgr.sessions
+
+
+class TestScrollback:
+    def test_read_loop_records_scrollback(self, mock_socketio):
+        sess = TerminalSession("s1", mock_socketio)
+        sess.active = True
+        sess.fd = 12
+        state = {"called": False}
+
+        def fake_select(*args, **kwargs):
+            if not state["called"]:
+                state["called"] = True
+                return ([12], [], [])
+            sess.active = False
+            return ([], [], [])
+
+        with patch("app.terminal_manager.select.select", side_effect=fake_select), \
+             patch("app.terminal_manager.os.read", return_value=b"hello"), \
+             patch.object(sess, "close"):
+            t = threading.Thread(target=sess._read_loop, daemon=True)
+            t.start()
+            t.join(timeout=1)
+        assert "".join(sess.scrollback) == "hello"
+
+    def test_backlog_joins_and_defaults_empty(self, mock_socketio):
+        mgr = TerminalManager(mock_socketio)
+        assert mgr.get_backlog("missing") == ""
+        sess = TerminalSession("a", mock_socketio)
+        sess.scrollback.append("$ ")
+        sess.scrollback.append("ls\n")
+        mgr.sessions["a"] = sess
+        assert mgr.get_backlog("a") == "$ ls\n"
+
+    def test_backlog_bounded(self, mock_socketio):
+        from app.terminal_manager import _SCROLLBACK_CHUNKS
+
+        sess = TerminalSession("s1", mock_socketio)
+        for i in range(_SCROLLBACK_CHUNKS + 50):
+            sess.scrollback.append("x")
+        assert len(sess.scrollback) == _SCROLLBACK_CHUNKS
+
+    def test_session_alive(self, mock_socketio):
+        mgr = TerminalManager(mock_socketio)
+        assert mgr.session_alive("missing") is False
+        sess = TerminalSession("a", mock_socketio)
+        sess.active = True
+        sess.pid = 123
+        mgr.sessions["a"] = sess
+        assert mgr.session_alive("a") is True
+        sess.active = False
+        assert mgr.session_alive("a") is False

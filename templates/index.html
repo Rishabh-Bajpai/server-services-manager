@@ -694,9 +694,17 @@
         // Icons initialization
         lucide.createIcons();
 
+        let termsRestored = false;
         socket.on('connect', () => {
             connectionStatus.textContent = 'System Online';
             connectionStatus.className = 'px-3 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-500';
+            // Reattach tabs from before a route change (once per page
+            // load). Server-side the shells never died: create is
+            // idempotent and replays missed output via backlog.
+            if (!termsRestored) {
+                termsRestored = true;
+                restoreTerminals();
+            }
         });
 
         socket.on('disconnect', () => {
@@ -712,6 +720,15 @@
         socket.on('terminal_output', (msg) => {
             const session = terminals[msg.id];
             if (session) {
+                session.term.write(msg.data);
+            }
+        });
+
+        // Missed-output replay for a reattached tab (route change and
+        // back). Same write path as live output.
+        socket.on('terminal_backlog', (msg) => {
+            const session = terminals[msg.id];
+            if (session && msg.data) {
                 session.term.write(msg.data);
             }
         });
@@ -1463,10 +1480,33 @@
     <script>
         // Terminal Logic
 
+        // Open tab ids survive route changes in this tab (sessionStorage):
+        // the shell keeps running server-side, and re-emitting
+        // terminal_create reattaches (idempotent) with backlog replay.
+        function saveTermIds() {
+            try {
+                sessionStorage.setItem('ssm-terminals',
+                    JSON.stringify(Object.keys(terminals).slice(-10)));
+            } catch (e) { /* private mode */ }
+        }
+        function restoreTerminals() {
+            let ids = [];
+            try { ids = JSON.parse(sessionStorage.getItem('ssm-terminals') || '[]'); } catch (e) {}
+            ids.filter(id => typeof id === 'string' && !terminals[id]).forEach(id => {
+                terminalCount++;
+                attachTerminal(id, `Terminal ${terminalCount}`);
+            });
+        }
+
         function createNewTerminal() {
             terminalCount++;
             const id = `term-${Date.now()}`;
             const name = `Terminal ${terminalCount}`;
+            attachTerminal(id, name);
+            saveTermIds();
+        }
+
+        function attachTerminal(id, name) {
 
             // Create Tab
             const tab = document.createElement('button');
@@ -1585,6 +1625,7 @@
             session.term.dispose();
 
             delete terminals[id];
+            saveTermIds();
 
             if (activeTerminalId === id) {
                 activeTerminalId = null;

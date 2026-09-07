@@ -1650,7 +1650,34 @@ editor and became the file manager:
   16px above the bottom, tree/list scroll internally.
 
 **Verified live** (zero JS errors, `node --check` clean).
-Full suite: 882 passed; secrets clean.
+Full suite: 882 passed → 886 after the final round below; secrets clean.
+
+### Final round — transfers & terminals survive route changes  [x]
+
+Small, user-facing, nothing radical:
+
+- **Download progress.** `/files` downloads (single, zip,
+  viewer) stream through a progress panel with per-file
+  bars + cancel. Over 512 MB or unknown size goes to the
+  browser's own download manager instead of OOMing the tab
+  (verified: 60 KB file byte-identical, cancel → cancelled).
+- **Route changes don't kill transfers.** `beforeunload`
+  warns only while an upload is queued/active or a download
+  is active; paused uploads leave silently (sessions persist
+  + resume on re-add). Verified blocking + silent states.
+- **Terminals survive + reattach.** Shells already outlived
+  navigation server-side, but every dashboard visit orphaned
+  them (`term-${Date.now()}`) and the tab came back blank.
+  Now: per-session scrollback ring (200 chunks), stable ids
+  in sessionStorage, idempotent reattach with backlog
+  replay to the requester only. Verified live: same tab id
+  after away+back, pre-navigation output replayed, shell
+  still live. 4 new tests.
+
+**Verified live** (zero JS errors, `node --check` clean).
+Full suite: 886 passed (the parallel-fanout timing flake
+appeared once in a loaded run; green in isolation and on
+re-run); secrets clean.
 
 ### Route 17 — VS Code Server (`/code`)  [x]
 

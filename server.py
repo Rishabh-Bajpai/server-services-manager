@@ -3651,7 +3651,18 @@ def test_connect():
 def handle_terminal_create(data):
     session_id = data.get('id')
     if session_id:
+        # create_session() is a no-op for a live id, so a client that
+        # navigated away and back reattaches to the same running shell
+        # instead of orphaning it. Replay missed output to the
+        # requester only (room=request.sid, not broadcast).
+        existed = tm.session_alive(session_id)
         tm.create_session(session_id)
+        if existed:
+            backlog = tm.get_backlog(session_id)
+            if backlog:
+                socketio.emit('terminal_backlog',
+                              {'id': session_id, 'data': backlog},
+                              room=request.sid)
 
 @socketio.on('terminal_input')
 def handle_terminal_input(data):

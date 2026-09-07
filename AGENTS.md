@@ -19,7 +19,7 @@ journalctl --user -u server-services-manager -f
 - **WebSocket events:** `update` (program cards, 1s interval), `system_stats` (monitor, 2s), `terminal_*`, `service_event` (state-change toasts), `health_event`
 - **Backend modules:**
   - `app/process_manager.py` — Program, ProcessManager, ProgramConfig (name/command/cwd/autostart/schedule/environment), `on_state_change` hook fired on every transition
-  - `app/terminal_manager.py` — PTY sessions
+  - `app/terminal_manager.py` — PTY sessions with a per-session scrollback ring (200 chunks); the dashboard reattaches by stable id (sessionStorage) with requester-only backlog replay, so route changes don't orphan shells or blank tabs
   - `app/system_services.py` — systemd unit introspection/control via `systemctl` (read + cached; write requires sudo password). `get_dependencies()` returns the BFS graph for `/system-services/<name>/graph`.
   - `app/log_streamer.py` — reference-counted `journalctl -f` per (unit, priority) with per-subscriber queues; SSE endpoint
   - `app/cron_manager.py` — parse /etc/crontab and /etc/cron.d/*, validate 5-field expressions, enable/disable via `sudo cp` of tempfile
