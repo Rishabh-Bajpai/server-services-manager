@@ -220,7 +220,7 @@
             <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
             <span class="hidden sm:inline">Refresh</span>
         </button>
-        <button class="btn btn-primary" onclick="openAdd()">
+        <button class="btn btn-primary" onclick="openAdd()" title="Trust a new public key">
             <i data-lucide="plus" class="w-3.5 h-3.5"></i>
             <span>Add Key</span>
         </button>
@@ -302,8 +302,8 @@
                 placeholder="ssh-ed25519 AAAA... user@host"></textarea>
             <div id="add-error" class="text-xs text-[var(--accent-red)] mt-2 hidden"></div>
             <div class="flex justify-end gap-2 mt-4">
-                <button class="btn" onclick="closeAdd()">Cancel</button>
-                <button class="btn btn-primary" id="add-submit" onclick="submitAdd()">
+                <button class="btn" onclick="closeAdd()" title="Close without adding">Cancel</button>
+                <button class="btn btn-primary" id="add-submit" onclick="submitAdd()" title="Save this key">
                     <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add
                 </button>
             </div>
@@ -324,8 +324,8 @@
                 Only proceed if you have another way in (console, password auth, another key).
             </p>
             <div class="flex justify-end gap-2 mt-4">
-                <button class="btn" onclick="closeRemove()">Cancel</button>
-                <button class="btn btn-danger" id="remove-confirm" onclick="confirmRemove()">
+                <button class="btn" onclick="closeRemove()" title="Keep this key">Cancel</button>
+                <button class="btn btn-danger" id="remove-confirm" onclick="confirmRemove()" title="Revoke this key now">
                     <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Remove
                 </button>
             </div>
@@ -482,7 +482,7 @@
                                 <button class="btn" onclick="copyText('${escapeAttr(k.raw)}')" title="Copy key">
                                     <i data-lucide="copy" class="w-3.5 h-3.5"></i>
                                 </button>
-                                <button class="btn btn-danger" onclick="askRemove('${escapeAttr(k.fingerprint)}', '${escapeAttr(k.comment || '')}', ${keys.length})">
+                                <button class="btn btn-danger" title="Revoke this key" onclick="askRemove('${escapeAttr(k.fingerprint)}', '${escapeAttr(k.comment || '')}', ${keys.length})">
                                     <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                                 </button>
                             </div>

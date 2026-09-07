@@ -515,8 +515,8 @@
             <input id="perm-mode" class="text-input" placeholder="0644" value="0644">
             <div id="perm-error" class="text-xs text-[var(--accent-red)] mt-2 hidden"></div>
             <div class="flex justify-end gap-2 mt-4">
-                <button class="btn" onclick="closePerm()">Cancel</button>
-                <button class="btn btn-primary" onclick="submitPerm()">Apply</button>
+                <button class="btn" onclick="closePerm()" title="Close without changing permissions">Cancel</button>
+                <button class="btn btn-primary" onclick="submitPerm()" title="Apply these permissions">Apply</button>
             </div>
         </div>
     </div>
@@ -528,8 +528,8 @@
             <input id="prompt-input" class="text-input" value="">
             <div id="prompt-error" class="text-xs text-[var(--accent-red)] mt-2 hidden"></div>
             <div class="flex justify-end gap-2 mt-4">
-                <button class="btn" onclick="closePrompt()">Cancel</button>
-                <button class="btn btn-primary" id="prompt-ok" onclick="submitPrompt()">OK</button>
+                <button class="btn" onclick="closePrompt()" title="Close without doing anything">Cancel</button>
+                <button class="btn btn-primary" id="prompt-ok" onclick="submitPrompt()" title="Confirm">OK</button>
             </div>
         </div>
     </div>
@@ -542,7 +542,7 @@
             </h3>
             <dl class="prop-grid" id="props-body"></dl>
             <div class="flex justify-end gap-2 mt-4">
-                <button class="btn" onclick="closeProps()">Close</button>
+                <button class="btn" onclick="closeProps()" title="Close properties">Close</button>
             </div>
         </div>
     </div>
@@ -1527,7 +1527,7 @@
         document.addEventListener('click', hideCtx);
 
         function ctxItem(icon, label, hint, fn, danger, disabled) {
-            return `<button class="ctx-item ${danger ? 'danger' : ''}" ${disabled ? 'disabled' : ''} data-ctx="${fn}">` +
+            return `<button class="ctx-item ${danger ? 'danger' : ''}" ${disabled ? 'disabled' : ''} data-ctx="${fn}" title="${escapeAttr(label)}">` +
                 `<i data-lucide="${icon}" class="w-3.5 h-3.5"></i>${escapeHtml(label)}` +
                 (hint ? `<span class="ctx-hint">${escapeHtml(hint)}</span>` : '') + `</button>`;
         }

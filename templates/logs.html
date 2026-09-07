@@ -213,7 +213,7 @@
                     <option>500</option>
                     <option>2000</option>
                 </select>
-                <button id="btn-search" class="btn btn-primary" onclick="runSearch(true)">
+                <button id="btn-search" class="btn btn-primary" onclick="runSearch(true)" title="Search logs with these filters">
                     <i data-lucide="search" class="w-3.5 h-3.5"></i>
                     <span class="hidden sm:inline">Search</span>
                 </button>
@@ -240,7 +240,7 @@
                     <span class="stat-pill"><span class="text-[var(--text-muted)]">showing</span> <span id="stat-showing">0</span></span>
                 </div>
                 <div class="flex items-center gap-2">
-                    <button id="btn-load-more" class="btn" onclick="loadMore()" disabled>
+                    <button id="btn-load-more" class="btn" onclick="loadMore()" disabled title="Show older log lines">
                         <i data-lucide="plus" class="w-3.5 h-3.5"></i> Load more
                     </button>
                 </div>

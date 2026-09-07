@@ -272,8 +272,8 @@
                 <div id="rule-warn" class="hidden rounded-lg border border-red-500/40 bg-red-500/10 p-2.5 text-[11px] text-[var(--accent-red)]">Warning: this would deny inbound SSH (port 22) from anywhere — you could lock yourself out. Add a source IP or use reject/limit instead.</div>
             </div>
             <div class="flex gap-2 justify-end mt-4">
-                <button class="btn" onclick="closeAddRule()">Cancel</button>
-                <button class="btn btn-primary" onclick="submitAddRule()">Add rule</button>
+                <button class="btn" onclick="closeAddRule()" title="Close without adding">Cancel</button>
+                <button class="btn btn-primary" onclick="submitAddRule()" title="Add this firewall rule">Add rule</button>
             </div>
         </div>
     </div>
@@ -306,8 +306,8 @@
                 </div>
             </div>
             <div class="flex gap-2 justify-end mt-4">
-                <button class="btn" onclick="closeDefaultModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="submitDefault()">Apply</button>
+                <button class="btn" onclick="closeDefaultModal()" title="Keep the current default policy">Cancel</button>
+                <button class="btn btn-primary" onclick="submitDefault()" title="Apply the new default policy">Apply</button>
             </div>
         </div>
     </div>
@@ -322,8 +322,8 @@
                 <input id="toggle-password" type="password" class="text-input" placeholder="sudo password (not app login)">
             </div>
             <div class="flex gap-2 justify-end mt-4">
-                <button class="btn" onclick="closeToggle()">Cancel</button>
-                <button class="btn btn-danger" id="toggle-confirm" onclick="submitToggle()">Confirm</button>
+                <button class="btn" onclick="closeToggle()" title="Leave the firewall as it is">Cancel</button>
+                <button class="btn btn-danger" id="toggle-confirm" onclick="submitToggle()" title="Switch the firewall on or off">Confirm</button>
             </div>
         </div>
     </div>
@@ -478,7 +478,7 @@
                                 <div class="font-semibold text-sm mb-1">Limited status</div>
                                 <div class="text-xs text-[var(--text-secondary)] mb-2">${escAttr(data.reason)}</div>
                                 <div class="text-xs text-[var(--text-muted)] mb-3">Enter your <span class="font-semibold text-[var(--text-primary)]">sudo password</span> (not the app login) to unlock the full view. It is kept only in this page's memory until refresh, never stored.</div>
-                                <button class="btn btn-primary" onclick="unlockFullView()">Unlock full view</button>
+                                <button class="btn btn-primary" onclick="unlockFullView()" title="Enter your sudo password to see rules">Unlock full view</button>
                             </div>
                         </div>
                     </div>`;

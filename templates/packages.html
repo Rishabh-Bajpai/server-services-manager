@@ -271,18 +271,18 @@
         info=page_info,
     ) }}
     {% set subheader %}
-        <button class="tab-button active" data-tab="updates" onclick="switchTab('updates')">
+        <button class="tab-button active" data-tab="updates" onclick="switchTab('updates')" title="Available software updates">
             <i data-lucide="package" class="w-3.5 h-3.5"></i> Updates
         </button>
-        <button class="tab-button" data-tab="lookup" onclick="switchTab('lookup')">
+        <button class="tab-button" data-tab="lookup" onclick="switchTab('lookup')" title="Look up any package by name">
             <i data-lucide="search" class="w-3.5 h-3.5"></i> Lookup
         </button>
-        <button class="tab-button" data-tab="history" onclick="switchTab('history')">
+        <button class="tab-button" data-tab="history" onclick="switchTab('history')" title="Previously installed updates">
             <i data-lucide="clock" class="w-3.5 h-3.5"></i> History
         </button>
         <span id="tab-tools-updates" class="flex flex-wrap items-center gap-2">
-            <button class="filter-tab active" data-filter="all" onclick="setFilter('all', this)">All</button>
-            <button class="filter-tab" data-filter="security" onclick="setFilter('security', this)">Security only</button>
+            <button class="filter-tab active" data-filter="all" onclick="setFilter('all', this)" title="Show every available update">All</button>
+            <button class="filter-tab" data-filter="security" onclick="setFilter('security', this)" title="Show security fixes only">Security only</button>
             <div class="relative flex-1 min-w-[12rem]">
                 <i data-lucide="search" class="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-2.5 top-1/2 -translate-y-1/2"></i>
                 <input id="search" type="text" class="search-input" placeholder="Filter by name..." oninput="renderRows()">
@@ -295,12 +295,12 @@
                 <i data-lucide="shield-alert" class="w-3.5 h-3.5"></i>
                 <span class="hidden sm:inline">Security</span>
             </button>
-            <button id="btn-install" class="btn btn-primary" onclick="doInstall()" disabled>
+            <button id="btn-install" class="btn btn-primary" onclick="doInstall()" disabled title="Install the selected updates">
                 <i data-lucide="download" class="w-3.5 h-3.5"></i>
                 Install (<span id="install-count">0</span>)
             </button>
         </span>
-        <button id="btn-refresh" class="btn" onclick="doRefresh()">
+        <button id="btn-refresh" class="btn" onclick="doRefresh()" title="Check for new updates (needs password)">
             <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
             <span class="hidden sm:inline">Refresh</span>
         </button>
@@ -341,7 +341,7 @@
                     <i data-lucide="search" class="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
                     <input id="lookup-query" type="text" class="search-input" placeholder="Search for a package…" onkeydown="if(event.key==='Enter')doLookup()">
                 </div>
-                <button class="btn btn-primary" onclick="doLookup()">
+                <button class="btn btn-primary" onclick="doLookup()" title="Search for this package">
                     <i data-lucide="search" class="w-3.5 h-3.5"></i> Lookup
                 </button>
             </div>
@@ -356,7 +356,7 @@
                         <div><span class="text-[var(--text-muted)]">Candidate:</span> <span id="lk-candidate" class="font-mono">—</span></div>
                     </div>
                     <div id="lk-action" class="hidden">
-                        <button class="btn btn-primary" onclick="quickInstall()">
+                        <button class="btn btn-primary" onclick="quickInstall()" title="Install this package upgrade now">
                             <i data-lucide="download" class="w-3.5 h-3.5"></i> Install upgrade
                         </button>
                     </div>
@@ -371,7 +371,7 @@
                     <i data-lucide="clock" class="w-4 h-4 text-[var(--accent-purple)]"></i>
                     Install history
                 </h2>
-                <button class="btn" onclick="loadJobs()">
+                <button class="btn" onclick="loadJobs()" title="Reload the install history">
                     <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Refresh
                 </button>
             </div>
@@ -424,8 +424,8 @@
                    onkeydown="if(event.key==='Enter') submitAuth()">
             <p id="auth-error" class="text-xs text-[var(--accent-red)]" style="display:none"></p>
             <div class="modal-actions">
-                <button class="btn" onclick="closeAuth()">Cancel</button>
-                <button class="btn btn-primary" id="auth-confirm" onclick="submitAuth()">Confirm</button>
+                <button class="btn" onclick="closeAuth()" title="Close without doing anything">Cancel</button>
+                <button class="btn btn-primary" id="auth-confirm" onclick="submitAuth()" title="Proceed with the entered password">Confirm</button>
             </div>
         </div>
     </div>
