@@ -243,7 +243,12 @@
     .textarea-input { resize: vertical; min-height: 100px; line-height: 1.5; }
 
     .data-table, .events-table, .jobs-table, .units-table {
-        width: 100%; table-layout: fixed; border-collapse: collapse; min-width: 0;
+        width: 100%; table-layout: fixed; border-collapse: collapse;
+        /* NOTE: no min-width here on purpose. Each page sets its
+           own table min-width (560/640px) so narrow screens get a
+           horizontal scroll inside .table-wrap/.table-scroll.
+           A min-width: 0 here would win the cascade (these styles
+           are emitted last) and squeeze columns to zero width. */
     }
     .data-table th, .events-table th, .jobs-table th, .units-table th {
         text-align: left; font-size: 0.6875rem; font-weight: 700;

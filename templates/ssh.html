@@ -106,7 +106,9 @@
             max-height: calc(100dvh - 260px);
             overflow-y: auto;
             overflow-x: auto;
-            min-width: 560px;
+            /* NOTE: no min-width on the wrapper itself — the table
+               inside keeps min-width: 560px and scrolls. A min-width
+               here would force the whole page wider than the phone. */
         }
         .keys-table {
             width: 100%;
