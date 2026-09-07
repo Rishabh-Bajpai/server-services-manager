@@ -261,9 +261,9 @@
         ) }}
 {% set subheader %}
         <div id="source-tabs" class="flex flex-wrap items-center gap-1.5">
-            <button class="filter-tab active" data-source="all"><i data-lucide="layers" class="w-3.5 h-3.5"></i><span>All</span></button>
-            <button class="filter-tab" data-source="system"><i data-lucide="file-cog" class="w-3.5 h-3.5"></i><span>System</span></button>
-            <button class="filter-tab" data-source="user"><i data-lucide="user" class="w-3.5 h-3.5"></i><span>User</span></button>
+            <button class="filter-tab active" data-source="all" title="Show system and user jobs"><i data-lucide="layers" class="w-3.5 h-3.5"></i><span>All</span></button>
+            <button class="filter-tab" data-source="system" title="Show system-wide jobs only"><i data-lucide="file-cog" class="w-3.5 h-3.5"></i><span>System</span></button>
+            <button class="filter-tab" data-source="user" title="Show per-user jobs only"><i data-lucide="user" class="w-3.5 h-3.5"></i><span>User</span></button>
         </div>
         <div class="relative flex-1 min-w-[12rem]">
             <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"></i>
@@ -351,8 +351,8 @@
             <input type="password" id="add-password" placeholder="Sudo password..." autocomplete="off">
             <div class="modal-error" id="add-error" style="display:none"></div>
             <div class="modal-actions">
-                <button class="btn-cancel" onclick="closeAddModal()">Cancel</button>
-                <button class="btn-primary" id="add-create">Create</button>
+                <button class="btn-cancel" onclick="closeAddModal()" title="Close without creating">Cancel</button>
+                <button class="btn-primary" id="add-create" title="Create this cron entry">Create</button>
             </div>
         </div>
     </div>
@@ -365,8 +365,8 @@
             <input type="password" id="auth-password" placeholder="Sudo password..." autocomplete="off">
             <div class="modal-error" id="auth-error" style="display:none"></div>
             <div class="modal-actions">
-                <button class="btn-cancel" onclick="closeAuth()">Cancel</button>
-                <button class="btn-primary" id="auth-execute">Confirm</button>
+                <button class="btn-cancel" onclick="closeAuth()" title="Close without changing anything">Cancel</button>
+                <button class="btn-primary" id="auth-execute" title="Apply with the entered password">Confirm</button>
             </div>
         </div>
     </div>

@@ -462,7 +462,7 @@
                     <div class="text-sm text-[var(--text-primary)]">du took too long</div>
                     <div class="text-xs text-[var(--text-muted)] max-w-md">${escapeHtml(data.error || '')}</div>
                     ${data.retry_with_timeout
-                        ? `<button class="btn btn-primary" onclick="(${onRetry.toString()})()">
+                        ? `<button class="btn btn-primary" onclick="(${onRetry.toString()})()" title="Retry the scan with a longer timeout">
                                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
                                Retry with timeout=${data.retry_with_timeout}s
                            </button>`

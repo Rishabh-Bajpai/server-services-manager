@@ -179,7 +179,7 @@
             <i data-lucide="pause" class="w-3.5 h-3.5"></i>
             <span class="hidden sm:inline" id="live-btn-label">Live</span>
         </button>
-        <button class="btn btn-primary" onclick="openCreate()">
+        <button class="btn btn-primary" onclick="openCreate()" title="Schedule a new backup job">
             <i data-lucide="plus" class="w-3.5 h-3.5"></i>
             <span class="hidden sm:inline">New backup</span>
         </button>
@@ -274,8 +274,8 @@
                 </div>
             </div>
             <div class="flex gap-2 justify-end mt-4">
-                <button class="btn" onclick="closeCreate()">Cancel</button>
-                <button class="btn btn-primary" onclick="submitCreate()">Create</button>
+                <button class="btn" onclick="closeCreate()" title="Close without creating">Cancel</button>
+                <button class="btn btn-primary" onclick="submitCreate()" title="Create this backup job">Create</button>
             </div>
         </div>
     </div>
@@ -290,8 +290,8 @@
                 <input id="confirm-password" type="password" class="text-input" placeholder="sudo password (not app login)">
             </div>
             <div class="flex gap-2 justify-end mt-4">
-                <button class="btn" onclick="closeConfirm()">Cancel</button>
-                <button class="btn btn-primary" id="confirm-action" onclick="submitConfirm()">Confirm</button>
+                <button class="btn" onclick="closeConfirm()" title="Close without doing anything">Cancel</button>
+                <button class="btn btn-primary" id="confirm-action" onclick="submitConfirm()" title="Go ahead">Confirm</button>
             </div>
         </div>
     </div>

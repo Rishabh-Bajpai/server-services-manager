@@ -207,7 +207,7 @@
             <i data-lucide="search" class="w-3.5 h-3.5"></i>
             <span class="hidden sm:inline">mDNS</span>
         </button>
-        <button class="btn btn-primary" onclick="openAdd()">
+        <button class="btn btn-primary" onclick="openAdd()" title="Register another machine running this app">
             <i data-lucide="plus" class="w-3.5 h-3.5"></i>
             <span>Add Peer</span>
         </button>
@@ -297,7 +297,7 @@
                     <i data-lucide="network" class="w-4 h-4 text-[var(--accent-blue)]"></i>
                     mDNS results
                 </h3>
-                <button class="btn" onclick="closeMdns()"><i data-lucide="x" class="w-4 h-4"></i></button>
+                <button class="btn" onclick="closeMdns()" title="Close network scan results"><i data-lucide="x" class="w-4 h-4"></i></button>
             </div>
             <div id="mdns-list" class="space-y-2 max-h-[50vh] overflow-y-auto"></div>
         </div>
@@ -329,8 +329,8 @@
                 <div id="add-error" class="text-xs text-[var(--accent-red)] hidden"></div>
             </div>
             <div class="flex justify-end gap-2 mt-4">
-                <button class="btn" onclick="closeAdd()">Cancel</button>
-                <button class="btn btn-primary" id="add-submit" onclick="submitAdd()">
+                <button class="btn" onclick="closeAdd()" title="Close without adding">Cancel</button>
+                <button class="btn btn-primary" id="add-submit" onclick="submitAdd()" title="Save this peer">
                     <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add
                 </button>
             </div>

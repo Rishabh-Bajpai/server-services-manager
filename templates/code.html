@@ -270,7 +270,7 @@
                 if (codeTimer) { clearInterval(codeTimer); codeTimer = null; }
             } else {
                 setBadge('off', 'stopped');
-                showOffline('VS Code Server is installed but not running.<br><br><button class="btn btn-primary" onclick="codeAction(\'start\')">Start VS Code</button>');
+                showOffline('VS Code Server is installed but not running.<br><br><button class="btn btn-primary" onclick="codeAction(\'start\')" title="Start the VS Code server">Start VS Code</button>');
                 lucide.createIcons();
             }
         }

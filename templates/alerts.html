@@ -199,20 +199,20 @@
     ) }}
     {% set subheader %}
         <div class="flex gap-1">
-            <button class="filter-tab active" data-range="all" onclick="setRange('all', this)">All</button>
-            <button class="filter-tab" data-range="1h" onclick="setRange('1h', this)">1h</button>
-            <button class="filter-tab" data-range="24h" onclick="setRange('24h', this)">24h</button>
-            <button class="filter-tab" data-range="7d" onclick="setRange('7d', this)">7d</button>
-            <button class="filter-tab" data-range="30d" onclick="setRange('30d', this)">30d</button>
+            <button class="filter-tab active" data-range="all" onclick="setRange('all', this)" title="Show all history">All</button>
+            <button class="filter-tab" data-range="1h" onclick="setRange('1h', this)" title="Show the last hour">1h</button>
+            <button class="filter-tab" data-range="24h" onclick="setRange('24h', this)" title="Show the last 24 hours">24h</button>
+            <button class="filter-tab" data-range="7d" onclick="setRange('7d', this)" title="Show the last 7 days">7d</button>
+            <button class="filter-tab" data-range="30d" onclick="setRange('30d', this)" title="Show the last 30 days">30d</button>
         </div>
-        <select id="filter-channel" class="select-input" style="max-width:160px" onchange="loadEvents()">
+        <select id="filter-channel" class="select-input" style="max-width:160px" onchange="loadEvents()" title="Show one channel only">
             <option value="">All channels</option>
             <option value="ntfy">ntfy</option>
             <option value="webhook">webhook</option>
             <option value="telegram">telegram</option>
             <option value="email">email</option>
         </select>
-        <select id="filter-success" class="select-input" style="max-width:140px" onchange="loadEvents()">
+        <select id="filter-success" class="select-input" style="max-width:140px" onchange="loadEvents()" title="Show delivered or failed only">
             <option value="">All results</option>
             <option value="1">Success only</option>
             <option value="0">Failures only</option>
@@ -228,7 +228,7 @@
             <i data-lucide="pause" class="w-3.5 h-3.5"></i>
             <span class="hidden sm:inline" id="pause-label">Pause</span>
         </button>
-        <button class="btn" onclick="loadAll()">
+        <button class="btn" onclick="loadAll()" title="Reload the delivery history">
             <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
             <span class="hidden sm:inline">Refresh</span>
         </button>

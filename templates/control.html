@@ -289,7 +289,7 @@
     <div id="output-drawer">
         <div class="flex items-center justify-between mb-2">
             <h3 class="text-sm font-bold text-[var(--text-primary)]">Output</h3>
-            <button onclick="closeOutput()" class="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-[var(--text-muted)] hover:bg-white/10 hover:text-[var(--text-primary)] transition-all">
+            <button onclick="closeOutput()" title="Close the output panel" class="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-[var(--text-muted)] hover:bg-white/10 hover:text-[var(--text-primary)] transition-all">
                 <i data-lucide="x" class="w-4 h-4"></i>
             </button>
         </div>
@@ -303,8 +303,8 @@
             <h2 id="confirm-title">Confirm Action</h2>
             <p id="confirm-message">Are you sure?</p>
             <div class="modal-actions">
-                <button class="btn-cancel" onclick="closeConfirm()">Cancel</button>
-                <button class="btn-danger" id="confirm-execute" onclick="executeConfirmed()">Execute</button>
+                <button class="btn-cancel" onclick="closeConfirm()" title="Don't run this command">Cancel</button>
+                <button class="btn-danger" id="confirm-execute" onclick="executeConfirmed()" title="Run the command now">Execute</button>
             </div>
         </div>
     </div>
@@ -316,8 +316,8 @@
             <p id="auth-message">Enter your app login password (not sudo) to execute this command.</p>
             <input type="password" id="auth-password" placeholder="App password..." autocomplete="off">
             <div class="modal-actions">
-                <button class="btn-cancel" onclick="closeAuth()">Cancel</button>
-                <button class="btn-primary" id="auth-execute" onclick="executeAuthed()">Confirm</button>
+                <button class="btn-cancel" onclick="closeAuth()" title="Close without running">Cancel</button>
+                <button class="btn-primary" id="auth-execute" onclick="executeAuthed()" title="Run with the entered password">Confirm</button>
             </div>
         </div>
     </div>
