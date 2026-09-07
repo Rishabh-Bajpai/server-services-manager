@@ -997,6 +997,36 @@ def _save_sidecar(data: Dict[str, Any], sessions: Optional[str] = None) -> None:
     os.replace(tmp, sidecar)
 
 
+from contextlib import contextmanager as _contextmanager
+
+
+@_contextmanager
+def _session_lock(staging: str):
+    """Hold the per-session ``.lock`` file exclusively.
+
+    Same lock file ``append_chunk`` uses, so complete/cancel are
+    serialized against an in-flight chunk PUT: cancel can't unlink
+    the staging file mid-write (which would resurrect via the
+    chunk's trailing sidecar save), and complete can't race a
+    final chunk. Best-effort on filesystems without fcntl.
+    Yields the open lock file handle; the lock file itself is
+    intentionally left on disk for the next holder.
+    """
+    lock_path = staging + ".lock"
+    try:
+        fh = open(lock_path, "w")
+    except OSError as e:
+        raise FileExplorerError("staging_failed", f"lost staging file: {e}")
+    with fh:
+        try:
+            import fcntl
+
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        except (ImportError, OSError):
+            pass  # Windows / odd fs: best effort only
+        yield fh
+
+
 def sweep_stale_uploads(
     sessions: Optional[str] = None, max_age_secs: int = _RESUMABLE_STALE_SECS,
 ) -> int:
@@ -1300,77 +1330,106 @@ def complete_upload(
 
     The destination appears only here — interrupted uploads never
     leave a partial file under the real name.
+
+    The whole finalize runs under the same per-session ``.lock``
+    as :func:`append_chunk`, so a concurrent final chunk can't
+    interleave with the size check / rename.
     """
-    data = _load_sidecar(session_id, sessions)
-    received = int(data.get("received", 0))
-    total = int(data.get("size", 0))
-    if received != total:
-        raise FileExplorerError(
-            "incomplete",
-            f"received {received} of {total} bytes; keep uploading",
-        )
+    # Validate the id + locate paths before locking (raises
+    # unknown_upload for garbage ids without touching the fs).
     staging, sidecar = _session_paths(session_id, sessions)
-    want = (sha256 or data.get("sha256") or "").lower() or None
-    if want:
-        if len(want) != 64 or not all(c in "0123456789abcdef" for c in want):
-            raise FileExplorerError("invalid_hash", "sha256 must be 64 hex chars")
-        try:
-            actual = _hash_file(staging)
-        except OSError as e:
-            raise FileExplorerError("staging_failed", f"lost staging file: {e}")
-        if actual != want:
-            for p in (staging, sidecar, staging + ".lock"):
-                try:
-                    os.unlink(p)
-                except OSError:
-                    pass
+    with _session_lock(staging):
+        data = _load_sidecar(session_id, sessions)
+        received = int(data.get("received", 0))
+        total = int(data.get("size", 0))
+        if received != total:
             raise FileExplorerError(
-                "hash_mismatch",
-                "sha256 mismatch; staged bytes discarded, re-upload",
+                "incomplete",
+                f"received {received} of {total} bytes; keep uploading",
             )
-    dest = _resolve(data["dest"])
-    if os.path.lexists(dest):
-        raise FileExplorerError("exists", "destination appeared during upload")
-    try:
-        os.makedirs(os.path.dirname(dest), mode=0o755, exist_ok=True)
+        want = (sha256 or data.get("sha256") or "").lower() or None
+        if want:
+            if len(want) != 64 or not all(c in "0123456789abcdef" for c in want):
+                raise FileExplorerError("invalid_hash", "sha256 must be 64 hex chars")
+            try:
+                actual = _hash_file(staging)
+            except OSError as e:
+                raise FileExplorerError("staging_failed", f"lost staging file: {e}")
+            if actual != want:
+                for p in (staging, sidecar, staging + ".lock"):
+                    try:
+                        os.unlink(p)
+                    except OSError:
+                        pass
+                raise FileExplorerError(
+                    "hash_mismatch",
+                    "sha256 mismatch; staged bytes discarded, re-upload",
+                )
+        dest = _resolve(data["dest"])
+        if os.path.lexists(dest):
+            raise FileExplorerError("exists", "destination appeared during upload")
         try:
-            os.replace(staging, dest)
+            os.makedirs(os.path.dirname(dest), mode=0o755, exist_ok=True)
+            try:
+                os.replace(staging, dest)
+            except OSError as e:
+                import errno
+                if e.errno != errno.EXDEV:
+                    raise
+                # Staging dir and destination on different mounts:
+                # streamed copy + unlink (constant memory).
+                shutil.copyfile(staging, dest)
+                shutil.copystat(staging, dest)
+                os.unlink(staging)
+        except FileExplorerError:
+            raise
         except OSError as e:
-            import errno
-            if e.errno != errno.EXDEV:
-                raise
-            # Staging dir and destination on different mounts:
-            # streamed copy + unlink (constant memory).
-            shutil.copyfile(staging, dest)
-            shutil.copystat(staging, dest)
-            os.unlink(staging)
-    except FileExplorerError:
-        raise
-    except OSError as e:
-        raise FileExplorerError("complete_failed", f"could not finalize: {e}")
-    for p in (sidecar, staging + ".lock"):
+            raise FileExplorerError("complete_failed", f"could not finalize: {e}")
+        for p in (sidecar, staging + ".lock"):
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
         try:
-            os.unlink(p)
+            size = os.path.getsize(dest)
         except OSError:
-            pass
-    try:
-        size = os.path.getsize(dest)
-    except OSError:
-        size = total
-    return {"path": os.path.relpath(dest, home_dir()), "size": size}
+            size = total
+        return {"path": os.path.relpath(dest, home_dir()), "size": size}
 
 
 def cancel_upload(
     session_id: str, sessions: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Discard a session's staging bytes + sidecar (idempotent)."""
+    """Discard a session's staging bytes + sidecar (idempotent).
+
+    Takes the same per-session ``.lock`` as :func:`append_chunk`
+    so a concurrent chunk PUT can't re-save the sidecar after
+    we've unlinked it (which would resurrect a cancelled session).
+    """
     try:
         staging, sidecar = _session_paths(session_id, sessions)
     except FileExplorerError:
         return {"cancelled": True}
-    for p in (staging, sidecar, staging + ".lock"):
-        try:
-            os.unlink(p)
-        except OSError:
-            pass
+    try:
+        with _session_lock(staging):
+            for p in (staging, sidecar):
+                try:
+                    os.unlink(p)
+                except OSError:
+                    pass
+            # Unlink the lock file itself while still holding it;
+            # on POSIX the held fd keeps the exclusion valid until
+            # the context exits, and the next holder recreates it.
+            try:
+                os.unlink(staging + ".lock")
+            except OSError:
+                pass
+    except FileExplorerError:
+        # Lock file itself couldn't be created (lost staging dir):
+        # fall back to best-effort unlink without the lock.
+        for p in (staging, sidecar, staging + ".lock"):
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
     return {"cancelled": True}

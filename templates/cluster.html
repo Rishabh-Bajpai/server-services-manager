@@ -380,7 +380,10 @@
         }
 
         function loadLocal() {
-            api('/api/cluster/info').then(({ status, data }) => {
+            // include_secret=true is used only here so the add-peer
+            // form can pre-fill; the default /api/cluster/info omits
+            // the raw secret and returns has_secret instead.
+            api('/api/cluster/info?include_secret=true').then(({ status, data }) => {
                 if (status >= 400) {
                     document.getElementById('local-info').textContent = 'Failed to load local info';
                     return;

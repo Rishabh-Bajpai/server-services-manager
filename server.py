@@ -146,6 +146,22 @@ _password_hash = generate_password_hash(os.getenv('PASSWORD', 'admin'))
 @app.before_request
 def require_login():
     allowed_routes = ['login', 'static', 'health', 'favicon']
+    if request.endpoint in allowed_routes or 'logged_in' in session:
+        return None
+    # Cluster peer auth: cross-node API calls carry the shared
+    # secret in X-SSM-Cluster-Secret. Accept it as an alternative
+    # credential for /api/* so peers authenticate even when their
+    # Flask SECRET_KEY differs (session cookies are instance-signed
+    # and don't verify across hosts). Empty secret never verifies.
+    if (request.path or "").startswith("/api/"):
+        try:
+            _cfg = pm.config_data if hasattr(pm, "config_data") else {}
+        except Exception:
+            _cfg = {}
+        if cluster_manager.verify_cluster_secret(
+            request.headers.get("X-SSM-Cluster-Secret", ""), _cfg
+        ):
+            return None
     if request.endpoint not in allowed_routes and 'logged_in' not in session:
         return redirect(url_for('login'))
 
@@ -3291,8 +3307,9 @@ def cluster_page():
     summary="Cluster info: local identity + enabled flag",
     description=(
         "Returns whether cluster mode is enabled in config and "
-        "this node's hostname, port, and configured secret. The "
-        "secret is included only so the UI can pre-fill the add-"
+        "this node's hostname, port, and whether a secret is "
+        "configured (has_secret). The raw secret is only included "
+        "when ?include_secret=true so the UI can pre-fill the add-"
         "peer form; never log it."
     ),
     tag="Cluster",
@@ -3301,13 +3318,19 @@ def api_cluster_info():
     cfg_data = pm.config_data if hasattr(pm, "config_data") else {}
     cfg = cluster_manager.get_cluster_config(cfg_data)
     ident = cluster_manager.local_identity(cfg_data)
-    return jsonify({
+    include = (request.args.get("include_secret", "") or "").lower() in (
+        "1", "true", "yes",
+    )
+    out = {
         "enabled": cfg["enabled"],
         "hostname": ident["hostname"],
         "port": ident["port"],
-        "secret": cfg["secret"],
+        "has_secret": bool(cfg["secret"]),
         "advertise": cfg["advertise"],
-    })
+    }
+    if include:
+        out["secret"] = cfg["secret"]
+    return jsonify(out)
 
 
 @app.route('/api/cluster/nodes', methods=['GET'])
@@ -3315,14 +3338,23 @@ def api_cluster_info():
     summary="List known peer nodes",
     description=(
         "Returns every peer in the local registry plus a summary "
-        "block with reachable/unreachable counts. Reachability "
-        "is read from the cached `last_seen` field; call "
+        "block with reachable/unreachable counts. Per-peer secrets "
+        "are never returned; each entry carries has_secret instead "
+        "(the proxy reads the stored secret server-side). "
+        "Reachability is read from the cached `last_seen` field; call "
         "POST /api/cluster/probe to refresh."
     ),
     tag="Cluster",
 )
 def api_cluster_nodes_list():
-    return jsonify(cluster_manager.list_peers_with_status())
+    data = cluster_manager.list_peers_with_status()
+    masked = []
+    for p in data.get("peers", []):
+        q = {k: v for k, v in p.items() if k != "secret"}
+        q["has_secret"] = bool(p.get("secret"))
+        masked.append(q)
+    data["peers"] = masked
+    return jsonify(data)
 
 
 @app.route('/api/cluster/nodes', methods=['POST'])
@@ -3353,7 +3385,9 @@ def api_cluster_nodes_add():
         "cluster.add_peer", target=peer["id"], status="ok",
         detail=peer.get("label", ""), ip=request.remote_addr or "",
     )
-    return jsonify({"peer": peer})
+    masked = {k: v for k, v in peer.items() if k != "secret"}
+    masked["has_secret"] = bool(peer.get("secret"))
+    return jsonify({"peer": masked})
 
 
 @app.route('/api/cluster/nodes/<peer_id>', methods=['DELETE'])
@@ -3422,8 +3456,11 @@ def api_cluster_proxy(peer_id, rest):
     if not peer:
         return jsonify({"error": "peer not found", "code": "not_found"}), 404
     cfg_data = pm.config_data if hasattr(pm, "config_data") else {}
-    # Forward the user's session cookie so they appear logged
-    # in on the peer.
+    # Auth to the peer rides on X-SSM-Cluster-Secret (verified
+    # inbound by require_login). The session cookie is forwarded
+    # best-effort as a fallback for peers that share SECRET_KEY,
+    # but it is not required — fresh installs have distinct
+    # signing keys, so the cookie alone would not verify there.
     fwd_headers = {}
     cookie = request.headers.get("Cookie")
     if cookie:

@@ -23,6 +23,8 @@ proxy to other instances on the LAN. v1 design:
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -164,17 +166,39 @@ def add_peer(host: str, port: int, secret: str = "", label: str = "") -> Dict[st
     secret is optional; if empty the proxy will fall back to
     the local ``cluster.secret`` from config.
     """
+    import re as _re
+
     host = (host or "").strip()
     if not host:
         raise ClusterError("invalid_host", "host is required")
-    if "/" in host or " " in host:
+    # URL metacharacters would confuse the f"http://{host}:{port}{p}"
+    # interpolation in probe/proxy (userinfo/fragment confusion).
+    if any(c in host for c in ("/", " ", "@", "#", "?", ":")):
         raise ClusterError("invalid_host", f"unexpected characters in host: {host!r}")
+    if any(ord(c) < 32 or ord(c) == 127 for c in host):
+        raise ClusterError("invalid_host", f"unexpected characters in host: {host!r}")
+    if len(host) > 253 or not _re.fullmatch(
+        r"[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?", host
+    ):
+        raise ClusterError("invalid_host", f"invalid hostname or IP: {host!r}")
     try:
         port = int(port)
     except (TypeError, ValueError):
         raise ClusterError("invalid_port", f"port must be an integer (got {port!r})")
     if not (1 <= port <= 65535):
         raise ClusterError("invalid_port", f"port out of range: {port}")
+    # Round-trip through urlparse: a hostile host must not smuggle
+    # userinfo / fragment / query into the peer URL.
+    try:
+        _parsed = urllib.parse.urlparse(f"http://{host}:{port}/health")
+        if _parsed.hostname != host.lower():
+            raise ClusterError(
+                "invalid_host", f"invalid hostname or IP: {host!r}"
+            )
+    except ClusterError:
+        raise
+    except Exception:
+        raise ClusterError("invalid_host", f"invalid hostname or IP: {host!r}")
     secret = (secret or "").strip()
     label = (label or "").strip() or host
     peer_id = _new_peer_id(host, port)
@@ -288,6 +312,21 @@ def probe_peer(peer: Dict[str, Any], timeout: float = _DEFAULT_TIMEOUT) -> Tuple
 
 def _local_secret(cfg_data: Dict[str, Any]) -> str:
     return get_cluster_config(cfg_data).get("secret", "") or ""
+
+
+def verify_cluster_secret(provided: str | None, cfg_data: Dict[str, Any]) -> bool:
+    """Check an inbound ``X-SSM-Cluster-Secret`` value.
+
+    Returns True only when both the configured ``cluster.secret``
+    and the provided value are non-empty and equal (constant-time
+    compare). Empty-on-either-side never verifies, so a node with
+    no secret configured accepts no peer requests.
+    """
+    expected = _local_secret(cfg_data)
+    given = (provided or "").strip()
+    if not expected or not given:
+        return False
+    return hmac.compare_digest(given, expected)
 
 
 def _resolve_secret(peer: Dict[str, Any], cfg_data: Dict[str, Any]) -> str:
