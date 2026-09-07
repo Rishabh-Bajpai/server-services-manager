@@ -4,3 +4,6 @@ eventlet
 pyyaml
 python-dotenv
 psutil
+docker
+pydantic
+httpcore<1.0

@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firewall - Server Services Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --border-subtle: #1e1e2a;
+            --border-active: #2d2d3a;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --accent-orange: #f97316;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+        * { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        code, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+        body {
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(ellipse at top left, rgba(239, 68, 68, 0.04) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(59, 130, 246, 0.04) 0%, transparent 50%);
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        .badge {
+            display: inline-flex; align-items: center; gap: 0.25rem;
+            padding: 0.125rem 0.5rem; border-radius: 0.375rem;
+            font-size: 0.6875rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .badge-green { background: rgba(16,185,129,0.12); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.25); }
+        .badge-red { background: rgba(239,68,68,0.12); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.25); }
+        .badge-blue { background: rgba(59,130,246,0.12); color: var(--accent-blue); border: 1px solid rgba(59,130,246,0.25); }
+        .badge-yellow { background: rgba(245,158,11,0.12); color: var(--accent-yellow); border: 1px solid rgba(245,158,11,0.25); }
+        .badge-gray { background: rgba(100,116,139,0.12); color: var(--text-secondary); border: 1px solid rgba(100,116,139,0.25); }
+        .panel-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+        }
+        .status-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            padding: 1rem 1.25rem;
+            display: flex; flex-direction: column; gap: 0.25rem;
+        }
+        .status-card .label { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+        .status-card .value { font-size: 1.25rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; }
+        .btn {
+            display: inline-flex; align-items: center; gap: 0.375rem;
+            padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+            font-size: 0.8125rem; font-weight: 600;
+            background: var(--bg-secondary); border: 1px solid var(--border-subtle);
+            color: var(--text-primary); cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .btn:hover { background: var(--border-subtle); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        /* Double-class on purpose: beats both .btn and Tailwind's
+           .hidden regardless of stylesheet order. */
+        .btn.hidden { display: none; }
+        .modal-backdrop.hidden { display: none; }
+        .btn-primary { background: var(--accent-blue); color: #061a30; border-color: var(--accent-blue); }
+        .btn-primary:hover { background: #60a5fa; }
+        .btn-danger { background: rgba(239,68,68,0.15); color: var(--accent-red); border-color: rgba(239,68,68,0.3); }
+        .btn-danger:hover { background: rgba(239,68,68,0.25); }
+        .btn-success { background: rgba(16,185,129,0.15); color: var(--accent-green); border-color: rgba(16,185,129,0.3); }
+        .btn-success:hover { background: rgba(16,185,129,0.25); }
+        .select-input, .text-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.5rem 0.875rem;
+            color: var(--text-primary);
+            font-size: 0.8125rem; outline: none; width: 100%;
+        }
+        .select-input:focus, .text-input:focus { border-color: var(--accent-blue); }
+        .data-table { width: 100%; table-layout: fixed; border-collapse: collapse; min-width: 640px; }
+        .data-table th {
+            position: sticky; top: 0; z-index: 1;
+            text-align: left; font-size: 0.6875rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.05em;
+            color: var(--text-muted); padding: 0.625rem 0.875rem;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        /* Offset measured live: table top sits ~316px below the
+           viewport top, so this ends the table ~24px above the
+           bottom edge instead of overflowing the page. */
+        .table-scroll { max-height: calc(100dvh - 340px); min-height: 200px; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+        .data-table td {
+            padding: 0.625rem 0.875rem;
+            border-bottom: 1px solid var(--border-subtle);
+            font-size: 0.8125rem; color: var(--text-primary);
+            vertical-align: middle;
+        }
+        .data-table tbody tr:hover td { background: rgba(255,255,255,0.02); }
+        .modal-backdrop {
+            position: fixed; inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 50;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .modal-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            max-width: 28rem;
+            width: 90%;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+        .empty-state {
+            text-align: center; padding: 3rem 1.5rem;
+            color: var(--text-muted);
+        }
+        .toast-container {
+            position: fixed; top: 1rem; right: 1rem;
+            z-index: 100; display: flex; flex-direction: column; gap: 0.5rem;
+        }
+        .toast {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem; font-size: 0.8125rem;
+            color: var(--text-primary);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            animation: fadeIn 0.2s ease-out;
+        }
+        .toast.success { border-left: 3px solid var(--accent-green); }
+        .toast.error { border-left: 3px solid var(--accent-red); }
+        .toast.info { border-left: 3px solid var(--accent-blue); }
+    </style>
+</head>
+<body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
+    {% import "_macros.html" as ui %}
+    {% set actions %}
+    {% endset %}
+    {% set page_info %}
+        <p style="margin-bottom:0.75rem">A firewall is the machine's <strong>bouncer</strong>: it decides which network traffic gets in. This page shows and edits those rules.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li><strong>Add rule</strong> opens a port or address (for example, letting a web server be reachable). Each rule can be removed again with one click.</li>
+            <li><strong>Default incoming/outgoing</strong> is the fallback answer when no rule matches — normally "deny in, allow out".</li>
+            <li>Everything here changes real network access and needs your password. If the page shows <strong>limited status</strong>, unlock the full view first.</li>
+        </ul>
+        {% endset %}
+    {{ ui.header(
+        title="Firewall",
+        icon="shield",
+        icon_color="var(--accent-red)",
+        badge_id="backend-badge",
+        actions=actions,
+        current='/firewall',
+        info=page_info,
+    ) }}
+    {% set subheader %}
+        <button class="btn" onclick="loadStatus()" title="Reload status and rules from the firewall">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Refresh</span>
+        </button>
+        <button id="btn-enable" class="btn btn-success hidden" onclick="openToggle('enable')" title="Turn the firewall on (rules take effect immediately)">
+            <i data-lucide="power" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Enable</span>
+        </button>
+        <button id="btn-disable" class="btn btn-danger hidden" onclick="openToggle('disable')" title="Turn the firewall off (all filtering stops)">
+            <i data-lucide="power" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Disable</span>
+        </button>
+        <button id="btn-reload" class="btn hidden" onclick="apiReload()" title="Re-apply the current ruleset without changing it">
+            <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Reload</span>
+        </button>
+        <button id="btn-default" class="btn hidden" onclick="openDefault()" title="Change the fallback action for traffic that matches no rule">
+            <i data-lucide="settings" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Default policy</span>
+        </button>
+        <button id="btn-add-rule" class="btn btn-primary" onclick="openAddRule()" title="Add an allow/deny rule for a port">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add rule
+        </button>
+    {% endset %}
+    {{ ui.subheader(subheader) }}
+
+    <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6 space-y-4">
+        <div id="unavailable-banner"></div>
+
+        <section class="grid grid-cols-2 sm:grid-cols-4 gap-3" id="status-cards">
+            <div class="empty-state col-span-full">Loading…</div>
+        </section>
+
+        <section class="panel-card">
+            <div class="p-4 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2">
+                <h2 class="text-sm font-semibold flex items-center gap-2">
+                    <i data-lucide="list" class="w-4 h-4 text-[var(--accent-blue)]"></i>
+                    Rules (<span id="rule-count">0</span>)
+                </h2>
+            </div>
+            <div class="table-scroll">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 4rem">#</th>
+                            <th style="width: 6rem">Action</th>
+                            <th style="width: 4rem">Dir</th>
+                            <th>To / Port</th>
+                            <th>From</th>
+                            <th style="width: 4rem" class="text-right">—</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rules-tbody"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <!-- Add rule modal -->
+    <div id="add-modal" onclick="if(event.target===this) closeAddRule()" class="modal-backdrop hidden">
+        <div class="modal-card">
+            <h3 class="text-lg font-semibold mb-3">Add firewall rule</h3>
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block mb-1 text-[var(--text-muted)]">Action</label>
+                    <select id="rule-action" class="select-input">
+                        <option value="allow">Allow</option>
+                        <option value="deny">Deny</option>
+                        <option value="reject">Reject</option>
+                        <option value="limit">Limit</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block mb-1 text-[var(--text-muted)]">Port</label>
+                    <input id="rule-port" type="text" class="text-input" placeholder="22, 80, 3306, 8000-8100">
+                </div>
+                <div>
+                    <label class="block mb-1 text-[var(--text-muted)]">Protocol</label>
+                    <select id="rule-proto" class="select-input">
+                        <option value="any">Any</option>
+                        <option value="tcp">TCP</option>
+                        <option value="udp">UDP</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block mb-1 text-[var(--text-muted)]">From (optional IP/CIDR)</label>
+                    <input id="rule-source" type="text" class="text-input" placeholder="192.168.1.0/24, 10.0.0.5, or leave empty">
+                </div>
+                <div>
+                    <label class="block mb-1 text-[var(--text-muted)]">Sudo password</label>
+                    <input id="rule-password" type="password" class="text-input" placeholder="sudo password (not app login)">
+                </div>
+                <div id="rule-preview" class="rounded-lg border border-[var(--border-subtle)] p-2.5 font-mono text-[11px] text-[var(--text-secondary)]">Preview will appear here.</div>
+                <div id="rule-warn" class="hidden rounded-lg border border-red-500/40 bg-red-500/10 p-2.5 text-[11px] text-[var(--accent-red)]">Warning: this would deny inbound SSH (port 22) from anywhere — you could lock yourself out. Add a source IP or use reject/limit instead.</div>
+            </div>
+            <div class="flex gap-2 justify-end mt-4">
+                <button class="btn" onclick="closeAddRule()" title="Close without adding">Cancel</button>
+                <button class="btn btn-primary" onclick="submitAddRule()" title="Add this firewall rule">Add rule</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Default policy modal -->
+    <div id="default-modal" onclick="if(event.target===this) closeDefaultModal()" class="modal-backdrop hidden">
+        <div class="modal-card">
+            <h3 class="text-lg font-semibold mb-3">Set default policy</h3>
+            <p class="text-xs text-[var(--text-secondary)] mb-3">The fallback action for traffic that matches <span class="text-[var(--text-primary)] font-semibold">none</span> of your rules. Typical setup: <span class="font-mono">deny</span> incoming (block everything not explicitly allowed) and <span class="font-mono">allow</span> outgoing.</p>
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block mb-1 text-[var(--text-muted)]">Direction</label>
+                    <select id="default-direction" class="select-input">
+                        <option value="incoming">Incoming</option>
+                        <option value="outgoing">Outgoing</option>
+                        <option value="routed">Routed</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block mb-1 text-[var(--text-muted)]">Policy</label>
+                    <select id="default-policy" class="select-input">
+                        <option value="allow">Allow</option>
+                        <option value="deny">Deny</option>
+                        <option value="reject">Reject</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block mb-1 text-[var(--text-muted)]">Sudo password</label>
+                    <input id="default-password" type="password" class="text-input" placeholder="sudo password (not app login)">
+                </div>
+            </div>
+            <div class="flex gap-2 justify-end mt-4">
+                <button class="btn" onclick="closeDefaultModal()" title="Keep the current default policy">Cancel</button>
+                <button class="btn btn-primary" onclick="submitDefault()" title="Apply the new default policy">Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toggle firewall modal -->
+    <div id="toggle-modal" onclick="if(event.target===this) closeToggle()" class="modal-backdrop hidden">
+        <div class="modal-card">
+            <h3 class="text-lg font-semibold mb-2" id="toggle-title">Toggle firewall</h3>
+            <p class="text-sm text-[var(--text-secondary)] mb-4" id="toggle-body"></p>
+            <div>
+                <label class="block mb-1 text-xs text-[var(--text-muted)]">Sudo password</label>
+                <input id="toggle-password" type="password" class="text-input" placeholder="sudo password (not app login)">
+            </div>
+            <div class="flex gap-2 justify-end mt-4">
+                <button class="btn" onclick="closeToggle()" title="Leave the firewall as it is">Cancel</button>
+                <button class="btn btn-danger" id="toggle-confirm" onclick="submitToggle()" title="Switch the firewall on or off">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toasts" class="toast-container"></div>
+
+    <script>
+    let state = null;
+    let toggleAction = null;
+    // Sudo password for the elevated status read. Kept in page memory
+    // only (never localStorage); cleared on wrong-password (403).
+    // Never assumed to equal the app login password.
+    let unlockPassword = null;
+
+    function toast(message, kind) {
+        kind = kind || 'info';
+        const el = document.createElement('div');
+        el.className = 'toast ' + kind;
+        el.textContent = message;
+        document.getElementById('toasts').appendChild(el);
+        setTimeout(() => el.remove(), 4000);
+    }
+    function escAttr(s) { return String(s == null ? '' : s).replace(/[<>"&]/g, c => ({'<':'&lt;','>':'&gt;','"':'&quot;','&':'&amp;'}[c])); }
+    function api(path, opts) {
+        return fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts || {}))
+            .then(r => r.json().then(data => ({ ok: r.ok, status: r.status, data })));
+    }
+    function badgeClassForAction(a) {
+        const x = (a || '').toUpperCase();
+        if (x === 'ALLOW') return 'badge-green';
+        if (x === 'DENY') return 'badge-red';
+        if (x === 'REJECT') return 'badge-yellow';
+        if (x === 'LIMIT') return 'badge-blue';
+        return 'badge-gray';
+    }
+
+    function renderUnavailable(reason) {
+        document.getElementById('unavailable-banner').innerHTML = `
+            <div class="panel-card border-yellow-500/30 border p-4">
+                <div class="flex items-start gap-3">
+                    <i data-lucide="alert-triangle" class="w-5 h-5 text-[var(--accent-yellow)] flex-shrink-0 mt-0.5"></i>
+                    <div>
+                        <div class="font-semibold text-sm mb-1">Firewall backend not available</div>
+                        <div class="text-xs text-[var(--text-secondary)]">${escAttr(reason || 'unknown')}</div>
+                    </div>
+                </div>
+            </div>`;
+        document.getElementById('status-cards').innerHTML = '';
+        document.getElementById('rules-tbody').innerHTML = '<tr><td colspan="6"><div class="empty-state">No firewall available</div></td></tr>';
+        setActionButtons(null);
+        lucide.createIcons();
+    }
+
+    function setActionButtons(state) {
+        // state may be null (backend unavailable) → hide everything
+        // except Refresh / Add rule.
+        const ok = !!state;
+        document.getElementById('btn-enable').classList.toggle('hidden', !(ok && !state.enabled));
+        document.getElementById('btn-disable').classList.toggle('hidden', !(ok && state.enabled));
+        document.getElementById('btn-reload').classList.toggle('hidden', !ok);
+        document.getElementById('btn-default').classList.toggle('hidden', !(ok && state.backend === 'ufw'));
+    }
+
+    function render(state) {
+        const backendBadge = document.getElementById('backend-badge');
+        backendBadge.textContent = state.backend;
+        backendBadge.classList.remove('hidden');
+        document.getElementById('btn-add-rule').classList.toggle('hidden', state.backend !== 'ufw');
+        setActionButtons(state);
+        // Status cards
+        const cards = document.getElementById('status-cards');
+        const enabledClass = state.enabled ? 'badge-green' : 'badge-red';
+        const enabledText = state.enabled ? 'active' : 'inactive';
+        cards.innerHTML = `
+            <div class="status-card">
+                <div class="label">Status</div>
+                <div class="value"><span class="badge ${enabledClass}">${enabledText}</span></div>
+            </div>
+            <div class="status-card">
+                <div class="label">Default incoming</div>
+                <div class="value" style="font-size:1.1rem">${escAttr(state.default_incoming || '—')}</div>
+            </div>
+            <div class="status-card">
+                <div class="label">Default outgoing</div>
+                <div class="value" style="font-size:1.1rem">${escAttr(state.default_outgoing || '—')}</div>
+            </div>
+            <div class="status-card">
+                <div class="label">Rules</div>
+                <div class="value">${(state.rules || []).length}</div>
+            </div>`;
+        // Rules table
+        const tbody = document.getElementById('rules-tbody');
+        document.getElementById('rule-count').textContent = (state.rules || []).length;
+        if (!state.rules || !state.rules.length) {
+            tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No rules configured. Click "Add rule" to add one.</div></td></tr>';
+        } else {
+            tbody.innerHTML = state.rules.map(r => {
+                const ac = badgeClassForAction(r.action);
+                // number 0 means "unknown" (unnumbered fallback): no
+                // delete button, since deleting by a guessed number
+                // can remove the wrong rule.
+                const delBtn = r.number
+                    ? `<button class="btn" style="padding:0.25rem 0.5rem" onclick="deleteRule(${r.number})" title="Delete rule">
+                            <i data-lucide="trash-2" class="w-3 h-3"></i>
+                        </button>`
+                    : '';
+                return `<tr>
+                    <td class="font-mono text-[var(--text-muted)]">${r.number ? '[' + r.number + ']' : '—'}</td>
+                    <td><span class="badge ${ac}">${escAttr(r.action)}</span></td>
+                    <td class="font-mono text-xs text-[var(--text-muted)]">${escAttr(r.direction) || '—'}</td>
+                    <td class="font-mono text-xs">${escAttr(r.port_proto)}</td>
+                    <td class="text-xs">${escAttr(r.to)}</td>
+                    <td class="text-right">${delBtn}</td>
+                </tr>`;
+            }).join('');
+        }
+        lucide.createIcons();
+    }
+
+    function loadStatus() {
+        // POST body preferred for the sudo password (avoids it landing
+        // in access logs); GET query kept as fallback.
+        const statusReq = unlockPassword
+            ? api('/api/firewall/status', { method: 'POST', body: JSON.stringify({ password: unlockPassword }) })
+            : api('/api/firewall/status');
+        statusReq.then(({ ok, status, data }) => {
+            if (!ok) {
+                // Error body is {error, code} — not a Status — so bail
+                // out before touching state (else the dashboard gets
+                // wiped by a false "backend not available" banner).
+                if (status === 403) {
+                    unlockPassword = null;
+                    toast(data.error || 'wrong sudo password', 'error');
+                } else {
+                    toast(data.error || 'failed to load firewall status', 'error');
+                }
+                return;
+            }
+            state = data;
+            if (!data.available) {
+                renderUnavailable(data.reason);
+                return;
+            }
+            if (data.reason) {
+                // Partial status (e.g. no sudo). Render what we can and
+                // offer an explicit unlock input for the sudo password.
+                document.getElementById('unavailable-banner').innerHTML = `
+                    <div class="panel-card border-blue-500/30 border p-4">
+                        <div class="flex items-start gap-3">
+                            <i data-lucide="info" class="w-5 h-5 text-[var(--accent-blue)] flex-shrink-0 mt-0.5"></i>
+                            <div class="flex-1">
+                                <div class="font-semibold text-sm mb-1">Limited status</div>
+                                <div class="text-xs text-[var(--text-secondary)] mb-2">${escAttr(data.reason)}</div>
+                                <div class="text-xs text-[var(--text-muted)] mb-3">Enter your <span class="font-semibold text-[var(--text-primary)]">sudo password</span> (not the app login) to unlock the full view. It is kept only in this page's memory until refresh, never stored.</div>
+                                <button class="btn btn-primary" onclick="unlockFullView()" title="Enter your sudo password to see rules">Unlock full view</button>
+                            </div>
+                        </div>
+                    </div>`;
+                lucide.createIcons();
+                render(data);
+                return;
+            }
+            document.getElementById('unavailable-banner').innerHTML = '';
+            render(data);
+        }).catch(err => {
+            toast('failed to load firewall status: ' + (err && err.message ? err.message : err), 'error');
+            document.getElementById('status-cards').innerHTML = '';
+            document.getElementById('rules-tbody').innerHTML = '<tr><td colspan="6"><div class="empty-state">Could not reach the server. Click Refresh to retry.</div></td></tr>';
+            setActionButtons(null);
+        });
+    }
+
+    async function unlockFullView() {
+        const pw = await uiPromptPassword('Unlock full firewall view', 'Enter your sudo password (not the app login). Kept only in this page\'s memory until refresh.', 'Unlock');
+        if (!pw) return;
+        unlockPassword = pw;
+        loadStatus();
+    }
+
+    // NB: modals need the 'open' class as well as hidden removal:
+    // the shared header macro emits its own `.modal-backdrop
+    // { display: none }` *after* this page's styles, so hidden-only
+    // toggling leaves them invisible. `.modal-backdrop.open` wins.
+    function showModal(id) {
+        const el = document.getElementById(id);
+        el.classList.remove('hidden');
+        el.classList.add('open');
+    }
+    function hideModal(id) {
+        const el = document.getElementById(id);
+        el.classList.add('hidden');
+        el.classList.remove('open');
+    }
+    function openAddRule() {
+        showModal('add-modal');
+        previewRule();
+    }
+    let previewTimer = null;
+    ['rule-action','rule-port','rule-proto','rule-source'].forEach(id => {
+        document.getElementById(id).addEventListener('input', () => {
+            clearTimeout(previewTimer);
+            previewTimer = setTimeout(previewRule, 250);
+        });
+    });
+    let lastPreview = null;
+    function previewRule() {
+        const body = {
+            action: document.getElementById('rule-action').value,
+            port: document.getElementById('rule-port').value.trim(),
+            protocol: document.getElementById('rule-proto').value,
+            source: document.getElementById('rule-source').value.trim(),
+            direction: 'in',
+        };
+        if (!body.port) {
+            document.getElementById('rule-preview').textContent = 'Enter a port to preview.';
+            document.getElementById('rule-warn').classList.add('hidden');
+            lastPreview = null;
+            return;
+        }
+        api('/api/firewall/rule-preview', { method: 'POST', body: JSON.stringify(body) })
+            .then(({ ok, data }) => {
+                if (!ok) {
+                    document.getElementById('rule-preview').textContent = data.error || 'Invalid rule';
+                    document.getElementById('rule-warn').classList.add('hidden');
+                    lastPreview = null;
+                    return;
+                }
+                lastPreview = data;
+                document.getElementById('rule-preview').textContent = data.preview || '';
+                document.getElementById('rule-warn').classList.toggle('hidden', !data.lockout_warning);
+            });
+    }
+    function closeAddRule() {
+        hideModal('add-modal');
+        document.getElementById('rule-password').value = '';
+    }
+    function submitAddRule(confirmed) {
+        // NB: the password field is wiped only on a terminal outcome
+        // (success / non-409 error / close) — the 409 lockout flow
+        // resubmits via submitAddRule(true) and needs it still present.
+        const body = {
+            action: document.getElementById('rule-action').value,
+            port: document.getElementById('rule-port').value.trim(),
+            protocol: document.getElementById('rule-proto').value,
+            source: document.getElementById('rule-source').value.trim(),
+            password: document.getElementById('rule-password').value,
+        };
+        if (!body.port) { toast('port is required', 'error'); return; }
+        if (!body.password) { toast('password is required', 'error'); return; }
+        if (!confirmed && lastPreview && lastPreview.lockout_warning) {
+            if (!window.confirm('This will deny inbound SSH with no source restriction. You may lock yourself out. Proceed?')) return;
+            body.confirm_lockout = true;
+        }
+        api('/api/firewall/rules', { method: 'POST', body: JSON.stringify(body) })
+            .then(({ ok, status, data }) => {
+                if (!ok && (status === 409 || data.code === 'confirm_required')) {
+                    if (window.confirm((data.preview || 'SSH lockout risk') + ' — proceed anyway?')) {
+                        submitAddRule(true);
+                    }
+                    return;
+                }
+                document.getElementById('rule-password').value = '';
+                if (!ok) { toast(data.error || 'add rule failed', 'error'); return; }
+                toast('rule added', 'success');
+                closeAddRule();
+                loadStatus();
+            });
+    }
+    async function deleteRule(num) {
+        const pw = await uiPromptPassword('Delete firewall rule', `Enter your sudo password (not the app login) to delete rule [${num}].`, 'Delete');
+        if (!pw) return;
+        api('/api/firewall/rules', { method: 'DELETE', body: JSON.stringify({ number: num, password: pw }) })
+            .then(({ ok, data }) => {
+                if (!ok) { toast(data.error || 'delete failed', 'error'); return; }
+                toast('rule removed', 'success');
+                loadStatus();
+            });
+    }
+
+    function openDefault() {
+        showModal('default-modal');
+    }
+    function closeDefaultModal() {
+        hideModal('default-modal');
+        document.getElementById('default-password').value = '';
+    }
+    function submitDefault() {
+        const password = document.getElementById('default-password').value;
+        document.getElementById('default-password').value = '';
+        const body = {
+            direction: document.getElementById('default-direction').value,
+            policy: document.getElementById('default-policy').value,
+            password: password,
+        };
+        if (!body.password) { toast('password is required', 'error'); return; }
+        api('/api/firewall/default', { method: 'POST', body: JSON.stringify(body) })
+            .then(({ ok, data }) => {
+                if (!ok) { toast(data.error || 'failed', 'error'); return; }
+                toast('default policy updated', 'success');
+                closeDefaultModal();
+                loadStatus();
+            });
+    }
+
+    function openToggle(action) {
+        toggleAction = action;
+        document.getElementById('toggle-title').textContent = action === 'enable' ? 'Enable firewall' : 'Disable firewall';
+        document.getElementById('toggle-body').textContent = action === 'enable'
+            ? 'Enabling the firewall will activate the configured rules immediately.'
+            : 'Disabling the firewall will stop all filtering. Incoming connections will be unrestricted until re-enabled.';
+        showModal('toggle-modal');
+    }
+    function closeToggle() {
+        hideModal('toggle-modal');
+        document.getElementById('toggle-password').value = '';
+        toggleAction = null;
+    }
+    function submitToggle() {
+        const pw = document.getElementById('toggle-password').value;
+        document.getElementById('toggle-password').value = '';
+        if (!pw) { toast('password is required', 'error'); return; }
+        const url = toggleAction === 'enable' ? '/api/firewall/enable' : '/api/firewall/disable';
+        api(url, { method: 'POST', body: JSON.stringify({ password: pw }) })
+            .then(({ ok, data }) => {
+                if (!ok) { toast(data.error || 'failed', 'error'); return; }
+                toast('firewall ' + toggleAction + 'd', 'success');
+                closeToggle();
+                loadStatus();
+            });
+    }
+
+    async function apiReload() {
+        const pw = await uiPromptPassword('Reload firewall', 'Enter your sudo password (not the app login) to reload the firewall.', 'Reload');
+        if (!pw) return;
+        api('/api/firewall/reload', { method: 'POST', body: JSON.stringify({ password: pw }) })
+            .then(({ ok, data }) => {
+                if (!ok) { toast(data.error || 'reload failed', 'error'); return; }
+                toast('reloaded', 'success');
+                loadStatus();
+            });
+    }
+
+    lucide.createIcons();
+    loadStatus();
+    </script>
+<script>
+
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (typeof closeAddRule==='function') { const el=document.getElementById('add-modal'); if(el && !el.classList.contains('hidden')) { closeAddRule(); return; } }
+    if (typeof closeDefaultModal==='function') { const el=document.getElementById('default-modal'); if(el && !el.classList.contains('hidden')) { closeDefaultModal(); return; } }
+    if (typeof closeToggle==='function') { const el=document.getElementById('toggle-modal'); if(el && !el.classList.contains('hidden')) { closeToggle(); return; } }
+});
+
+</script>
+</body>
+</html>

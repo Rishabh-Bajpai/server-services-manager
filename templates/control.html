@@ -206,8 +206,10 @@
             z-index: 40;
             transform: translateY(100%);
             transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            max-height: 50vh;
-            overflow-y: auto;
+            max-height: 55vh;
+            overflow: hidden;
+            display: flex; flex-direction: column;
+            box-shadow: 0 -12px 40px rgba(0,0,0,0.5);
         }
         #output-drawer.open { transform: translateY(0); }
         #output-drawer pre {
@@ -215,45 +217,41 @@
             font-size: 0.75rem;
             color: var(--text-secondary);
             white-space: pre-wrap;
-            word-break: break-all;
+            word-break: break-word;
             line-height: 1.6;
             margin-top: 0.75rem;
             padding: 1rem;
             background: var(--bg-secondary);
             border-radius: 0.75rem;
             border: 1px solid var(--border-subtle);
+            overflow: auto;
+            max-height: 38vh;
+            overscroll-contain: contain;
         }
     </style>
 </head>
 <body class="bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-screen">
-    <div class="max-w-5xl mx-auto p-4 sm:p-6">
-        <!-- Header -->
-        <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8 animate-fade-in">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center shadow-lg shadow-red-500/20">
-                    <i data-lucide="gamepad-2" class="w-5 h-5 text-white"></i>
-                </div>
-                <div>
-                    <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">Control Panel</h1>
-                    <p class="text-[var(--text-muted)] text-xs font-medium">Quick system commands</p>
-                </div>
-            </div>
-            <div class="flex items-center gap-2">
-                <a href="/" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
-                    <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Dashboard</span>
-                </a>
-                <a href="/monitor" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
-                    <i data-lucide="activity" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Monitor</span>
-                </a>
-                <a href="/logout" class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20 rounded-lg hover:bg-[var(--accent-red)]/20 transition-all text-sm font-medium">
-                    <i data-lucide="log-out" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Logout</span>
-                </a>
-            </div>
-        </header>
 
+    {% import "_macros.html" as ui %}
+{% set actions %}
+{% endset %}
+{% set page_info %}
+        <p style="margin-bottom:0.75rem">Big friendly buttons for <strong>common jobs on this machine</strong> — things you'd otherwise type in a terminal.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li><strong>Power</strong> buttons (lock, reboot, shutdown…) affect the whole machine. The dangerous ones ask for your password first.</li>
+            <li><strong>System and Network</strong> buttons run quick checks like disk usage or your IP address and show the result below.</li>
+            <li>Your own buttons can be added in <strong>config.yaml</strong> under <strong>commands</strong> — they appear here automatically.</li>
+        </ul>
+        {% endset %}
+{{ ui.header(
+            title="Control Panel",
+            icon="gamepad-2",
+            icon_color="var(--accent-red)",
+            actions=actions,
+            current='/control',
+            info=page_info,
+        ) }}
+<main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6">
         <!-- Power Section -->
         <div class="flex items-center gap-3 mb-4 section-label animate-fade-in" style="animation-delay:0.05s">
             <span class="line"></span>
@@ -285,13 +283,13 @@
             <span class="line"></span>
         </div>
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-8" id="custom-group"></div>
-    </div>
+    </main>
 
     <!-- Output Drawer -->
     <div id="output-drawer">
         <div class="flex items-center justify-between mb-2">
             <h3 class="text-sm font-bold text-[var(--text-primary)]">Output</h3>
-            <button onclick="closeOutput()" class="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-[var(--text-muted)] hover:bg-white/10 hover:text-[var(--text-primary)] transition-all">
+            <button onclick="closeOutput()" title="Close the output panel" class="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-[var(--text-muted)] hover:bg-white/10 hover:text-[var(--text-primary)] transition-all">
                 <i data-lucide="x" class="w-4 h-4"></i>
             </button>
         </div>
@@ -300,26 +298,26 @@
     </div>
 
     <!-- Confirm Modal -->
-    <div class="modal-overlay" id="confirm-modal">
+    <div class="modal-overlay" id="confirm-modal" onclick="if(event.target===this) closeConfirm()">
         <div class="modal-box">
             <h2 id="confirm-title">Confirm Action</h2>
             <p id="confirm-message">Are you sure?</p>
             <div class="modal-actions">
-                <button class="btn-cancel" onclick="closeConfirm()">Cancel</button>
-                <button class="btn-danger" id="confirm-execute" onclick="executeConfirmed()">Execute</button>
+                <button class="btn-cancel" onclick="closeConfirm()" title="Don't run this command">Cancel</button>
+                <button class="btn-danger" id="confirm-execute" onclick="executeConfirmed()" title="Run the command now">Execute</button>
             </div>
         </div>
     </div>
 
     <!-- Auth Modal -->
-    <div class="modal-overlay" id="auth-modal">
+    <div class="modal-overlay" id="auth-modal" onclick="if(event.target===this) closeAuth()">
         <div class="modal-box">
-            <h2 id="auth-title">Authentication Required</h2>
-            <p id="auth-message">Enter your password to execute this command.</p>
-            <input type="password" id="auth-password" placeholder="Enter password..." autocomplete="off">
+            <h2 id="auth-title">App password required</h2>
+            <p id="auth-message">Enter your app login password (not sudo) to execute this command.</p>
+            <input type="password" id="auth-password" placeholder="App password..." autocomplete="off">
             <div class="modal-actions">
-                <button class="btn-cancel" onclick="closeAuth()">Cancel</button>
-                <button class="btn-primary" id="auth-execute" onclick="executeAuthed()">Confirm</button>
+                <button class="btn-cancel" onclick="closeAuth()" title="Close without running">Cancel</button>
+                <button class="btn-primary" id="auth-execute" onclick="executeAuthed()" title="Run with the entered password">Confirm</button>
             </div>
         </div>
     </div>
@@ -362,7 +360,7 @@
                 const container = document.getElementById(g + '-group');
                 container.innerHTML = COMMANDS[g].map(cmd => {
                     const auth = cmd.id === 'suspend' || cmd.id === 'hibernate' || cmd.id === 'reboot' || cmd.id === 'shutdown';
-                    return `<div class="cmd-btn ${g}" onclick="handleCommand('${cmd.id}', '${cmd.label}', ${auth})" title="${cmd.label}">
+                    return `<div class="cmd-btn ${g}" onclick="handleCommand(event, '${cmd.id}', '${cmd.label}', ${auth})" title="${cmd.label}">
                         <i data-lucide="${cmd.icon}" class="btn-icon"></i>
                         <span class="btn-label">${cmd.label}</span>
                         <div class="spinner"></div>
@@ -379,7 +377,7 @@
                 customContainer.innerHTML = CUSTOM_COMMANDS.map(cmd => {
                     const icon = cmd.icon || 'terminal';
                     const auth = cmd.auth || false;
-                    return `<div class="cmd-btn custom" onclick="handleCommand('${cmd.id}', '${cmd.name}', ${auth})" title="${cmd.name}">
+                    return `<div class="cmd-btn custom" onclick="handleCommand(event, '${cmd.id}', '${cmd.name}', ${auth})" title="${cmd.name}">
                         <i data-lucide="${icon}" class="btn-icon"></i>
                         <span class="btn-label">${cmd.name}</span>
                         <div class="spinner"></div>
@@ -436,8 +434,8 @@
             }
         }
 
-        function handleCommand(id, label, needsAuth) {
-            const btn = event.currentTarget;
+        function handleCommand(ev, id, label, needsAuth) {
+            const btn = ev && ev.currentTarget ? ev.currentTarget : null;
             const run = (password) => {
                 setExecuting(btn, true);
                 fetch('/api/control/run', {
@@ -453,7 +451,7 @@
                             pendingCommand = { id, label, passwordNeeded: true };
                             pendingLabel = label;
                             document.getElementById('auth-title').textContent = label;
-                            document.getElementById('auth-message').textContent = 'Enter your password to execute "' + label + '".';
+                            document.getElementById('auth-message').textContent = 'Enter your app login password (not sudo) to execute "' + label + '".';
                             document.getElementById('auth-password').value = '';
                             document.getElementById('auth-modal').classList.add('active');
                             setTimeout(() => document.getElementById('auth-password').focus(), 100);
@@ -493,7 +491,7 @@
             closeConfirm();
             const { id, label } = pendingCommand;
             pendingCommand = null;
-            handleCommand(id, label, false);
+            handleCommand(null, id, label, false);
         }
 
         function executeAuthed() {
@@ -525,5 +523,20 @@
 
         renderButtons();
     </script>
+<script>
+
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    // These modals toggle `.active` (not `.hidden`), so check that —
+    // otherwise Escape always hits the auth branch and the confirm
+    // modal can never be closed with Escape.
+    const am = document.getElementById('auth-modal');
+    const cm = document.getElementById('confirm-modal');
+    if (am && am.classList.contains('active')) { if(typeof closeAuth==='function') closeAuth(); return; }
+    if (cm && cm.classList.contains('active')) { if(typeof closeConfirm==='function') closeConfirm(); return; }
+    if (typeof closeOutput === 'function') closeOutput();
+});
+
+</script>
 </body>
 </html>

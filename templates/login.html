@@ -5,25 +5,54 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Server Services Manager</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.ico">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --border-subtle: #1e1e2a;
+            --border-active: #2d2d3a;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+        * { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        body {
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(ellipse at top left, rgba(6, 182, 212, 0.04) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(59, 130, 246, 0.04) 0%, transparent 50%);
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+    </style>
 </head>
 
-<body class="bg-gray-950 text-gray-100 h-screen flex items-center justify-center font-sans">
-    <div class="w-full max-w-md p-8 bg-gray-900 rounded-xl border border-gray-800 shadow-2xl">
+<body class="text-[var(--text-primary)] h-screen flex items-center justify-center font-sans bg-[var(--bg-primary)]">
+    <div class="w-full max-w-md p-8 bg-[var(--bg-card)] rounded-xl border border-[var(--border-subtle)] shadow-2xl animate-fade-in">
         <div class="flex flex-col items-center mb-8">
-            <div class="p-3 bg-blue-600 rounded-lg text-white mb-4">
+            <div class="p-3 rounded-lg text-white mb-4" style="background: var(--accent-blue);">
                 <i data-lucide="lock" class="w-8 h-8"></i>
             </div>
             <h1 class="text-2xl font-bold tracking-tight">Access Restricted</h1>
-            <p class="text-gray-400 text-sm mt-1">Please enter your password to continue</p>
+            <p class="text-[var(--text-muted)] text-sm mt-1">Please enter your password to continue</p>
         </div>
 
         {% with messages = get_flashed_messages() %}
         {% if messages %}
         {% for message in messages %}
         <div
-            class="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-3 text-red-500 text-sm">
+            class="mb-6 p-4 rounded-lg flex items-center gap-3 text-sm" style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); color: var(--accent-red);">
             <i data-lucide="alert-circle" class="w-4 h-4 shrink-0"></i>
             {{ message }}
         </div>
@@ -33,24 +62,26 @@
 
         <form action="/login" method="POST" class="space-y-6">
             <div>
-                <label for="password" class="block text-sm font-medium mb-2 text-gray-300">Password</label>
+                <label for="password" class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Password</label>
                 <div class="relative">
                     <input type="password" id="password" name="password" required autofocus
-                        class="w-full bg-gray-950 border border-gray-800 rounded-lg py-2.5 px-4 pl-11 text-gray-100 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 transition-colors placeholder-gray-600"
+                        class="w-full rounded-lg py-2.5 px-4 pl-11 transition-colors placeholder:"
+                        style="background: var(--bg-primary); border: 1px solid var(--border-subtle); color: var(--text-primary); outline: none;"
                         placeholder="Enter password...">
-                    <i data-lucide="key" class="w-4 h-4 text-gray-500 absolute left-4 top-3"></i>
+                    <i data-lucide="key" class="w-4 h-4" style="color: var(--text-muted); position: absolute; left: 1rem; top: 0.75rem;"></i>
                 </div>
             </div>
 
-            <button type="submit"
-                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2">
+            <button type="submit" title="Log in to the manager"
+                class="w-full font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 text-white"
+                style="background: var(--accent-blue);">
                 <span>Login</span>
                 <i data-lucide="arrow-right" class="w-4 h-4"></i>
             </button>
         </form>
 
         <div class="mt-6 text-center">
-            <p class="text-xs text-gray-500">
+            <p class="text-xs" style="color: var(--text-muted);">
                 Server Services Manager &copy; 2025
             </p>
         </div>

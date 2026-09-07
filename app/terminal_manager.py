@@ -9,9 +9,15 @@ import signal
 import fcntl
 import termios
 import struct
+from collections import deque
 from typing import Dict, Optional
 
 logger = logging.getLogger("TerminalManager")
+
+# Scrollback kept per session so a client that navigates away and
+# comes back (reattach by stable id) sees what it missed instead of
+# a blank tab. Bounded: 200 chunks ≈ 800 KB worst case per session.
+_SCROLLBACK_CHUNKS = 200
 
 class TerminalSession:
     def __init__(self, session_id: str, socketio, cmd: str = "/bin/bash"):
@@ -22,6 +28,7 @@ class TerminalSession:
         self.pid = None
         self.active = False
         self.thread = None
+        self.scrollback: deque = deque(maxlen=_SCROLLBACK_CHUNKS)
 
     def start(self):
         self.pid, self.fd = pty.fork()
@@ -45,9 +52,11 @@ class TerminalSession:
                     data = os.read(self.fd, 4096)
                     if not data:
                         break
+                    text = data.decode('utf-8', errors='ignore')
+                    self.scrollback.append(text)
                     self.socketio.emit('terminal_output', {
                         'id': self.id,
-                        'data': data.decode('utf-8', errors='ignore')
+                        'data': text
                     })
             except OSError:
                 break
@@ -104,10 +113,22 @@ class TerminalManager:
     def create_session(self, session_id: str):
         if session_id in self.sessions:
             return
-            
+
         session = TerminalSession(session_id, self.socketio)
         session.start()
         self.sessions[session_id] = session
+
+    def session_alive(self, session_id: str) -> bool:
+        """True if the session exists and its shell is still running."""
+        session = self.sessions.get(session_id)
+        return bool(session) and session.active and session.pid is not None
+
+    def get_backlog(self, session_id: str) -> str:
+        """Replayable scrollback for a reattaching client ('' if none)."""
+        session = self.sessions.get(session_id)
+        if not session:
+            return ""
+        return "".join(session.scrollback)
 
     def write(self, session_id: str, data: str):
         if session_id in self.sessions:

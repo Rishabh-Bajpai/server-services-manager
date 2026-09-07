@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disk Usage - Server Services Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --border-subtle: #1e1e2a;
+            --border-active: #2d2d3a;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-purple: #8b5cf6;
+            --accent-orange: #f97316;
+            --accent-cyan: #06b6d4;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+        * { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        code, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+        body {
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(ellipse at top left, rgba(59, 130, 246, 0.04) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(6, 182, 212, 0.04) 0%, transparent 50%);
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        .badge {
+            display: inline-flex; align-items: center; gap: 0.25rem;
+            padding: 0.125rem 0.5rem; border-radius: 0.375rem;
+            font-size: 0.6875rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .badge-green { background: rgba(16,185,129,0.12); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.25); }
+        .badge-blue { background: rgba(59,130,246,0.12); color: var(--accent-blue); border: 1px solid rgba(59,130,246,0.25); }
+        .badge-yellow { background: rgba(245,158,11,0.12); color: var(--accent-yellow); border: 1px solid rgba(245,158,11,0.25); }
+        .badge-gray { background: rgba(100,116,139,0.12); color: var(--text-secondary); border: 1px solid rgba(100,116,139,0.25); }
+        .badge-purple { background: rgba(139,92,246,0.12); color: var(--accent-purple); border: 1px solid rgba(139,92,246,0.25); }
+        .panel-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+        }
+        .status-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            padding: 1rem 1.25rem;
+            display: flex; flex-direction: column; gap: 0.25rem;
+        }
+        .status-card .label { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+        .status-card .value { font-size: 1.25rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+        .btn {
+            display: inline-flex; align-items: center; gap: 0.375rem;
+            padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+            font-size: 0.8125rem; font-weight: 600;
+            background: var(--bg-secondary); border: 1px solid var(--border-subtle);
+            color: var(--text-primary); cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .btn:hover { background: var(--border-subtle); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--accent-blue); color: #061a30; border-color: var(--accent-blue); }
+        .btn-primary:hover { background: #60a5fa; }
+        .text-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.5rem 0.875rem;
+            color: var(--text-primary);
+            font-size: 0.8125rem; outline: none; width: 100%;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .text-input:focus { border-color: var(--accent-blue); }
+        .empty-state {
+            padding: 2rem 1rem; text-align: center;
+            color: var(--text-muted); font-size: 0.875rem;
+        }
+        .crumb {
+            display: inline-flex; align-items: center; gap: 0.375rem;
+            padding: 0.25rem 0.625rem; border-radius: 0.375rem;
+            font-size: 0.8125rem; font-family: 'JetBrains Mono', monospace;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .crumb:hover { background: var(--bg-secondary); color: var(--text-primary); }
+        .crumb.current { color: var(--text-primary); background: var(--bg-secondary); }
+        .crumb-sep { color: var(--text-muted); font-size: 0.75rem; user-select: none; }
+        .disk-table { width: 100%; min-width: 560px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+        .disk-table thead th {
+            text-align: left; font-size: 0.6875rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-muted); padding: 0.75rem 1rem;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-subtle);
+            position: sticky; top: 0; z-index: 2;
+            user-select: none;
+        }
+        .disk-table thead th.text-right, .disk-table tbody td.text-right { text-align: right; }
+        .disk-table tbody tr { transition: background 0.1s ease; cursor: pointer; }
+        .disk-table tbody tr:hover { background: rgba(255,255,255,0.025); }
+        .disk-table tbody td {
+            padding: 0.625rem 1rem;
+            border-bottom: 1px solid var(--border-subtle);
+            font-size: 0.8125rem; color: var(--text-primary);
+            vertical-align: middle;
+        }
+        .disk-table tbody tr:last-child td { border-bottom: none; }
+        .table-scroll {
+            max-height: calc(100dvh - 300px);
+            min-height: 200px;
+            overflow-y: auto; overflow-x: auto;
+            overscroll-behavior: contain;
+            -webkit-overflow-scrolling: touch;
+        }
+        .item-name {
+            display: block;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8125rem;
+            color: var(--text-primary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .item-bar {
+            height: 6px;
+            background: var(--bg-secondary);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .item-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-blue), var(--accent-cyan));
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+        .item-bar-fill.file { background: linear-gradient(90deg, var(--accent-purple), #c084fc); }
+        .item-size {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-align: right;
+        }
+        .treemap-wrap {
+            position: relative;
+            width: 100%;
+            height: min(60dvh, 480px);
+            background: var(--bg-secondary);
+            border-radius: 0.75rem;
+            overflow: hidden;
+        }
+        .treemap-tile {
+            position: absolute;
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 4px;
+            padding: 0.5rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            cursor: pointer;
+            transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+            overflow: hidden;
+            color: rgba(15, 23, 42, 0.92);
+        }
+        .treemap-tile:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            border-color: rgba(255,255,255,0.25);
+            z-index: 5;
+        }
+        .treemap-tile .name {
+            font-weight: 700;
+            font-size: 0.8125rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .treemap-tile .size {
+            font-size: 0.75rem;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+            opacity: 0.85;
+        }
+        .treemap-tile.dir { background: linear-gradient(135deg, #3b82f6, #06b6d4); color: white; }
+        .treemap-tile.file { background: linear-gradient(135deg, #8b5cf6, #c084fc); color: white; }
+        .treemap-empty {
+            display: flex; align-items: center; justify-content: center;
+            height: 100%; color: var(--text-muted); font-size: 0.875rem;
+        }
+        .toast-container {
+            position: fixed; top: 1rem; right: 1rem; z-index: 100;
+            display: flex; flex-direction: column; gap: 0.5rem;
+        }
+        .toast {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.625rem 0.875rem;
+            font-size: 0.8125rem;
+            color: var(--text-primary);
+            min-width: 240px; max-width: 360px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            animation: fadeIn 0.2s ease-out forwards;
+        }
+        .toast.error { border-left: 3px solid var(--accent-red); }
+        .toast.success { border-left: 3px solid var(--accent-green); }
+        .toast.info { border-left: 3px solid var(--accent-blue); }
+    </style>
+</head>
+<body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
+    {% import "_macros.html" as ui %}
+    {% set actions %}
+    {% endset %}
+    {% set page_info %}
+        <p style="margin-bottom:0.75rem">Finds out <strong>what is eating your disk space</strong>. The colored mosaic (treemap) makes big folders obvious at a glance — bigger box, more space.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li>Click a box or a row to <strong>go inside</strong> that folder; the arrow button or breadcrumb takes you back up.</li>
+            <li><strong>Depth 1/2/3</strong> controls how many levels deep it scans; <strong>Top 20</strong> lists the biggest items anywhere below.</li>
+            <li>Scans can take a few seconds on big disks — the spinner means it's still measuring.</li>
+        </ul>
+        {% endset %}
+    {{ ui.header(
+        title="Disk Usage",
+        icon="pie-chart",
+        icon_color="var(--accent-cyan)",
+        badge_id="depth-badge",
+        actions=actions,
+        current='/disk',
+        info=page_info,
+    ) }}
+    {% set subheader %}
+        <button class="btn" onclick="navigateUp()" title="Go to parent directory" style="padding:0.5rem 0.625rem">
+            <i data-lucide="arrow-up" class="w-3.5 h-3.5"></i>
+        </button>
+        <div id="breadcrumb" class="flex items-center gap-1.5 min-h-[2rem] overflow-x-auto whitespace-nowrap">
+            <span class="text-xs text-[var(--text-muted)] py-2">Loading…</span>
+        </div>
+        <span class="flex-1"></span>
+        <button class="btn" onclick="changeDepth(1)" id="btn-depth-1" title="Show 1 level"><span>1</span></button>
+        <button class="btn" onclick="changeDepth(2)" id="btn-depth-2" title="Show 2 levels"><span>2</span></button>
+        <button class="btn" onclick="changeDepth(3)" id="btn-depth-3" title="Show 3 levels"><span>3</span></button>
+        <button class="btn" id="btn-refresh" onclick="loadCurrent()" title="Refresh">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Refresh</span>
+        </button>
+    {% endset %}
+    {{ ui.subheader(subheader) }}
+
+    <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6 space-y-4">
+        <section class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div class="status-card">
+                <span class="label">Total size</span>
+                <span class="value text-[var(--accent-cyan)]" id="stat-total">—</span>
+            </div>
+            <div class="status-card">
+                <span class="label">Items</span>
+                <span class="value text-[var(--accent-blue)]" id="stat-items">—</span>
+            </div>
+            <div class="status-card">
+                <span class="label">Largest item</span>
+                <span class="value text-[var(--accent-purple)]" id="stat-largest">—</span>
+            </div>
+            <div class="status-card">
+                <span class="label">Files / Dirs</span>
+                <span class="value text-[var(--accent-yellow)]" id="stat-mix">—</span>
+            </div>
+        </section>
+
+        <section class="panel-card p-4">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <h2 class="text-sm font-semibold flex items-center gap-2">
+                    <i data-lucide="layout-grid" class="w-4 h-4 text-[var(--accent-cyan)]"></i>
+                    Treemap
+                </h2>
+                <span id="treemap-summary" class="text-xs text-[var(--text-muted)]"></span>
+            </div>
+            <div class="treemap-wrap" id="treemap">
+                <div class="treemap-empty">Loading…</div>
+            </div>
+        </section>
+
+        <div class="grid grid-cols-1 lg:grid-cols-10 gap-4">
+            <section class="panel-card lg:col-span-7">
+                <div class="p-4 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2">
+                    <h2 class="text-sm font-semibold flex items-center gap-2">
+                        <i data-lucide="list" class="w-4 h-4 text-[var(--accent-blue)]"></i>
+                        Children (<span id="item-count">0</span>)
+                    </h2>
+                    <input id="filter-input" class="text-input" style="max-width: 240px" placeholder="Filter by name…" oninput="renderItems()">
+                </div>
+                <div id="items-list" class="table-scroll">
+                    <div class="empty-state">Loading…</div>
+                </div>
+            </section>
+
+            <section class="panel-card lg:col-span-3">
+                <div class="p-4 border-b border-[var(--border-subtle)]">
+                    <h2 class="text-sm font-semibold flex items-center gap-2">
+                        <i data-lucide="trophy" class="w-4 h-4 text-[var(--accent-yellow)]"></i>
+                        Top 20 largest
+                    </h2>
+                </div>
+                <div id="largest-list" class="table-scroll">
+                    <div class="empty-state">Loading…</div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <script>
+        let currentPath = '.';
+        let currentData = null;
+        let currentDepth = 1;
+        let filterText = '';
+
+        function api(url) {
+            return fetch(url, { credentials: 'same-origin' }).then(r => {
+                if (!r.ok) return r.json().then(j => { throw new Error(j.error || `HTTP ${r.status}`); });
+                return r.json();
+            });
+        }
+
+        function toast(message, kind = 'info') {
+            const c = document.getElementById('toast-container');
+            const t = document.createElement('div');
+            t.className = `toast ${kind}`;
+            t.textContent = message;
+            c.appendChild(t);
+            setTimeout(() => t.remove(), 3500);
+        }
+
+        function updateBreadcrumb() {
+            const wrap = document.getElementById('breadcrumb');
+            wrap.innerHTML = '';
+            const crumbs = (currentData && currentData.breadcrumb) || [{ label: '~', path: '.' }];
+            crumbs.forEach((c, i) => {
+                if (i > 0) {
+                    const sep = document.createElement('span');
+                    sep.className = 'crumb-sep';
+                    sep.textContent = '/';
+                    wrap.appendChild(sep);
+                }
+                const el = document.createElement('span');
+                el.className = 'crumb' + (i === crumbs.length - 1 ? ' current' : '');
+                el.textContent = c.label;
+                el.title = c.path;
+                el.onclick = () => navigateTo(c.path);
+                wrap.appendChild(el);
+            });
+        }
+
+        function navigateTo(path) {
+            currentPath = path || '.';
+            loadCurrent();
+        }
+
+        function navigateUp() {
+            if (!currentPath || currentPath === '.' || currentPath === '') return;
+            const parts = currentPath.split('/');
+            parts.pop();
+            navigateTo(parts.join('/') || '.');
+        }
+
+        function changeDepth(d) {
+            currentDepth = d;
+            document.getElementById('depth-badge').textContent = `depth ${d}`;
+            for (const n of [1, 2, 3]) {
+                document.getElementById(`btn-depth-${n}`).classList.toggle('btn-primary', n === d);
+            }
+            loadCurrent();
+        }
+
+        let loadSeq = 0;
+        function setRefreshBusy(busy) {
+            const btn = document.getElementById('btn-refresh');
+            btn.disabled = busy;
+            btn.innerHTML = busy
+                ? '<span class="inline-flex items-center gap-1.5"><i data-lucide="loader" class="w-3.5 h-3.5 animate-spin"></i><span class="hidden sm:inline">Scanning…</span></span>'
+                : '<i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">Refresh</span>';
+            lucide.createIcons();
+        }
+
+        function loadCurrent() {
+            const params = new URLSearchParams({ path: currentPath, depth: String(currentDepth) });
+            const mySeq = ++loadSeq;
+            // Show a "scanning" indicator on every panel that the
+            // load touches so the user knows the page isn't
+            // frozen — du on a big home dir can take a minute.
+            showScanning(true);
+            setRefreshBusy(true);
+            api('/api/disk/usage?' + params.toString())
+                .then(data => {
+                    if (mySeq !== loadSeq) return; // superseded
+                    currentData = data;
+                    if (data && data.code === 'timeout') {
+                        showScanning(false);
+                        showTimeout(data, () => retryWithLongerTimeout());
+                        setRefreshBusy(false);
+                        return;
+                    }
+                    if (data && data.error) {
+                        toast(data.error, 'error');
+                        showScanning(false);
+                        setRefreshBusy(false);
+                        return;
+                    }
+                    updateBreadcrumb();
+                    renderStats();
+                    // renderTreemap() overwrites the scanning spinner
+                    // with the real summary — no showScanning(false).
+                    renderTreemap();
+                    renderItems();
+                    renderLargest();
+                    setRefreshBusy(false);
+                })
+                .catch(err => {
+                    if (mySeq !== loadSeq) return;
+                    showScanning(false);
+                    setRefreshBusy(false);
+                    toast(err.message || String(err), 'error');
+                });
+        }
+
+        function showScanning(on) {
+            // Tiny "scanning…" tag inside the treemap header so
+            // the user knows the page is alive.
+            const summary = document.getElementById('treemap-summary');
+            if (on) {
+                summary.innerHTML = '<span class="inline-flex items-center gap-1.5"><i data-lucide="loader" class="w-3 h-3 animate-spin"></i>scanning…</span>';
+                lucide.createIcons();
+            } else {
+                summary.innerHTML = '';
+            }
+        }
+
+        function showTimeout(data, onRetry) {
+            const wrap = document.getElementById('treemap');
+            wrap.innerHTML = `
+                <div class="treemap-empty flex flex-col items-center justify-center gap-3 text-center px-4">
+                    <i data-lucide="timer" class="w-8 h-8 text-[var(--accent-yellow)]"></i>
+                    <div class="text-sm text-[var(--text-primary)]">du took too long</div>
+                    <div class="text-xs text-[var(--text-muted)] max-w-md">${escapeHtml(data.error || '')}</div>
+                    ${data.retry_with_timeout
+                        ? `<button class="btn btn-primary" onclick="(${onRetry.toString()})()" title="Retry the scan with a longer timeout">
+                               <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                               Retry with timeout=${data.retry_with_timeout}s
+                           </button>`
+                        : ''}
+                </div>
+            `;
+            lucide.createIcons();
+        }
+
+        function retryWithLongerTimeout() {
+            // Re-issue the same request with an explicit longer
+            // timeout the server can use directly.
+            const params = new URLSearchParams({ path: currentPath, depth: String(currentDepth) });
+            const current = currentData && currentData.timeout ? currentData.timeout : 60;
+            params.set('timeout', String(Math.min(current * 2, 300)));
+            showScanning(true);
+            api('/api/disk/usage?' + params.toString())
+                .then(data => {
+                    if (data && data.code === 'timeout') {
+                        showScanning(false);
+                        showTimeout(data, () => retryWithLongerTimeout());
+                        return;
+                    }
+                    if (data && data.error) {
+                        toast(data.error, 'error');
+                        showScanning(false);
+                        return;
+                    }
+                    currentData = data;
+                    updateBreadcrumb();
+                    renderStats();
+                    // renderTreemap() overwrites the scanning spinner
+                    // with the real summary — no showScanning(false).
+                    renderTreemap();
+                    renderItems();
+                    renderLargest();
+                })
+                .catch(err => {
+                    showScanning(false);
+                    toast(err.message || String(err), 'error');
+                });
+        }
+
+        function renderStats() {
+            const d = currentData;
+            document.getElementById('stat-total').textContent = d.total_human || '0 B';
+            const items = d.items || [];
+            document.getElementById('stat-items').textContent = String(items.length);
+            const files = items.filter(i => !i.is_dir).length;
+            const dirs = items.length - files;
+            document.getElementById('stat-mix').textContent = `${files} / ${dirs}`;
+            if (items.length > 0) {
+                const top = items[0];
+                document.getElementById('stat-largest').textContent = top.name.length > 14 ? top.name.slice(0, 12) + '…' : top.name;
+                document.getElementById('stat-largest').title = `${top.name} — ${humanize(top.size)}`;
+            } else {
+                document.getElementById('stat-largest').textContent = '—';
+                document.getElementById('stat-largest').title = '';
+            }
+        }
+
+        function humanize(bytes) {
+            const n = Number(bytes) || 0;
+            if (n < 1024) return n + ' B';
+            const units = ['KB', 'MB', 'GB', 'TB', 'PB'];
+            let v = n / 1024;
+            for (const u of units) {
+                if (v < 1024) return v.toFixed(1) + ' ' + u;
+                v /= 1024;
+            }
+            return v.toFixed(1) + ' EB';
+        }
+
+        // Squarified treemap — a tiny implementation that lays out
+        // rectangles by descending size along the shorter side of
+        // the remaining area. Good enough for "where is the disk
+        // being used" and avoids dragging in a heavy library.
+        function squarify(items, x, y, w, h) {
+            if (!items.length || w <= 0 || h <= 0) return [];
+            const total = items.reduce((a, b) => a + b.size, 0) || 1;
+            const scale = (w * h) / total;
+            const scaled = items.map(it => ({ ...it, area: it.size * scale }));
+            const out = [];
+            let rect = { x, y, w, h };
+            let row = [];
+            let i = 0;
+            function worst(row, side) {
+                if (!row.length) return Infinity;
+                const sum = row.reduce((a, r) => a + r.area, 0);
+                const max = Math.max(...row.map(r => r.area));
+                const min = Math.min(...row.map(r => r.area));
+                const s2 = side * side;
+                const sum2 = sum * sum;
+                return Math.max((s2 * max) / sum2, sum2 / (s2 * min));
+            }
+            function layoutRow(row, rect) {
+                const sum = row.reduce((a, r) => a + r.area, 0);
+                const isHorizontal = rect.w >= rect.h;
+                const side = isHorizontal ? rect.h : rect.w;
+                const rowThickness = sum / side;
+                let offset = isHorizontal ? rect.x : rect.y;
+                for (const r of row) {
+                    const length = r.area / rowThickness;
+                    if (isHorizontal) {
+                        out.push({ ...r, x: offset, y: rect.y, w: length, h: rowThickness });
+                        offset += length;
+                    } else {
+                        out.push({ ...r, x: rect.x, y: offset, w: rowThickness, h: length });
+                        offset += length;
+                    }
+                }
+                if (isHorizontal) {
+                    return { x: rect.x, y: rect.y + rowThickness, w: rect.w, h: rect.h - rowThickness };
+                }
+                return { x: rect.x + rowThickness, y: rect.y, w: rect.w - rowThickness, h: rect.h };
+            }
+            while (i < scaled.length) {
+                const item = scaled[i];
+                const side = rect.w >= rect.h ? rect.h : rect.w;
+                if (side <= 0) break;
+                const withItem = [...row, item];
+                if (!row.length || worst(withItem, side) <= worst(row, side)) {
+                    row = withItem;
+                    i++;
+                } else {
+                    rect = layoutRow(row, rect);
+                    row = [];
+                }
+            }
+            if (row.length) layoutRow(row, rect);
+            return out;
+        }
+
+        function renderTreemap() {
+            const wrap = document.getElementById('treemap');
+            wrap.innerHTML = '';
+            const d = currentData;
+            const items = (d.items || []).slice(0, 60); // cap for DOM sanity
+            if (!items.length) {
+                wrap.innerHTML = '<div class="treemap-empty">This directory is empty.</div>';
+                document.getElementById('treemap-summary').textContent = '';
+                return;
+            }
+            const w = wrap.clientWidth;
+            const h = wrap.clientHeight;
+            const tiles = squarify(items, 0, 0, w, h);
+            for (const t of tiles) {
+                if (t.w < 6 || t.h < 6) continue;
+                const tile = document.createElement('div');
+                tile.className = 'treemap-tile ' + (t.is_dir ? 'dir' : 'file');
+                tile.style.left = t.x + 'px';
+                tile.style.top = t.y + 'px';
+                tile.style.width = t.w + 'px';
+                tile.style.height = t.h + 'px';
+                const fontSize = Math.max(10, Math.min(14, Math.sqrt(t.w * t.h) / 8));
+                tile.innerHTML = `<div class="name" style="font-size:${fontSize}px">${escapeHtml(t.name)}</div><div class="size">${humanize(t.size)}</div>`;
+                if (t.is_dir) {
+                    tile.title = `Open ${t.name} (${humanize(t.size)})`;
+                    tile.onclick = () => {
+                        const next = currentPath === '.' ? t.name : `${currentPath}/${t.name}`;
+                        navigateTo(next);
+                    };
+                } else {
+                    tile.title = `${t.name} — ${humanize(t.size)}`;
+                }
+                wrap.appendChild(tile);
+            }
+            const total = items.reduce((a, b) => a + b.size, 0);
+            const totalAll = (d.items || []).reduce((a, b) => a + b.size, 0);
+            const summary = items.length === (d.items || []).length
+                ? `${items.length} item(s) · ${humanize(total)}`
+                : `${items.length} of ${(d.items || []).length} shown · ${humanize(total)} of ${humanize(totalAll)}`;
+            document.getElementById('treemap-summary').textContent = summary;
+        }
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+        }
+
+        function renderItems() {
+            const list = document.getElementById('items-list');
+            const items = (currentData && currentData.items) || [];
+            const f = (filterText = document.getElementById('filter-input').value.toLowerCase()).trim();
+            const filtered = f ? items.filter(i => i.name.toLowerCase().includes(f)) : items;
+            document.getElementById('item-count').textContent = String(items.length);
+            if (!filtered.length) {
+                list.innerHTML = '<div class="empty-state">No items match.</div>';
+                return;
+            }
+            const max = items.reduce((a, b) => Math.max(a, b.size), 0) || 1;
+            const parent = currentPath === '.' ? '' : currentPath + '/';
+            const rows = [];
+            for (const it of filtered) {
+                const width = Math.max(2, (it.size / max) * 100);
+                const icon = it.is_dir ? 'folder' : 'file';
+                const onclick = it.is_dir
+                    ? `onclick="navigateTo('${escapeAttr(parent + it.name)}')"`
+                    : '';
+                rows.push(`
+                    <tr ${onclick}>
+                        <td class="w-10 text-center"><i data-lucide="${icon}" class="w-3.5 h-3.5 ${it.is_dir ? 'text-[var(--accent-blue)]' : 'text-[var(--accent-purple)]'}"></i></td>
+                        <td class="item-name" title="${escapeHtml(it.name)}">${escapeHtml(it.name)}</td>
+                        <td class="w-28"><div class="item-bar"><div class="item-bar-fill ${it.is_dir ? '' : 'file'}" style="width:${width}%"></div></div></td>
+                        <td class="item-size">${humanize(it.size)}</td>
+                    </tr>
+                `);
+            }
+            list.innerHTML = `
+                <table class="disk-table">
+                    <thead><tr>
+                        <th class="w-10"></th>
+                        <th>Name</th>
+                        <th class="w-28">Share</th>
+                        <th class="w-24 text-right">Size</th>
+                    </tr></thead>
+                    <tbody>${rows.join('')}</tbody>
+                </table>
+            `;
+            lucide.createIcons();
+        }
+
+        // Attribute-escaper for values placed inside a double-quoted
+        // HTML attribute as a single-quoted JS string
+        // (onclick="navigateTo('…')"). Escaping only quotes is NOT
+        // enough: an unescaped `"` breaks out of the attribute
+        // entirely (stored XSS via a crafted filename), and `&`/`<`
+        // need entity-encoding first so the decoded JS string stays
+        // intact. `\'` survives HTML parsing untouched and escapes
+        // the quote for the JS layer.
+        function escapeAttr(s) {
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/'/g, "\\'");
+        }
+
+        function renderLargest() {
+            const wrap = document.getElementById('largest-list');
+            const items = (currentData && currentData.largest) || [];
+            if (!items.length) {
+                wrap.innerHTML = '<div class="empty-state">No items yet.</div>';
+                return;
+            }
+            const rows = items.map((it, idx) => {
+                const icon = it.is_dir ? 'folder' : 'file';
+                const onclick = it.is_dir ? `onclick="navigateTo('${escapeAttr(it.path)}')"` : '';
+                return `
+                    <tr ${onclick}>
+                        <td class="w-10 text-right text-xs font-mono text-[var(--text-muted)]">${idx + 1}</td>
+                        <td class="item-name" title="${escapeHtml(it.name)}"><i data-lucide="${icon}" class="w-3 h-3 inline ${it.is_dir ? 'text-[var(--accent-blue)]' : 'text-[var(--accent-purple)]'}"></i> ${escapeHtml(it.name)}</td>
+                        <td class="item-size">${humanize(it.size)}</td>
+                    </tr>
+                `;
+            }).join('');
+            wrap.innerHTML = `
+                <table class="disk-table">
+                    <thead><tr>
+                        <th class="w-10 text-right">#</th>
+                        <th>Name</th>
+                        <th class="w-24 text-right">Size</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+            lucide.createIcons();
+        }
+
+        window.addEventListener('resize', () => {
+            if (currentData) renderTreemap();
+        });
+
+        lucide.createIcons();
+        changeDepth(1);
+    </script>
+</body>
+</html>

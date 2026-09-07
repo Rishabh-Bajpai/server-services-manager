@@ -1,0 +1,748 @@
+{# -----------------------------------------------------------------
+   Shared UI macros. Every page in the app imports this file and
+   uses the `header` macro to render its top navigation bar so
+   the look is identical across pages (logo, page icon, title,
+   global nav, optional badge, action buttons).
+
+   The header now embeds a global navigation bar with all the
+   primary app pages, so from any route the user can go to
+   any other route with a single click. The current page is
+   marked active. The bar collapses to a hamburger menu on
+   mobile, just like the dashboard.
+
+   Usage in a page template:
+
+     {% import "_macros.html" as ui %}
+     {% set actions %}
+       <button class="btn" onclick="loadList()">Refresh</button>
+     {% endset %}
+     {{ ui.header(
+         title="SSH Keys",
+         icon="key-round",
+         icon_color="var(--accent-purple)",
+         badge_id="count-badge",
+         actions=actions,
+         current='/ssh',
+     ) }}
+
+   Parameters:
+     title        - the page name shown after the icon
+     icon         - lucide icon name
+     icon_color   - CSS color (any valid value)
+     badge_id     - optional id of a badge element rendered between
+                   the title and the action buttons (the page sets
+                   its content via setBadge())
+     actions      - HTML for the right-side buttons
+     current      - the path of the current page; used to mark
+                   the active nav pill. e.g. '/ssh'
+   ----------------------------------------------------------------- #}
+
+{# Single header macro. The shared style + script blocks live
+   INSIDE the macro so they're emitted at the call site (Jinja's
+   macro-scope rules mean a template-level {% set %} isn't visible
+   inside a {% macro %} body). Browsers handle duplicate
+   <style>/<script> tags fine; the styles are scoped to
+   .ui-nav-pill / .ui-nav-tile so they can't collide with
+   anything else. The {% raw %} wrapper is required so Jinja's
+   lexer doesn't choke on the {{ }} inside the JS. #}
+{% macro header(title, icon, icon_color, badge_id=None, badge_html='', actions='', current='', info='') %}<link rel="icon" type="image/svg+xml" href="/favicon.ico">{% raw %}<style>
+    .ui-nav-pill {
+        display: inline-flex; align-items: center; gap: 0.375rem;
+        padding: 0.375rem 0.75rem;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid var(--border-subtle);
+        border-radius: 0.5rem;
+        color: var(--text-secondary);
+        font-size: 0.8125rem; font-weight: 500;
+        transition: all 0.15s ease;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+    .ui-nav-pill:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+    .ui-nav-pill.active {
+        background: rgba(59,130,246,0.12);
+        border-color: rgba(59,130,246,0.35);
+        color: var(--accent-blue);
+    }
+    .ui-nav-tile {
+        display: flex; align-items: center; gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid var(--border-subtle);
+        border-radius: 0.5rem;
+        color: var(--text-primary);
+        font-size: 0.8125rem; font-weight: 500;
+        transition: background 0.15s ease;
+        cursor: pointer;
+        text-decoration: none;
+    }
+    .ui-nav-tile:hover { background: rgba(255,255,255,0.08); }
+    .ui-nav-tile.active {
+        background: rgba(59,130,246,0.15);
+        border-color: rgba(59,130,246,0.4);
+        color: var(--accent-blue);
+    }
+    .ui-more-dropdown-inner {
+        background: var(--bg-card);
+        border: 1px solid var(--border-subtle);
+        border-radius: 0.75rem;
+        padding: 0.375rem;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    }
+    .ui-more-item {
+        display: flex; align-items: center; gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        border-radius: 0.5rem;
+        color: var(--text-primary);
+        font-size: 0.8125rem;
+        font-weight: 500;
+        text-decoration: none;
+        white-space: nowrap;
+        transition: background 0.1s ease;
+    }
+    .ui-more-item:hover { background: rgba(255,255,255,0.06); }
+    .ui-more-item.active { background: rgba(59,130,246,0.15); color: var(--accent-blue); }
+    .ui-modal-overlay {
+        position: fixed; inset: 0; z-index: 60;
+        background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+        display: none; align-items: center; justify-content: center;
+    }
+    .ui-modal-overlay.open { display: flex; }
+    .ui-modal-box {
+        background: var(--bg-card); border: 1px solid var(--border-subtle);
+        border-radius: 0.75rem; padding: 1.5rem;
+        max-width: 28rem; width: 90%;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    }
+    .ui-modal-title { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem; }
+    .ui-modal-desc { font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 1.25rem; line-height: 1.5; }
+    .ui-modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+    .ui-btn {
+        padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+        font-size: 0.8125rem; font-weight: 600;
+        border: 1px solid var(--border-subtle);
+        background: var(--bg-secondary); color: var(--text-primary);
+        cursor: pointer; transition: all 0.15s ease;
+        display: inline-flex; align-items: center; gap: 0.375rem;
+    }
+    .ui-btn:hover { background: var(--border-subtle); }
+    .ui-btn-primary { background: var(--accent-blue); color: #fff; border-color: var(--accent-blue); }
+    .ui-btn-primary:hover { background: #2563eb; }
+    .ui-btn-danger { background: rgba(239,68,68,0.15); color: var(--accent-red); border-color: rgba(239,68,68,0.3); }
+    .ui-btn-danger:hover { background: rgba(239,68,68,0.25); }
+    .ui-modal-input {
+        width: 100%; background: var(--bg-secondary);
+        border: 1px solid var(--border-subtle); border-radius: 0.5rem;
+        padding: 0.5rem 0.875rem; margin-bottom: 1rem;
+        font-size: 0.875rem; color: var(--text-primary);
+        outline: none; transition: border-color 0.15s;
+        box-sizing: border-box;
+    }
+    .ui-modal-input:focus { border-color: var(--accent-blue); }
+
+    /* ============================================================
+       Shared design system. Every page imports this macro, so these
+       component classes are identical on every route. Pages may
+       define page-specific classes (charts, treemap, key rows, etc)
+       alongside them, but these names are canonical and emitted LAST
+       so they win the cascade and keep the whole app consistent.
+       ============================================================ */
+    @keyframes ui-fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes ui-spin { to { transform: rotate(360deg); } }
+
+    .badge {
+        display: inline-flex; align-items: center; gap: 0.25rem;
+        padding: 0.125rem 0.5rem; border-radius: 0.375rem;
+        font-size: 0.6875rem; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.04em;
+        white-space: nowrap;
+    }
+    .badge-green { background: rgba(16,185,129,0.12); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.25); }
+    .badge-red { background: rgba(239,68,68,0.12); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.25); }
+    .badge-blue { background: rgba(59,130,246,0.12); color: var(--accent-blue); border: 1px solid rgba(59,130,246,0.25); }
+    .badge-yellow { background: rgba(245,158,11,0.12); color: var(--accent-yellow); border: 1px solid rgba(245,158,11,0.25); }
+    .badge-purple { background: rgba(139,92,246,0.12); color: var(--accent-purple); border: 1px solid rgba(139,92,246,0.25); }
+    .badge-cyan { background: rgba(6,182,212,0.12); color: var(--accent-cyan); border: 1px solid rgba(6,182,212,0.25); }
+    .badge-orange { background: rgba(249,115,22,0.12); color: var(--accent-orange); border: 1px solid rgba(249,115,22,0.25); }
+    .badge-gray { background: rgba(100,116,139,0.12); color: var(--text-secondary); border: 1px solid rgba(100,116,139,0.25); }
+
+    .btn, .refresh-btn {
+        display: inline-flex; align-items: center; gap: 0.375rem;
+        padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+        font-size: 0.8125rem; font-weight: 600;
+        background: var(--bg-secondary); border: 1px solid var(--border-subtle);
+        color: var(--text-primary); cursor: pointer;
+        transition: all 0.15s ease; text-decoration: none;
+        white-space: nowrap; line-height: 1.25rem;
+    }
+    .btn:hover, .refresh-btn:hover { background: var(--border-subtle); color: var(--text-primary); }
+    .btn:disabled, .refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: var(--accent-blue); color: #fff; border-color: var(--accent-blue); }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-success { background: rgba(16,185,129,0.15); color: var(--accent-green); border-color: rgba(16,185,129,0.3); }
+    .btn-success:hover { background: rgba(16,185,129,0.25); }
+    .btn-danger { background: rgba(239,68,68,0.15); color: var(--accent-red); border-color: rgba(239,68,68,0.3); }
+    .btn-danger:hover { background: rgba(239,68,68,0.25); }
+    .modal-actions .btn-primary { background: var(--accent-blue); color: #fff; }
+    .modal-actions .btn-primary:hover { background: #2563eb; }
+
+    .panel-card {
+        background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 0.75rem;
+    }
+
+    .status-card {
+        background: var(--bg-card); border: 1px solid var(--border-subtle);
+        border-radius: 0.75rem; padding: 1rem 1.25rem;
+        display: flex; flex-direction: column; gap: 0.25rem;
+    }
+    .status-card .label { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+    .status-card .value { font-size: 1.5rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+
+    .summary-card {
+        background: var(--bg-card); border: 1px solid var(--border-subtle);
+        border-radius: 0.75rem; padding: 1rem 1.25rem;
+        display: flex; flex-direction: column; gap: 0.25rem;
+    }
+    .summary-value { font-size: 1.5rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+    .summary-label { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+
+    .filter-tab {
+        padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+        font-size: 0.8125rem; font-weight: 600;
+        color: var(--text-secondary); background: transparent;
+        border: 1px solid var(--border-subtle);
+        cursor: pointer; transition: all 0.15s ease;
+        display: inline-flex; align-items: center; gap: 0.375rem;
+        white-space: nowrap;
+    }
+    .filter-tab:hover { background: rgba(255,255,255,0.04); color: var(--text-primary); }
+    .filter-tab.active { background: rgba(59,130,246,0.12); color: var(--accent-blue); border-color: rgba(59,130,246,0.35); }
+
+    .search-input {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-subtle);
+        border-radius: 0.5rem;
+        padding: 0.5rem 0.875rem 0.5rem 2.25rem;
+        color: var(--text-primary);
+        font-size: 0.8125rem; outline: none;
+        transition: border-color 0.15s, background 0.15s;
+        width: 100%; min-width: 0;
+    }
+    .search-input::placeholder { color: var(--text-muted); }
+    .search-input:focus { border-color: var(--accent-blue); background: var(--bg-card); }
+    .select-input, .text-input, .textarea-input {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-subtle);
+        border-radius: 0.5rem;
+        padding: 0.5rem 0.875rem;
+        color: var(--text-primary);
+        font-size: 0.8125rem; outline: none;
+        transition: border-color 0.15s; width: 100%;
+    }
+    .select-input:focus, .text-input:focus, .textarea-input:focus { border-color: var(--accent-blue); }
+    .textarea-input { resize: vertical; min-height: 100px; line-height: 1.5; }
+
+    .data-table, .events-table, .jobs-table, .units-table {
+        width: 100%; table-layout: fixed; border-collapse: collapse;
+        /* NOTE: no min-width here on purpose. Each page sets its
+           own table min-width (560/640px) so narrow screens get a
+           horizontal scroll inside .table-wrap/.table-scroll.
+           A min-width: 0 here would win the cascade (these styles
+           are emitted last) and squeeze columns to zero width. */
+    }
+    .data-table th, .events-table th, .jobs-table th, .units-table th {
+        text-align: left; font-size: 0.6875rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.05em;
+        color: var(--text-muted); padding: 0.625rem 0.875rem;
+        background: var(--bg-secondary);
+        border-bottom: 1px solid var(--border-subtle);
+    }
+    .data-table td, .events-table td, .jobs-table td, .units-table td {
+        padding: 0.625rem 0.875rem;
+        border-bottom: 1px solid var(--border-subtle);
+        font-size: 0.8125rem; color: var(--text-primary);
+        vertical-align: middle;
+    }
+    .data-table tbody tr:last-child td, .events-table tbody tr:last-child td,
+    .jobs-table tbody tr:last-child td, .units-table tbody tr:last-child td { border-bottom: none; }
+    .data-table tbody tr:hover td, .events-table tbody tr:hover td,
+    .jobs-table tbody tr:hover td, .units-table tbody tr:hover td { background: rgba(255,255,255,0.02); }
+
+    .tab-button, .tab-btn {
+        padding: 0.5rem 0.875rem; font-size: 0.8125rem; font-weight: 600;
+        color: var(--text-secondary); background: transparent; border: none;
+        border-bottom: 2px solid transparent; cursor: pointer;
+        transition: all 0.15s ease;
+        display: inline-flex; align-items: center; gap: 0.375rem;
+    }
+    .tab-button:hover, .tab-btn:hover { color: var(--text-primary); }
+    .tab-button.active, .tab-btn.active { color: var(--accent-blue); border-bottom-color: var(--accent-blue); }
+
+    .empty-state {
+        text-align: center; padding: 3rem 1.5rem;
+        color: var(--text-muted);
+    }
+
+    .toast-container {
+        position: fixed; top: 1rem; right: 1rem;
+        z-index: 100; display: flex; flex-direction: column; gap: 0.5rem;
+        pointer-events: none;
+    }
+    .toast {
+        background: var(--bg-card); border: 1px solid var(--border-subtle);
+        border-radius: 0.5rem; padding: 0.75rem 1rem; font-size: 0.8125rem;
+        color: var(--text-primary); pointer-events: auto;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        animation: ui-fade-in 0.2s ease-out;
+    }
+    .toast.success { border-left: 3px solid var(--accent-green); }
+    .toast.error { border-left: 3px solid var(--accent-red); }
+    .toast.info { border-left: 3px solid var(--accent-blue); }
+
+    .modal-backdrop {
+        position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+        backdrop-filter: blur(4px); z-index: 100;
+        display: none; align-items: center; justify-content: center;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal-card, .modal {
+        background: var(--bg-card); border: 1px solid var(--border-subtle);
+        border-radius: 0.75rem; padding: 1.5rem;
+        max-width: 28rem; width: 90%;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    }
+
+    .row-action-btn {
+        width: 28px; height: 28px;
+        display: inline-flex; align-items: center; justify-content: center;
+        border-radius: 0.375rem;
+        background: rgba(255,255,255,0.04);
+        color: var(--text-secondary);
+        border: 1px solid transparent;
+        cursor: pointer; transition: all 0.15s ease;
+        flex-shrink: 0;
+    }
+    .row-action-btn:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+    .row-action-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .spinner {
+        display: inline-block; width: 14px; height: 14px;
+        border: 2px solid rgba(255,255,255,0.15);
+        border-top-color: currentColor; border-radius: 50%;
+        animation: ui-spin 0.6s linear infinite;
+    }
+</style>
+<script>
+    // Shared nav mobile-menu toggle. Bound to the hamburger
+    // button in the header macro. Closes on any tile click or
+    // outside click.
+    window.uiToggleMobileMenu = function(force) {
+        var menu = document.getElementById('ui-mobile-menu');
+        if (!menu) return;
+        var willShow = force === true || (force === undefined && menu.classList.contains('hidden'));
+        menu.classList.toggle('hidden', !willShow);
+        var btn = document.getElementById('ui-menu-btn');
+        if (btn) {
+            var icon = btn.querySelector('[data-lucide]');
+            if (icon) {
+                icon.setAttribute('data-lucide', willShow ? 'x' : 'menu');
+                if (window.lucide) lucide.createIcons();
+            }
+        }
+        if (willShow && window.lucide) lucide.createIcons();
+    };
+    // "More" dropdown toggle for the desktop nav overflow
+    window.uiToggleMore = function() {
+        var dd = document.getElementById('ui-more-dropdown');
+        if (!dd) return;
+        dd.classList.toggle('hidden');
+        var pill = document.getElementById('ui-nav-more-pill');
+        if (pill) {
+            var icon = pill.querySelector('[data-lucide]');
+            if (icon) {
+                var showing = !dd.classList.contains('hidden');
+                icon.setAttribute('data-lucide', showing ? 'chevron-up' : 'chevron-down');
+                if (window.lucide) lucide.createIcons();
+            }
+        }
+    };
+    document.addEventListener('click', function(e) {
+        // Close "More" dropdown on outside click
+        var more = document.getElementById('ui-more-dropdown');
+        if (more && !more.classList.contains('hidden')) {
+            if (!e.target.closest('#ui-nav-more')) {
+                more.classList.add('hidden');
+                var pill = document.getElementById('ui-nav-more-pill');
+                if (pill) {
+                    var icon = pill.querySelector('[data-lucide]');
+                    if (icon) icon.setAttribute('data-lucide', 'chevron-down');
+                }
+                if (window.lucide) lucide.createIcons();
+            }
+        }
+        // Mobile menu close on tile click or outside click
+        var menu = document.getElementById('ui-mobile-menu');
+        if (!menu || menu.classList.contains('hidden')) return;
+        if (e.target.closest('.ui-nav-tile')) {
+            window.uiToggleMobileMenu(false);
+        } else if (!e.target.closest('#ui-mobile-menu') && !e.target.closest('#ui-menu-btn')) {
+            window.uiToggleMobileMenu(false);
+        }
+    });
+    // Shared confirm/alert modal
+    window.uiConfirm = function(title, desc, danger) {
+        return new Promise(function(resolve) {
+            var overlay = document.getElementById('ui-modal');
+            if (!overlay) { resolve(false); return; }
+            overlay.querySelector('.ui-modal-title').textContent = title;
+            overlay.querySelector('.ui-modal-desc').textContent = desc || '';
+            var pwd = overlay.querySelector('#ui-modal-password');
+            if (pwd) pwd.style.display = 'none';
+            var actions = overlay.querySelector('.ui-modal-actions');
+            actions.innerHTML = '';
+            var cancelBtn = document.createElement('button');
+            cancelBtn.className = 'ui-btn';
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.onclick = function() { overlay.classList.remove('open'); resolve(false); };
+            actions.appendChild(cancelBtn);
+            var okBtn = document.createElement('button');
+            okBtn.className = 'ui-btn' + (danger ? ' ui-btn-danger' : ' ui-btn-primary');
+            okBtn.textContent = danger ? 'Confirm' : 'OK';
+            okBtn.onclick = function() { overlay.classList.remove('open'); resolve(true); };
+            actions.appendChild(okBtn);
+            overlay._resolve = resolve;
+            overlay._cancelValue = false;
+            overlay.classList.add('open');
+            cancelBtn.focus();
+        });
+    };
+     window.uiAlert = function(title, desc) {
+        return window.uiConfirm(title, desc, false).then(function() {});
+    };
+    // Per-page "what is this?" explainer. Each page stores its copy
+    // in a hidden #ui-page-info div (rendered by the header macro
+    // from the page's `info=` argument); this shows it in the shared
+    // modal with a single OK button. Content is author-written
+    // static HTML from the template — never user data.
+    window.uiShowInfo = function() {
+        return new Promise(function(resolve) {
+            var overlay = document.getElementById('ui-modal');
+            var src = document.getElementById('ui-page-info');
+            if (!overlay || !src) { resolve(false); return; }
+            var title = overlay.getAttribute('data-page-title')
+                || document.title.replace(/ - Server Services Manager$/, '');
+            overlay.querySelector('.ui-modal-title').textContent = title;
+            overlay.querySelector('.ui-modal-desc').innerHTML = src.innerHTML;
+            var pwd = overlay.querySelector('#ui-modal-password');
+            if (pwd) pwd.style.display = 'none';
+            var actions = overlay.querySelector('.ui-modal-actions');
+            actions.innerHTML = '';
+            var okBtn = document.createElement('button');
+            okBtn.className = 'ui-btn ui-btn-primary';
+            okBtn.textContent = 'Got it';
+            okBtn.onclick = function() { overlay.classList.remove('open'); resolve(true); };
+            actions.appendChild(okBtn);
+            overlay._resolve = resolve;
+            overlay._cancelValue = true;
+            overlay.classList.add('open');
+            okBtn.focus();
+        });
+    };
+    // Shared password prompt modal (replaces native window.prompt()
+    // for sudo/app-password entry so the UX matches every page).
+    // Resolves with the typed password, or null if cancelled/closed.
+    window.uiPromptPassword = function(title, desc, confirmLabel) {
+        return new Promise(function(resolve) {
+            var overlay = document.getElementById('ui-modal');
+            if (!overlay) { resolve(null); return; }
+            overlay.querySelector('.ui-modal-title').textContent = title;
+            overlay.querySelector('.ui-modal-desc').textContent = desc || '';
+            var pwd = overlay.querySelector('#ui-modal-password');
+            if (pwd) { pwd.style.display = 'block'; pwd.value = ''; }
+            var actions = overlay.querySelector('.ui-modal-actions');
+            actions.innerHTML = '';
+            var cancelBtn = document.createElement('button');
+            cancelBtn.className = 'ui-btn';
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.onclick = function() { overlay.classList.remove('open'); resolve(null); };
+            actions.appendChild(cancelBtn);
+            var okBtn = document.createElement('button');
+            okBtn.className = 'ui-btn ui-btn-primary';
+            okBtn.textContent = confirmLabel || 'Confirm';
+            okBtn.onclick = function() {
+                var val = pwd ? pwd.value : '';
+                overlay.classList.remove('open');
+                resolve(val);
+            };
+            actions.appendChild(okBtn);
+            overlay._resolve = resolve;
+            overlay._cancelValue = null;
+            overlay.classList.add('open');
+            setTimeout(function() { if (pwd) pwd.focus(); }, 50);
+        });
+    };
+    document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Enter') return;
+        var overlay = document.getElementById('ui-modal');
+        if (!overlay || !overlay.classList.contains('open')) return;
+        if (e.target && e.target.id === 'ui-modal-password') {
+            var ok = overlay.querySelector('.ui-modal-actions .ui-btn-primary');
+            if (ok) ok.click();
+        }
+    });
+    // Close shared confirm/modal on Escape
+    document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Escape') return;
+        var overlay = document.getElementById('ui-modal');
+        if (overlay && overlay.classList.contains('open')) {
+            overlay.classList.remove('open');
+            // resolve pending promise if any is waiting - remove open will cause next uiConfirm to create new
+            // For already-open promise, we dispatch a cancel by clicking cancel
+            var cancelBtn = overlay.querySelector('.ui-btn');
+            if (cancelBtn) cancelBtn.click();
+        }
+    });
+</script>{% endraw %}<div id="ui-modal" class="ui-modal-overlay" onclick="if(event.target===this){var b=this.querySelector('.ui-btn');if(b)b.click();this.classList.remove('open');}">
+    <div class="ui-modal-box">
+        <div class="ui-modal-title"></div>
+        <div class="ui-modal-desc"></div>
+        <input type="password" id="ui-modal-password" class="ui-modal-input" autocomplete="off" style="display:none" aria-label="Password">
+        <div class="ui-modal-actions"></div>
+    </div>
+</div>
+<header class="border-b border-[var(--border-subtle)] bg-[var(--bg-card)] sticky top-0 z-30 h-14">
+    {# NOTE: solid bg, not bg-[var(--bg-card)]/60. The Tailwind CDN emits
+       an invalid color for opacity modifiers on var() colors, which
+       computed to fully transparent — page content showed through the
+       sticky header and the mobile menu was unreadable. #}
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-full flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3 shrink-0 min-w-0">
+            <button onclick="uiToggleMobileMenu()" class="xl:hidden p-2 -ml-2 rounded-lg hover:bg-white/5 text-[var(--text-secondary)] cursor-pointer" style="touch-action:manipulation;min-width:40px;min-height:40px;display:inline-flex;align-items:center;justify-content:center" title="Menu" aria-label="Toggle menu" id="ui-menu-btn">
+                {# NOTE: no ontouchstart here on purpose. HTML lowercases
+                   onTouchStart into a real touchstart listener, so a tap
+                   fired the toggle twice (touchstart opens, synthesized
+                   click closes) and the menu only stayed open on
+                   long-press. onclick alone is correct on mobile. #}
+                <i data-lucide="menu" class="w-5 h-5"></i>
+            </button>
+            <a href="/" class="flex items-center gap-2 shrink-0" title="Server Services Manager">
+                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20 flex-shrink-0 overflow-hidden">
+                    <img src="/favicon.ico" alt="SSM" class="w-8 h-8">
+                </div>
+                <span class="hidden sm:inline text-base font-semibold tracking-tight bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent whitespace-nowrap">SSM</span>
+            </a>
+            <span class="text-[var(--border-active)] hidden sm:inline">/</span>
+            <div class="flex items-center gap-1.5 shrink-0">
+                <i data-lucide="{{ icon }}" class="w-5 h-5 flex-shrink-0"
+                   style="color: {{ icon_color }}"></i>
+                <h1 class="text-sm sm:text-[15px] font-semibold whitespace-nowrap">{{ title }}</h1>
+                {% if badge_id %}
+                <span id="{{ badge_id }}" class="hidden sm:inline-flex badge badge-gray">…</span>
+                {% elif badge_html %}
+                <span class="hidden sm:inline-flex">{{ badge_html|safe }}</span>
+                {% endif %}
+            </div>
+        </div>
+        <div id="ui-nav-bar" class="hidden xl:flex items-center gap-1.5 flex-1 justify-center mx-4">
+            {{ _ui_nav_primary(current) }}
+            {% set more_active = current in ['/control','/cron','/notifications','/disk','/cluster','/plugins','/config','/alerts','/packages','/backups','/firewall','/logs','/code'] %}
+            <div id="ui-nav-more" class="relative shrink-0">
+                <div id="ui-nav-more-pill" class="ui-nav-pill cursor-pointer select-none {{ 'active' if more_active else '' }}" onclick="uiToggleMore()" title="More pages">
+                    <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                    <span>More</span>
+                </div>
+                <div id="ui-more-dropdown" class="hidden absolute right-0 top-full mt-2 z-40" style="min-width: 200px;">
+                    <div class="ui-more-dropdown-inner flex flex-col gap-0.5">
+                        {{ _ui_nav_more_items(current) }}
+                        <hr class="border-[var(--border-subtle)] my-1">
+                        <a href="/docs/" target="_blank" rel="noopener" class="ui-more-item">
+                            <i data-lucide="book-open" class="w-4 h-4"></i>API Docs
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <a href="/logout" class="ui-nav-pill !text-[var(--text-muted)] hover:!text-[var(--accent-red)] hover:!border-[var(--accent-red)]/30 shrink-0" title="Logout">
+                <i data-lucide="log-out" class="w-4 h-4"></i><span class="hidden xl:inline">Logout</span>
+            </a>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+            {% if info %}
+            <button onclick="uiShowInfo()" class="p-2 -m-1 rounded-lg hover:bg-white/5 text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer" style="touch-action:manipulation;min-width:36px;min-height:36px;display:inline-flex;align-items:center;justify-content:center" title="What is this page?" aria-label="About this page">
+                <i data-lucide="info" class="w-5 h-5"></i>
+            </button>
+            {% endif %}
+            {{ actions|safe }}
+        </div>
+        </div>
+    {# Mobile slide-down menu (mirrors the desktop nav) #}
+    <div id="ui-mobile-menu" class="xl:hidden hidden border-t border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 py-3 animate-fade-in">
+        <div class="grid grid-cols-3 sm:grid-cols-4 gap-2">
+            {{ _ui_nav_primary(current, mobile=True) }}
+            {{ _ui_nav_more_items(current, mobile=True) }}
+            <a href="/docs/" target="_blank" rel="noopener" class="ui-nav-tile">
+                <i data-lucide="book-open" class="w-4 h-4"></i>API Docs
+            </a>
+            <a href="/logout" class="ui-nav-tile text-[var(--accent-red)] border-[var(--accent-red)]/30">
+                <i data-lucide="log-out" class="w-4 h-4"></i>Logout
+            </a>
+        </div>
+    </div>
+</header>
+{% if info %}<div id="ui-page-info" style="display:none">{{ info|safe }}</div>{% endif %}
+{% endmacro %}
+
+
+{# Second, route-specific subheader band. Sits directly under the
+   fixed header (sticky at top-14) and holds the page's tools —
+   filter tabs, search boxes, selects, refresh buttons, breadcrumbs
+   and page-level action buttons — so the main header stays clean and
+   identical on every route while each page's controls live in one
+   consistent strip.
+
+   Usage:
+
+     {% set subheader %}
+       <input id="q" class="search-input" placeholder="Filter…">
+       <button class="btn" onclick="reload()">Refresh</button>
+     {% endset %}
+     {{ ui.subheader(subheader) }}
+
+   The strip wraps on narrow screens and its inputs/buttons use the
+   shared component classes, so it looks the same everywhere. #}
+{% macro subheader(children='') %}
+<header class="ui-subheader sticky top-14 z-20 border-b border-[var(--border-subtle)] bg-[var(--bg-card)]">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex flex-wrap items-center gap-2">
+        {{ children|safe }}
+    </div>
+</header>
+<style>
+    .ui-subheader .search-input,
+    .ui-subheader .select-input,
+    .ui-subheader .text-input { width: auto; }
+    .ui-subheader .filter-tab,
+    .ui-subheader .btn,
+    .ui-subheader .refresh-btn,
+    .ui-subheader .tab-button,
+    .ui-subheader .tab-btn { flex-shrink: 0; }
+</style>
+{% endmacro %}
+
+
+{# Dismissible "best on desktop" banner for routes that are
+   inherently desktop-class (e.g. the VS Code iframe, which needs
+   keyboard + precision pointer). Shown only on narrow screens,
+   dismissible per page (localStorage), desktop never sees it.
+
+   Usage:  {{ ui.desktop_notice('code', 'VS Code needs a keyboard and a wide screen. For the best view, use a computer — this page stays usable for quick peeks.') }} #}
+{% macro desktop_notice(page, text) %}
+<div class="ui-desktop-notice hidden" data-desktop-notice="{{ page }}"
+     style="background:rgba(245,158,11,0.08);border-bottom:1px solid rgba(245,158,11,0.3);">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-2 flex items-start gap-2 text-xs text-[var(--text-secondary)]">
+        <i data-lucide="monitor-smartphone" class="w-4 h-4 flex-shrink-0 mt-px text-[var(--accent-yellow)]"></i>
+        <span class="flex-1 leading-relaxed">{{ text }}</span>
+        <button onclick="uiDismissDesktopNotice('{{ page }}')" class="flex-shrink-0 p-1 -m-1 rounded hover:bg-white/5 text-[var(--text-muted)]" title="Dismiss" aria-label="Dismiss">
+            <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+    </div>
+</div>
+{% raw %}<script>
+    window.uiDismissDesktopNotice = function(page) {
+        try { localStorage.setItem('ssm-desktop-notice-' + page, '1'); } catch (e) {}
+        var el = document.querySelector('[data-desktop-notice="' + page + '"]');
+        if (el) el.classList.add('hidden');
+    };
+    (function() {
+        document.querySelectorAll('[data-desktop-notice]').forEach(function(el) {
+            var page = el.getAttribute('data-desktop-notice');
+            var dismissed = false;
+            try { dismissed = localStorage.getItem('ssm-desktop-notice-' + page) === '1'; } catch (e) {}
+            // Narrow screens only (below the lg breakpoint); desktop never sees it.
+            if (!dismissed && window.matchMedia('(max-width: 1023px)').matches) {
+                el.classList.remove('hidden');
+            }
+        });
+        if (window.lucide) lucide.createIcons();
+    })();
+</script>{% endraw %}
+{% endmacro %}
+
+
+{# Renders a single nav item as a pill. Same DOM for both the
+   desktop bar and the mobile menu — styling is controlled by
+   .ui-nav-pill / .ui-nav-tile (defined in the page that imports
+   this macro). #}
+{% macro _ui_nav_item(href, icon, label, current, mobile=False) -%}
+{%- if href == current -%}
+<a href="{{ href }}" class="ui-nav-{{ 'tile' if mobile else 'pill' }} active" data-key="{{ label|lower }}">
+{%- else -%}
+<a href="{{ href }}" class="ui-nav-{{ 'tile' if mobile else 'pill' }}" data-key="{{ label|lower }}">
+{%- endif -%}
+    <i data-lucide="{{ icon }}" class="w-4 h-4 flex-shrink-0"></i>
+    <span class="{{ '' if mobile else 'hidden xl:inline' }}">{{ label }}</span>
+</a>
+{%- endmacro %}
+
+
+{# Renders the 7 primary nav items (always visible on desktop). #}
+{% macro _ui_nav_primary(current, mobile=False) %}
+    {{ _ui_nav_item('/',                 'layout-dashboard', 'Dashboard',  current, mobile) }}
+    {{ _ui_nav_item('/monitor',          'activity',         'Monitor',    current, mobile) }}
+    {{ _ui_nav_item('/system-services',  'server-cog',       'System',     current, mobile) }}
+    {{ _ui_nav_item('/docker',           'container',        'Docker',     current, mobile) }}
+    {{ _ui_nav_item('/ssh',              'key-round',        'SSH',        current, mobile) }}
+    {{ _ui_nav_item('/files',            'folder-open',      'Files',      current, mobile) }}
+    {{ _ui_nav_item('/activity',         'history',          'Activity',   current, mobile) }}
+{% endmacro %}
+
+{# Renders a single dropdown item in the "More" menu (desktop only). #}
+{% macro _ui_more_item(href, icon, label, current) -%}
+<a href="{{ href }}" class="ui-more-item{{ ' active' if href == current else '' }}">
+    <i data-lucide="{{ icon }}" class="w-4 h-4"></i>{{ label }}
+</a>
+{%- endmacro %}
+
+{# Renders the overflow nav items for the "More" dropdown (desktop)
+   or as tiles in the mobile slide-down menu. #}
+{% macro _ui_nav_more_items(current, mobile=False) %}
+{% set items = [
+    ('/control', 'gamepad-2', 'Control'),
+    ('/cron', 'calendar-clock', 'Cron'),
+    ('/notifications', 'bell-ring', 'Health & Notifications'),
+    ('/disk', 'pie-chart', 'Disk'),
+    ('/cluster', 'network', 'Cluster'),
+    ('/plugins', 'plug', 'Plugins'),
+    ('/config', 'file-cog', 'Config'),
+    ('/alerts', 'megaphone', 'Alerts'),
+    ('/packages', 'package', 'Packages'),
+    ('/backups', 'archive', 'Backups'),
+    ('/firewall', 'shield', 'Firewall'),
+    ('/logs', 'file-text', 'Logs'),
+    ('/code', 'code', 'VS Code'),
+] %}
+{% for href, icon, label in items %}
+    {% if mobile %}
+        {{ _ui_nav_item(href, icon, label, current, True) }}
+    {% else %}
+        {{ _ui_more_item(href, icon, label, current) }}
+    {% endif %}
+{% endfor %}
+{% endmacro %}
+
+
+{# Renders the page-level "scanning…" / "loading" indicator strip
+   used by pages whose backend may take a few seconds to respond
+   (disk usage, file tree, etc). Page just calls
+   setScanning(true|false) to toggle. #}
+{% macro scanning_strip() %}
+<div id="scanning-strip" class="hidden items-center gap-2 text-xs text-[var(--text-muted)] panel-card px-3 py-2">
+    <i data-lucide="loader" class="w-3.5 h-3.5 animate-spin"></i>
+    <span>scanning…</span>
+</div>
+{% endmacro %}
+
+
+{# A small page-level banner that pages can populate with arbitrary
+   HTML via setBanner() (warnings, info, errors, etc). #}
+{% macro banner() %}
+<div id="page-banner"></div>
+{% endmacro %}

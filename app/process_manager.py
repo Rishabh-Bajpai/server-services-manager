@@ -36,6 +36,10 @@ class ProgramConfig:
     cwd: str
     autostart: bool = False
     environment: Dict[str, str] = field(default_factory=dict)
+    # If set, the program runs on a systemd timer (scheduled task)
+    # instead of as a long-lived service. Format is a systemd
+    # OnCalendar= expression (e.g. "hourly", "*-*-* *:00/15").
+    schedule: str = ""
 
 class Program:
     def __init__(self, config: ProgramConfig):
@@ -50,6 +54,27 @@ class Program:
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
         self._monitor_thread: Optional[threading.Thread] = None
+        # Hook called whenever the program transitions to a new
+        # status. The signature is (program, old_status, new_status).
+        # It is fired on every transition, including STOPPED->RUNNING,
+        # RUNNING->FAILED, and re-attaches. Set externally so
+        # notification wiring lives in server.py / notifier.py
+        # without importing process_manager from there.
+        self.on_state_change = None  # type: ignore
+
+    def _set_status(self, new_status: ProgramStatus) -> None:
+        """Update status and fire the state-change hook if it moved."""
+        old = self.status
+        if old == new_status:
+            return
+        with self._lock:
+            self.status = new_status
+        hook = self.on_state_change
+        if hook:
+            try:
+                hook(self, old, new_status)
+            except Exception as e:  # never let a hook break the program
+                logger.error(f"state-change hook error: {e}")
 
     def start(self):
         with self._lock:
@@ -77,17 +102,16 @@ class Program:
                 bufsize=1
             )
             with self._lock:
-                self.status = ProgramStatus.RUNNING
                 self.last_restart_time = time.time()
-            
+            self._set_status(ProgramStatus.RUNNING)
+
             self._monitor_thread = threading.Thread(target=self._monitor, daemon=True)
             self._monitor_thread.start()
             logger.info(f"Started {self.config.name} with PID {self.process.pid}")
 
         except Exception as e:
             logger.error(f"Failed to start {self.config.name}: {e}")
-            with self._lock:
-                self.status = ProgramStatus.FAILED
+            self._set_status(ProgramStatus.FAILED)
             self.log(f"Error starting program: {e}")
 
     def _get_pid(self) -> Optional[int]:
@@ -139,14 +163,14 @@ class Program:
         with self._lock:
             self.process = None
             self._attached_pid = None
-            self.status = ProgramStatus.STOPPED
             self.restart_count = 0
+        self._set_status(ProgramStatus.STOPPED)
         logger.info(f"Stopped {self.config.name}")
 
     def attach(self, pid: int):
         self._attached_pid = pid
         self._stop_event.clear()
-        self.status = ProgramStatus.RUNNING
+        self._set_status(ProgramStatus.RUNNING)
         self.log(f"Re-attached to running process (PID: {pid})")
         self._monitor_thread = threading.Thread(target=self._monitor_attached, daemon=True)
         self._monitor_thread.start()
@@ -186,22 +210,21 @@ class Program:
 
         code = self.process.returncode
         logger.info(f"{self.config.name} exited with code {code}")
-        
+
         if self._stop_event.is_set():
-            self.status = ProgramStatus.STOPPED
+            self._set_status(ProgramStatus.STOPPED)
             return
 
-        self.status = ProgramStatus.FAILED
+        self._set_status(ProgramStatus.FAILED)
         self.log(f"Process exited with code {code}")
-        
+
         # Auto-restart logic
         self._handle_restart()
 
     def _monitor_attached(self):
         while self.status == ProgramStatus.RUNNING:
             if self._stop_event.is_set():
-                with self._lock:
-                    self.status = ProgramStatus.STOPPED
+                self._set_status(ProgramStatus.STOPPED)
                 return
             pid = self._attached_pid
             if pid is None or not self._is_pid_alive(pid):
@@ -210,8 +233,8 @@ class Program:
                 except OSError:
                     pass
                 with self._lock:
-                    self.status = ProgramStatus.FAILED
                     self._attached_pid = None
+                self._set_status(ProgramStatus.FAILED)
                 self.log(f"Process exited (PID: {pid})")
                 self._handle_restart()
                 return
@@ -248,6 +271,15 @@ class Program:
 
     def log(self, message: str):
         self.logs.append(message)
+        # Best-effort tail persistence: write to a per-service log
+        # file. Reading is done on demand via :func:`read_persisted_log`.
+        # Failures here are silent — logging is best-effort.
+        try:
+            from app.log_persistence import append_line
+            append_line(self.config.name, message)
+        except Exception:
+            pass
+
 
 class ProcessManager:
     STATE_DIR = os.path.expanduser("~/.server-services-manager")
@@ -272,6 +304,7 @@ class ProcessManager:
                 command=p_conf['command'],
                 cwd=p_conf['cwd'],
                 autostart=p_conf.get('autostart', False),
+                schedule=p_conf.get('schedule', ''),
                 environment=p_conf.get('environment', {})
             )
             self.programs[config.name] = Program(config)
@@ -343,7 +376,7 @@ class ProcessManager:
     def add_program(self, config: ProgramConfig):
         if config.name in self.programs:
             raise ValueError(f"Program {config.name} already exists")
-        
+
         self.programs[config.name] = Program(config)
         self._save_program_config(config)
 
@@ -370,6 +403,7 @@ class ProcessManager:
                         'command': config.command,
                         'cwd': config.cwd,
                         'autostart': config.autostart,
+                        'schedule': config.schedule,
                         'environment': config.environment
                     }
                     break
@@ -393,6 +427,7 @@ class ProcessManager:
             'command': config.command,
             'cwd': config.cwd,
             'autostart': config.autostart,
+            'schedule': config.schedule,
             'environment': config.environment
         }
         

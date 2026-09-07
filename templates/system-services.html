@@ -1,0 +1,1719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Services - Server Services Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --border-subtle: #1e1e2a;
+            --border-active: #2d2d3a;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --accent-orange: #f97316;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+
+        * { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        code, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+
+        body {
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(ellipse at top left, rgba(139, 92, 246, 0.04) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(59, 130, 246, 0.04) 0%, transparent 50%);
+        }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        @keyframes toastIn { from { opacity: 0; transform: translateY(-10px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes toastOut { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(-10px) scale(0.95); } }
+        @keyframes flash-update { 0% { background: rgba(59, 130, 246, 0.15); } 100% { background: transparent; } }
+
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        .animate-slide-up { animation: slideUp 0.4s ease-out forwards; }
+        .animate-slide-in-right { animation: slideInRight 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+        .row-flash { animation: flash-update 0.8s ease-out; }
+
+        .state-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            display: inline-block; flex-shrink: 0;
+        }
+        .state-running { background: var(--accent-green); box-shadow: 0 0 8px rgba(16, 185, 129, 0.6); }
+        .state-stopped { background: var(--text-muted); }
+        .state-failed { background: var(--accent-red); box-shadow: 0 0 8px rgba(239, 68, 68, 0.5); }
+        .state-waiting { background: var(--accent-yellow); box-shadow: 0 0 8px rgba(245, 158, 11, 0.5); }
+        .state-static { background: var(--accent-purple); }
+
+        .badge {
+            display: inline-flex; align-items: center; gap: 0.25rem;
+            padding: 0.125rem 0.5rem; border-radius: 0.375rem;
+            font-size: 0.6875rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .badge-green { background: rgba(16,185,129,0.12); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.25); }
+        .badge-red { background: rgba(239,68,68,0.12); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.25); }
+        .badge-yellow { background: rgba(245,158,11,0.12); color: var(--accent-yellow); border: 1px solid rgba(245,158,11,0.25); }
+        .badge-blue { background: rgba(59,130,246,0.12); color: var(--accent-blue); border: 1px solid rgba(59,130,246,0.25); }
+        .badge-purple { background: rgba(139,92,246,0.12); color: var(--accent-purple); border: 1px solid rgba(139,92,246,0.25); }
+        .badge-gray { background: rgba(100,116,139,0.12); color: var(--text-secondary); border: 1px solid rgba(100,116,139,0.25); }
+
+        .filter-tab {
+            padding: 0.5rem 0.875rem;
+            border-radius: 0.5rem;
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            background: transparent;
+            border: 1px solid var(--border-subtle);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+        .filter-tab:hover { background: rgba(255,255,255,0.04); color: var(--text-primary); }
+        .filter-tab.active { background: rgba(139,92,246,0.12); color: var(--accent-purple); border-color: rgba(139,92,246,0.35); }
+
+        .row-action-btn {
+            width: 28px; height: 28px;
+            display: inline-flex; align-items: center; justify-content: center;
+            border-radius: 0.375rem;
+            background: rgba(255,255,255,0.04);
+            color: var(--text-secondary);
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .row-action-btn:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+        .row-action-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+        .row-action-btn.start:hover { background: rgba(16,185,129,0.15); color: var(--accent-green); }
+        .row-action-btn.stop:hover { background: rgba(239,68,68,0.15); color: var(--accent-red); }
+        .row-action-btn.restart:hover { background: rgba(59,130,246,0.15); color: var(--accent-blue); }
+
+        .search-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.5rem 0.875rem 0.5rem 2.25rem;
+            color: var(--text-primary);
+            font-size: 0.8125rem;
+            outline: none;
+            transition: border-color 0.15s, background 0.15s;
+            width: 100%;
+            min-width: 200px;
+        }
+        .search-input::placeholder { color: var(--text-muted); }
+        .search-input:focus { border-color: var(--accent-purple); background: var(--bg-card); }
+
+        .table-wrap {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            overflow: hidden;
+        }
+
+        .units-table { width: 100%; min-width: 640px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+        .units-table thead th {
+            text-align: left;
+            font-size: 0.6875rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-muted);
+            padding: 0.75rem 1rem;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-subtle);
+            position: sticky; top: 0; z-index: 2;
+            user-select: none;
+        }
+        .units-table tbody tr {
+            cursor: pointer;
+            transition: background 0.1s ease;
+        }
+        .units-table tbody tr:hover { background: rgba(255,255,255,0.025); }
+        .units-table tbody td {
+            padding: 0.625rem 1rem;
+            border-bottom: 1px solid var(--border-subtle);
+            font-size: 0.8125rem;
+            color: var(--text-primary);
+            vertical-align: middle;
+        }
+        .units-table tbody tr:last-child td { border-bottom: none; }
+
+        .table-scroll { max-height: calc(100dvh - 250px); min-height: 240px; overflow-y: auto; overflow-x: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+        @media (max-width: 640px) { .table-scroll { max-height: calc(100dvh - 300px); } }
+
+        .side-panel {
+            position: fixed; top: 0; right: 0; bottom: 0;
+            width: 100%; max-width: 640px;
+            background: var(--bg-card);
+            border-left: 1px solid var(--border-subtle);
+            z-index: 40;
+            display: flex; flex-direction: column;
+            transform: translateX(100%);
+            transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .side-panel.open { transform: translateX(0); }
+        .side-panel-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(4px);
+            z-index: 39;
+            display: none;
+        }
+        .side-panel-overlay.open { display: block; }
+
+        .panel-section { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-subtle); }
+        .panel-section:last-child { border-bottom: none; }
+        .panel-label {
+            font-size: 0.6875rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 0.5rem;
+        }
+
+        .tab-btn {
+            padding: 0.625rem 1rem;
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .tab-btn:hover { color: var(--text-primary); }
+        .tab-btn.active { color: var(--accent-purple); border-bottom-color: var(--accent-purple); }
+
+        .editor {
+            background: #050508;
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            line-height: 1.6;
+            color: var(--text-primary);
+            width: 100%;
+            resize: vertical;
+            outline: none;
+            white-space: pre;
+            overflow: auto;
+        }
+        .editor:focus { border-color: var(--accent-purple); }
+
+        .logs-view {
+            background: #050508;
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            line-height: 1.55;
+            color: var(--text-secondary);
+            max-height: 50vh;
+            overflow: auto;
+            white-space: pre;
+        }
+        .logs-view .log-line { padding: 0.0625rem 0; }
+
+        .meta-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 1.25rem;
+        }
+        .meta-item { display: flex; flex-direction: column; gap: 0.125rem; min-width: 0; }
+        .meta-key { font-size: 0.6875rem; color: var(--text-muted); font-weight: 500; }
+        .meta-val { font-size: 0.8125rem; color: var(--text-primary); word-break: break-all; }
+
+        .modal-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.65);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 60;
+            padding: 1rem;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 1.25rem;
+            padding: 1.5rem;
+            width: 100%;
+            max-width: 28rem;
+            box-shadow: 0 20px 60px -12px rgba(0,0,0,0.5);
+            animation: slideUp 0.25s ease-out;
+        }
+        .modal-box h2 { font-size: 1.125rem; font-weight: 700; margin-bottom: 0.5rem; }
+        .modal-box p { font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1rem; }
+        .modal-box input[type="password"], .modal-box input[type="text"] {
+            width: 100%;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            padding: 0.75rem 1rem;
+            font-size: 0.875rem;
+            color: var(--text-primary);
+            outline: none;
+            transition: border-color 0.2s;
+            margin-bottom: 1rem;
+        }
+        .modal-box input:focus { border-color: var(--accent-purple); }
+        .modal-actions { display: flex; flex-direction: column; gap: 0.75rem; }
+        @media (min-width: 480px) { .modal-actions { flex-direction: row; } }
+        .modal-actions button {
+            flex: 1; padding: 0.75rem; border-radius: 0.75rem;
+            font-size: 0.875rem; font-weight: 600; border: none;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .modal-actions .btn-cancel { background: rgba(255,255,255,0.06); color: var(--text-secondary); }
+        .modal-actions .btn-cancel:hover { background: rgba(255,255,255,0.1); }
+        .modal-actions .btn-primary { background: var(--accent-purple); color: white; }
+        .modal-actions .btn-primary:hover { background: #7c3aed; }
+        .modal-actions .btn-danger { background: var(--accent-red); color: white; }
+        .modal-actions .btn-danger:hover { background: #dc2626; }
+        .modal-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        #toast-container {
+            position: fixed; top: 1rem; right: 1rem; z-index: 100;
+            display: flex; flex-direction: column; gap: 0.5rem; pointer-events: none;
+        }
+        .toast {
+            padding: 0.75rem 1.25rem; border-radius: 0.75rem;
+            font-size: 0.8125rem; font-weight: 500; pointer-events: auto;
+            animation: toastIn 0.25s ease-out;
+            max-width: 24rem;
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: 0 8px 24px -8px rgba(0,0,0,0.4);
+        }
+        .toast.success { background: rgba(16,185,129,0.92); color: white; }
+        .toast.error { background: rgba(239,68,68,0.92); color: white; }
+        .toast.info { background: rgba(59,130,246,0.92); color: white; }
+        .toast.out { animation: toastOut 0.2s ease-in forwards; }
+
+        .empty-state {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 4rem 1rem; color: var(--text-muted); text-align: center;
+        }
+        .empty-state .icon { opacity: 0.4; margin-bottom: 1rem; }
+
+        .spinner {
+            display: inline-block; width: 14px; height: 14px;
+            border: 2px solid rgba(255,255,255,0.15);
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+
+        .refresh-btn {
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            padding: 0.5rem 0.875rem;
+            border-radius: 0.5rem;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-secondary);
+            font-size: 0.8125rem; font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .refresh-btn:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+        .refresh-btn.loading .icon { animation: spin 0.8s linear infinite; }
+        .refresh-btn .icon { transition: transform 0.3s; }
+        .refresh-btn.paused { border-color: rgba(245,158,11,0.4); color: var(--accent-yellow); }
+
+        .row-check { accent-color: var(--accent-purple); width: 0.875rem; height: 0.875rem; cursor: pointer; vertical-align: middle; }
+
+        .graph-legend { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.5rem; font-size: 10px; color: var(--text-muted); font-weight: 500; }
+        .graph-legend .key { display: inline-flex; align-items: center; gap: 0.375rem; }
+        .graph-legend .swatch { display: inline-block; width: 22px; height: 0; border-top: 2px solid #3b82f6; }
+        .graph-legend .swatch.wants { border-top: 2px dashed #8b5cf6; }
+        .graph-legend .swatch.order { border-top: 2px dotted #64748b; }
+
+        .logs-filter {
+            background: var(--bg-secondary); border: 1px solid var(--border-subtle);
+            border-radius: 0.375rem; padding: 0.25rem 0.5rem; font-size: 11px;
+            color: var(--text-primary); outline: none; width: 9rem;
+        }
+        .logs-filter:focus { border-color: var(--accent-purple); }
+        .log-line.filtered-out { display: none; }
+        .log-line mark { background: rgba(245,158,11,0.35); color: inherit; border-radius: 2px; padding: 0 1px; }
+    </style>
+</head>
+<body class="bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-screen">
+
+    {% import "_macros.html" as ui %}
+{% set actions %}
+{% endset %}
+{% set page_info %}
+        <p style="margin-bottom:0.75rem">Every background piece of the operating system — services, timers, sockets — in one searchable list. These are <strong>the machine's own programs</strong>, separate from the ones on your Dashboard.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li>Click a row to open details: status, what it depends on, its settings file, and <strong>live logs</strong>.</li>
+            <li><strong>Start / stop / restart</strong> and on/off-at-boot switches work here. Changing things asks for your password — looking never does.</li>
+            <li>Ticking checkboxes selects several units so you can act on all of them at once.</li>
+        </ul>
+        {% endset %}
+{{ ui.header(
+            title="System Services",
+            icon="server-cog",
+            icon_color="var(--accent-purple)",
+            actions=actions,
+            current='/system-services',
+            info=page_info,
+        ) }}
+{% set subheader %}
+        <div id="type-tabs" class="flex flex-wrap items-center gap-1.5">
+            <button class="filter-tab active" data-type="all" title="Show all unit types"><i data-lucide="layers" class="w-3.5 h-3.5"></i><span>All</span></button>
+            <button class="filter-tab" data-type="service" title="Show services only"><i data-lucide="cog" class="w-3.5 h-3.5"></i><span>Service</span></button>
+            <button class="filter-tab" data-type="timer" title="Show timers only"><i data-lucide="timer" class="w-3.5 h-3.5"></i><span>Timer</span></button>
+            <button class="filter-tab" data-type="socket" title="Show sockets only"><i data-lucide="plug" class="w-3.5 h-3.5"></i><span>Socket</span></button>
+            <button class="filter-tab" data-type="path" title="Show path units only"><i data-lucide="file-search" class="w-3.5 h-3.5"></i><span>Path</span></button>
+            <button class="filter-tab" data-type="mount" title="Show mounts only"><i data-lucide="hard-drive" class="w-3.5 h-3.5"></i><span>Mount</span></button>
+        </div>
+        <div id="state-tabs" class="flex flex-wrap items-center gap-1.5">
+            <button class="filter-tab active" data-state="all" title="Show units in any state">All</button>
+            <button class="filter-tab" data-state="active" title="Show active units only"><span class="state-dot state-running"></span><span>Active</span></button>
+            <button class="filter-tab" data-state="running" title="Show running units only"><span class="state-dot state-running"></span><span>Running</span></button>
+            <button class="filter-tab" data-state="inactive" title="Show inactive units only"><span class="state-dot state-stopped"></span><span>Inactive</span></button>
+            <button class="filter-tab" data-state="static" title="Show static units only"><span class="state-dot state-static"></span><span>Static</span></button>
+            <button class="filter-tab" data-state="failed" title="Show failed units only"><span class="state-dot state-failed"></span><span>Failed</span></button>
+        </div>
+        <div class="relative flex-1 min-w-[12rem]">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"></i>
+            <input id="search-input" type="text" placeholder="Search units by name or description…" class="search-input" autocomplete="off">
+        </div>
+        <button id="failed-chip" class="filter-tab" style="display:none;border-color:rgba(239,68,68,0.4);color:var(--accent-red)" title="Show failed units">
+            <span class="state-dot state-failed"></span><span id="failed-chip-text">0 failed</span>
+        </button>
+        <span id="count-display" class="text-xs text-[var(--text-muted)] font-medium whitespace-nowrap px-2"></span>
+        <button id="live-btn" class="refresh-btn" title="Pause live auto-refresh (keeps rows clickable)">
+            <i data-lucide="pause" class="w-3.5 h-3.5 icon"></i>
+            <span class="hidden sm:inline" id="live-btn-label">Live</span>
+        </button>
+    {% endset %}
+    {{ ui.subheader(subheader) }}
+<main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6">
+        <!-- Bulk action bar (visible when rows are selected) -->
+        <div id="bulk-bar" class="animate-fade-in" style="display:none;align-items:center;gap:0.5rem;margin-bottom:0.75rem;padding:0.625rem 0.875rem;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.3);border-radius:0.75rem;font-size:0.8125rem">
+            <span id="bulk-count" class="font-semibold text-[var(--accent-purple)] whitespace-nowrap">0 selected</span>
+            <span style="flex:1"></span>
+            <button class="row-action-btn" style="height:auto;padding:0.375rem 0.625rem;width:auto;display:inline-flex;gap:0.375rem" onclick="bulkAction('start')" title="Start selected"><i data-lucide="play" class="w-3.5 h-3.5"></i><span class="text-xs">Start</span></button>
+            <button class="row-action-btn" style="height:auto;padding:0.375rem 0.625rem;width:auto;display:inline-flex;gap:0.375rem" onclick="bulkAction('stop')" title="Stop selected"><i data-lucide="square" class="w-3.5 h-3.5"></i><span class="text-xs">Stop</span></button>
+            <button class="row-action-btn restart" style="height:auto;padding:0.375rem 0.625rem;width:auto;display:inline-flex;gap:0.375rem" onclick="bulkAction('restart')" title="Restart selected"><i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i><span class="text-xs">Restart</span></button>
+            <button class="row-action-btn" style="height:auto;padding:0.375rem 0.625rem;width:auto;display:inline-flex;gap:0.375rem" onclick="bulkAction('enable')" title="Enable selected at boot"><i data-lucide="check-circle" class="w-3.5 h-3.5"></i><span class="text-xs">Enable</span></button>
+            <button class="row-action-btn" style="height:auto;padding:0.375rem 0.625rem;width:auto;display:inline-flex;gap:0.375rem" onclick="bulkAction('disable')" title="Disable selected at boot"><i data-lucide="circle" class="w-3.5 h-3.5"></i><span class="text-xs">Disable</span></button>
+            <button class="row-action-btn" style="height:auto;padding:0.375rem 0.625rem;width:auto;display:inline-flex;gap:0.375rem" onclick="clearSelection()" title="Clear selection"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+        </div>
+        <!-- Table -->
+        <div class="table-wrap animate-fade-in">
+            <div class="table-scroll">
+                <table class="units-table">
+                    <thead>
+                        <tr>
+                            <th style="width:36px" onclick="event.stopPropagation()"><input type="checkbox" id="select-all" class="row-check" title="Select all visible rows"></th>
+                            <th style="width:32px"></th>
+                            <th style="width:26%">Name</th>
+                            <th style="width:110px">State</th>
+                            <th>Description</th>
+                            <th style="width:80px" class="hidden sm:table-cell">PID</th>
+                            <th style="width:110px" class="hidden md:table-cell">Enabled</th>
+                            <th style="width:142px" class="text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="units-tbody"></tbody>
+                </table>
+            </div>
+            <div id="empty-state" class="empty-state" style="display:none">
+                <i data-lucide="inbox" class="w-12 h-12 icon"></i>
+                <p class="text-sm font-medium">No units match your filters</p>
+                <p class="text-xs mt-1">Try a different type or search term</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Side Panel -->
+    <div id="panel-overlay" class="side-panel-overlay"></div>
+    <aside id="side-panel" class="side-panel" aria-hidden="true">
+        <div class="flex items-center justify-between p-4 border-b border-[var(--border-subtle)]">
+            <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                    <span id="panel-state-dot" class="state-dot"></span>
+                    <h2 id="panel-name" class="text-base font-bold font-mono truncate"></h2>
+                </div>
+                <p id="panel-description" class="text-xs text-[var(--text-muted)] line-clamp-2"></p>
+            </div>
+            <button onclick="closePanel()" class="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-[var(--text-muted)] hover:bg-white/10 hover:text-[var(--text-primary)] transition-all flex-shrink-0 ml-2" title="Close">
+                <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+        </div>
+
+        <div class="flex items-center gap-1 px-4 border-b border-[var(--border-subtle)] overflow-x-auto">
+            <button class="tab-btn active" data-tab="overview" title="Status, actions, and key details">Overview</button>
+            <button class="tab-btn" data-tab="dependencies" title="What this unit needs, and what needs it">Dependencies</button>
+            <button class="tab-btn" data-tab="unit-file" title="The unit's settings file">Unit File</button>
+            <button class="tab-btn" data-tab="logs" title="Live log output for this unit">Logs</button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto">
+            <!-- Overview tab -->
+            <div id="tab-overview" class="tab-pane">
+                <div class="panel-section">
+                    <div class="flex flex-wrap items-center gap-1.5 mb-3">
+                        <span id="panel-badge-state" class="badge"></span>
+                        <span id="panel-badge-enabled" class="badge"></span>
+                        <span id="panel-badge-override" class="badge badge-purple" style="display:none">override</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button id="btn-start" onclick="handleAction('start')" title="Start this unit now" class="row-action-btn start" style="height:auto;padding:0.5rem;width:auto;display:inline-flex;gap:0.375rem">
+                            <i data-lucide="play" class="w-3.5 h-3.5"></i><span>Start</span>
+                        </button>
+                        <button id="btn-stop" onclick="handleAction('stop')" title="Stop this unit now" class="row-action-btn stop" style="height:auto;padding:0.5rem;width:auto;display:inline-flex;gap:0.375rem">
+                            <i data-lucide="square" class="w-3.5 h-3.5"></i><span>Stop</span>
+                        </button>
+                        <button id="btn-restart" onclick="handleAction('restart')" title="Restart this unit now" class="row-action-btn restart" style="height:auto;padding:0.5rem;width:auto;display:inline-flex;gap:0.375rem">
+                            <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i><span>Restart</span>
+                        </button>
+                        <button id="btn-reload" onclick="handleAction('reload')" title="Reload this unit's settings without stopping it" class="row-action-btn" style="height:auto;padding:0.5rem;width:auto;display:inline-flex;gap:0.375rem">
+                            <i data-lucide="refresh-ccw" class="w-3.5 h-3.5"></i><span>Reload</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="panel-section">
+                    <div class="panel-label">Details</div>
+                    <div id="panel-meta" class="meta-grid"></div>
+                </div>
+                <div class="panel-section">
+                    <div class="panel-label">Toggle at boot</div>
+                    <div class="flex items-center gap-2">
+                        <button id="btn-enable" onclick="handleAction('enable')" title="Start this unit automatically at boot" class="row-action-btn" style="height:auto;padding:0.5rem 0.75rem;width:auto;display:inline-flex;gap:0.375rem">
+                            <i data-lucide="check" class="w-3.5 h-3.5"></i><span>Enable</span>
+                        </button>
+                        <button id="btn-disable" onclick="handleAction('disable')" title="Do not start this unit at boot" class="row-action-btn" style="height:auto;padding:0.5rem 0.75rem;width:auto;display:inline-flex;gap:0.375rem">
+                            <i data-lucide="x" class="w-3.5 h-3.5"></i><span>Disable</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="panel-section">
+                    <div class="panel-label">Mask <span class="text-[10px] text-[var(--text-muted)] font-normal">(prevent any start)</span></div>
+                    <div class="flex items-center gap-2">
+                        <button id="btn-mask" onclick="handleAction('mask')" class="row-action-btn" style="height:auto;padding:0.5rem 0.75rem;width:auto;display:inline-flex;gap:0.375rem;color:var(--accent-red)" title="Mask this unit (link to /dev/null)">
+                            <i data-lucide="eye-off" class="w-3.5 h-3.5"></i><span>Mask</span>
+                        </button>
+                        <button id="btn-unmask" onclick="handleAction('unmask')" class="row-action-btn" style="height:auto;padding:0.5rem 0.75rem;width:auto;display:inline-flex;gap:0.375rem" title="Remove the mask link">
+                            <i data-lucide="eye" class="w-3.5 h-3.5"></i><span>Unmask</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Unit File tab -->
+            <div id="tab-unit-file" class="tab-pane" style="display:none">
+                <div class="panel-section">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="panel-label" style="margin-bottom:0">Rendered unit file</div>
+                        <div class="flex items-center gap-1">
+                            <button onclick="reloadUnitFile()" class="row-action-btn" style="height:auto;padding:0.375rem 0.625rem;width:auto;display:inline-flex;gap:0.375rem" title="Reload from disk">
+                                <i data-lucide="refresh-ccw" class="w-3.5 h-3.5"></i>
+                            </button>
+                            <button onclick="openEditModal()" class="row-action-btn" style="height:auto;padding:0.375rem 0.625rem;width:auto;display:inline-flex;gap:0.375rem;color:var(--accent-purple)" title="Edit drop-in">
+                                <i data-lucide="edit-3" class="w-3.5 h-3.5"></i><span class="text-xs">Edit</span>
+                            </button>
+                        </div>
+                    </div>
+                    <p class="text-xs text-[var(--text-muted)] mb-2">Drop-in overrides live at <code class="font-mono text-[var(--accent-purple)]">/etc/systemd/system/&lt;name&gt;.d/99-manager.conf</code></p>
+                    <pre id="unit-file-content" class="editor" style="max-height:50vh;overflow:auto;white-space:pre;font-family:'JetBrains Mono',monospace"></pre>
+                </div>
+            </div>
+
+            <!-- Dependencies tab -->
+            <div id="tab-dependencies" class="tab-pane" style="display:none">
+                <div class="panel-section">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="panel-label" style="margin-bottom:0">Dependency graph</div>
+                        <div class="flex items-center gap-1">
+                            <select id="graph-depth" title="How many dependency levels to show" class="text-xs bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-md px-2 py-1 text-[var(--text-primary)] outline-none">
+                                <option value="1">depth 1</option>
+                                <option value="2" selected>depth 2</option>
+                                <option value="3">depth 3</option>
+                            </select>
+                            <button onclick="loadGraph()" class="row-action-btn" style="height:auto;padding:0.375rem 0.625rem;width:auto;display:inline-flex;gap:0.375rem" title="Reload">
+                                <i data-lucide="refresh-ccw" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <p class="text-xs text-[var(--text-muted)] mb-2">Hover a node to see its edges. Missing units are shown with a dashed border.</p>
+                    <div class="graph-legend">
+                        <span class="key"><span class="swatch"></span>Requires</span>
+                        <span class="key"><span class="swatch wants"></span>Wants</span>
+                        <span class="key"><span class="swatch order"></span>After / Before</span>
+                    </div>
+                    <div id="graph-canvas" style="background:#050508;border:1px solid var(--border-subtle);border-radius:0.5rem;padding:1rem;min-height:300px;overflow:auto;position:relative">
+                        <div class="empty-state" id="graph-empty" style="color:var(--text-muted);text-align:center;padding:2rem">Loading…</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Logs tab -->
+            <div id="tab-logs" class="tab-pane" style="display:none">
+                <div class="panel-section">
+                    <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+                        <div class="panel-label" style="margin-bottom:0">Recent logs</div>
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <select id="log-lines" class="text-xs bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-md px-2 py-1 text-[var(--text-primary)] outline-none" title="History lines">
+                                <option value="50">50 lines</option>
+                                <option value="100" selected>100 lines</option>
+                                <option value="500">500 lines</option>
+                                <option value="2000">2000 lines</option>
+                            </select>
+                            <select id="log-priority" class="text-xs bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-md px-2 py-1 text-[var(--text-primary)] outline-none" title="Minimum priority">
+                                <option value="emerg">emerg</option>
+                                <option value="alert">alert</option>
+                                <option value="crit">crit</option>
+                                <option value="err">err</option>
+                                <option value="warning">warning</option>
+                                <option value="notice">notice</option>
+                                <option value="info" selected>info</option>
+                                <option value="debug">debug</option>
+                            </select>
+                            <button id="log-stream-btn" onclick="toggleLogStream()" class="row-action-btn" style="height:auto;padding:0.375rem 0.625rem;width:auto;display:inline-flex;gap:0.375rem" title="Toggle live stream">
+                                <i data-lucide="play" class="w-3.5 h-3.5"></i>
+                                <span class="text-xs" id="log-stream-label">Stream</span>
+                            </button>
+                            <button id="log-clear-btn" onclick="clearLogsView()" class="row-action-btn" style="height:auto;padding:0.375rem 0.625rem;width:auto;display:inline-flex;gap:0.375rem" title="Clear view">
+                                <i data-lucide="eraser" class="w-3.5 h-3.5"></i>
+                            </button>
+                            <button onclick="loadLogs()" class="row-action-btn" style="height:auto;padding:0.375rem 0.625rem;width:auto;display:inline-flex;gap:0.375rem" title="Reload from disk">
+                                <i data-lucide="refresh-ccw" class="w-3.5 h-3.5"></i>
+                            </button>
+                            <input id="log-filter" class="logs-filter" type="text" placeholder="Filter lines…" autocomplete="off" title="Show only matching lines (highlights the match)">
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3 mb-2 text-[10px] text-[var(--text-muted)] font-medium">
+                        <span id="log-stream-status" class="flex items-center gap-1">
+                            <span class="w-1.5 h-1.5 rounded-full bg-[var(--text-muted)]"></span>
+                            <span>idle</span>
+                        </span>
+                        <label class="flex items-center gap-1 cursor-pointer">
+                            <input type="checkbox" id="log-autoscroll" checked class="accent-[var(--accent-purple)]">
+                            <span>follow tail</span>
+                        </label>
+                        <span id="log-line-count">0 lines</span>
+                    </div>
+                    <div id="logs-content" class="logs-view"></div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Auth modal -->
+    <div class="modal-overlay" id="auth-modal" onclick="if(event.target===this) closeAuth()">
+        <div class="modal-box">
+            <h2 id="auth-title">Sudo password required</h2>
+            <p id="auth-message">Enter your sudo password (not the app login) to perform this action.</p>
+            <input type="password" id="auth-password" placeholder="Sudo password..." autocomplete="off">
+            <p id="auth-error" class="text-xs text-[var(--accent-red)] mb-2" style="display:none"></p>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeAuth()" title="Close without doing anything">Cancel</button>
+                <button class="btn-primary" id="auth-execute" title="Run with the entered password">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit modal -->
+    <div class="modal-overlay" id="edit-modal" onclick="if(event.target===this) closeEdit()">
+        <div class="modal-box" style="max-width:48rem;max-height:90vh;display:flex;flex-direction:column;padding:1.25rem">
+            <h2>Edit unit drop-in</h2>
+            <p class="text-xs text-[var(--text-muted)] mb-2">Saves to <code class="font-mono text-[var(--accent-purple)]" id="edit-target-path"></code></p>
+            <textarea id="edit-content" class="editor" style="flex:1;min-height:200px;margin-bottom:1rem"></textarea>
+            <input type="password" id="edit-password" placeholder="Sudo password to save..." autocomplete="off">
+            <p id="edit-error" class="text-xs text-[var(--accent-red)] mb-2" style="display:none"></p>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeEdit()" title="Close without saving">Cancel</button>
+                <button class="btn-primary" id="edit-save" title="Save settings and reload the unit">Save &amp; reload</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script>
+        lucide.createIcons();
+
+        // State
+        let allUnits = [];
+        let currentUnit = null;
+        let pendingAction = null;
+        let activeTab = 'overview';
+
+        const filters = { type: 'all', state: 'all', search: '' };
+
+        function $(id) { return document.getElementById(id); }
+        function el(tag, attrs = {}, ...children) {
+            const e = document.createElement(tag);
+            for (const [k, v] of Object.entries(attrs)) {
+                if (k === 'class') e.className = v;
+                else if (k === 'onclick') e.onclick = v;
+                else if (k === 'html') e.innerHTML = v;
+                else e.setAttribute(k, v);
+            }
+            for (const c of children) e.append(c);
+            return e;
+        }
+
+        function toast(message, type) {
+            const container = $('toast-container');
+            const t = el('div', { class: 'toast ' + (type || 'info') }, message);
+            container.appendChild(t);
+            setTimeout(() => {
+                t.classList.add('out');
+                setTimeout(() => t.remove(), 200);
+            }, 3000);
+        }
+
+        // ----- Filtering / rendering -----
+        function stateClassFor(unit) {
+            if (unit.is_failed) return 'state-failed';
+            if (unit.is_running) return 'state-running';
+            if (unit.active_state === 'active') return 'state-waiting';
+            if (unit.unit_file_state === 'static') return 'state-static';
+            return 'state-stopped';
+        }
+
+        function stateBadge(unit) {
+            if (unit.is_failed) return `<span class="badge badge-red">failed</span>`;
+            if (unit.is_running) return `<span class="badge badge-green">running</span>`;
+            if (unit.active_state === 'active') return `<span class="badge badge-yellow">${escapeHtml(unit.sub_state || 'active')}</span>`;
+            if (unit.unit_file_state === 'static') return `<span class="badge badge-purple">static</span>`;
+            if (unit.active_state === 'inactive') return `<span class="badge badge-gray">inactive</span>`;
+            return `<span class="badge badge-gray">${escapeHtml(unit.active_state || 'unknown')}</span>`;
+        }
+
+        function escapeHtml(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        // Row selection for bulk actions (survives re-renders via names).
+        const selectedUnits = new Set();
+        function toggleSelect(name, box) {
+            if (box.checked) selectedUnits.add(name);
+            else selectedUnits.delete(name);
+            syncBulkBar();
+        }
+        function clearSelection() {
+            selectedUnits.clear();
+            document.querySelectorAll('.row-select').forEach(b => { b.checked = false; });
+            syncBulkBar();
+        }
+        function syncBulkBar() {
+            const bar = $('bulk-bar');
+            const n = selectedUnits.size;
+            bar.style.display = n > 0 ? 'flex' : 'none';
+            $('bulk-count').textContent = `${n} selected`;
+            const visible = [...document.querySelectorAll('.row-select')];
+            const all = $('select-all');
+            if (all) {
+                all.checked = visible.length > 0 && visible.every(b => b.checked);
+            }
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+        function renderTable() {
+            const tbody = $('units-tbody');
+            const empty = $('empty-state');
+            const q = filters.search.toLowerCase();
+            const rows = [];
+            for (const u of allUnits) {
+                if (filters.type !== 'all' && u.type !== filters.type) continue;
+                // 'running' and 'static' have no server-side state param,
+                // so they filter client-side (server returns everything).
+                if (filters.state === 'running' && !u.is_running) continue;
+                if (filters.state === 'static' && u.unit_file_state !== 'static') continue;
+                if (q && !u.name.toLowerCase().includes(q) &&
+                    !(u.description || '').toLowerCase().includes(q)) continue;
+                rows.push(u);
+            }
+            // Failed-attention chip (counts across all units, not the filter).
+            const failedN = allUnits.filter(u => u.is_failed).length;
+            $('failed-chip').style.display = failedN > 0 ? 'inline-flex' : 'none';
+            $('failed-chip-text').textContent = `${failedN} failed`;
+            $('count-display').textContent =
+                rows.length === allUnits.length
+                    ? `${allUnits.length} units`
+                    : `${rows.length} / ${allUnits.length} units`;
+
+            if (rows.length === 0) {
+                tbody.innerHTML = '';
+                empty.style.display = 'flex';
+                return;
+            }
+            empty.style.display = 'none';
+
+            // Build via documentFragment for speed on long lists
+            const frag = document.createDocumentFragment();
+            for (const u of rows) {
+                const tr = el('tr', {
+                    onclick: () => openPanel(u.name),
+                    'data-name': u.name,
+                });
+                tr.innerHTML = `
+                    <td onclick="event.stopPropagation()"><input type="checkbox" class="row-check row-select" data-name="${escapeHtml(u.name)}" ${selectedUnits.has(u.name) ? 'checked' : ''} onchange="toggleSelect('${escapeHtml(u.name)}', this)" title="Select for bulk actions"></td>
+                    <td><span class="state-dot ${stateClassFor(u)}"></span></td>
+                    <td>
+                        <div class="font-mono text-[var(--text-primary)] font-semibold truncate" title="${escapeHtml(u.name)}">${escapeHtml(u.name)}</div>
+                        <div class="text-[10px] text-[var(--text-muted)] font-mono mt-0.5">${escapeHtml(u.type)}</div>
+                    </td>
+                    <td>${stateBadge(u)}</td>
+                    <td class="text-[var(--text-secondary)] truncate" style="max-width:0" title="${escapeHtml(u.description)}">${escapeHtml(u.description)}</td>
+                    <td class="hidden sm:table-cell font-mono text-xs text-[var(--text-muted)]">${u.main_pid ? u.main_pid : '—'}</td>
+                    <td class="hidden md:table-cell">${u.is_enabled ? '<span class="badge badge-blue">enabled</span>' : '<span class="badge badge-gray">disabled</span>'}</td>
+                    <td class="text-right whitespace-nowrap" onclick="event.stopPropagation()">
+                        <button class="row-action-btn start" onclick="rowAction(event, '${escapeHtml(u.name)}', 'start')" title="Start"><i data-lucide="play" class="w-3.5 h-3.5"></i></button>
+                        <button class="row-action-btn stop" onclick="rowAction(event, '${escapeHtml(u.name)}', 'stop')" title="Stop"><i data-lucide="square" class="w-3.5 h-3.5"></i></button>
+                        <button class="row-action-btn restart" onclick="rowAction(event, '${escapeHtml(u.name)}', 'restart')" title="Restart"><i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i></button>
+                        <button class="row-action-btn" onclick="rowAction(event, '${escapeHtml(u.name)}', u.is_enabled ? 'disable' : 'enable')" title="${u.is_enabled ? 'Disable at boot' : 'Enable at boot'}"><i data-lucide="${u.is_enabled ? 'check-circle' : 'circle'}" class="w-3.5 h-3.5"></i></button>
+                    </td>
+                `;
+                frag.appendChild(tr);
+            }
+            tbody.innerHTML = '';
+            tbody.appendChild(frag);
+            lucide.createIcons();
+            syncBulkBar();
+            const all = $('select-all');
+            if (all && !all.dataset.wired) {
+                all.dataset.wired = '1';
+                all.onchange = () => {
+                    document.querySelectorAll('.row-select').forEach(b => {
+                        b.checked = all.checked;
+                        if (all.checked) selectedUnits.add(b.dataset.name);
+                        else selectedUnits.delete(b.dataset.name);
+                    });
+                    syncBulkBar();
+                };
+            }
+        }
+
+        // ----- Loading -----
+        // Pause-live toggle: stops the 5s auto-refresh so rows stay
+        // clickable while interacting (the refresh button was removed
+        // in favor of this — refresh happens automatically when live).
+        let livePaused = false;
+        $('live-btn').onclick = () => {
+            livePaused = !livePaused;
+            const btn = $('live-btn');
+            btn.classList.toggle('paused', livePaused);
+            btn.querySelector('.icon').setAttribute('data-lucide', livePaused ? 'play' : 'pause');
+            $('live-btn-label').textContent = livePaused ? 'Paused' : 'Live';
+            btn.title = livePaused ? 'Resume live auto-refresh' : 'Pause live auto-refresh (keeps rows clickable)';
+            lucide.createIcons();
+            if (!livePaused) loadUnits(false);
+        };
+
+        async function loadUnits(showSpinner = true) {
+            try {
+                const params = new URLSearchParams();
+                // 'running'/'static' filter client-side; ask the server
+                // for everything in those cases.
+                if (filters.state !== 'all' && filters.state !== 'running' && filters.state !== 'static') {
+                    params.set('state', filters.state);
+                }
+                if (filters.search) params.set('q', filters.search);
+                const r = await fetch('/api/system-services?' + params.toString());
+                const data = await r.json();
+                if (!r.ok) {
+                    toast(data.error || 'Failed to load', 'error');
+                    return;
+                }
+                allUnits = data.units || [];
+                renderTable();
+                refreshOpenPanel();
+            } catch (e) {
+                toast('Network error: ' + e.message, 'error');
+            }
+        }
+
+        // Keep the open side panel fresh on each tick (Overview tab
+        // only — never disturb Logs/Graph/Unit-file views, modals,
+        // or error states).
+        async function refreshOpenPanel() {
+            if (!$('side-panel').classList.contains('open')) return;
+            if (!currentUnit || !currentUnit.name) return;
+            if (activeTab !== 'overview') return;
+            if ($('auth-modal').classList.contains('active')) return;
+            if ($('edit-modal').classList.contains('active')) return;
+            try {
+                const name = currentUnit.name;
+                const r = await fetch('/api/system-services/' + encodeURIComponent(name));
+                if (!r.ok) return;
+                const u = await r.json();
+                if (currentUnit && currentUnit.name === name && activeTab === 'overview') {
+                    populatePanel(u);
+                }
+            } catch (e) { /* next tick will retry */ }
+        }
+
+        // ----- Filters -----
+        document.querySelectorAll('#type-tabs .filter-tab').forEach(btn => {
+            btn.onclick = () => {
+                document.querySelectorAll('#type-tabs .filter-tab').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                filters.type = btn.dataset.type;
+                renderTable();
+            };
+        });
+        document.querySelectorAll('#state-tabs .filter-tab').forEach(btn => {
+            btn.onclick = () => {
+                document.querySelectorAll('#state-tabs .filter-tab').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                filters.state = btn.dataset.state;
+                loadUnits();
+            };
+        });
+
+        let searchDebounce = null;
+        $('search-input').addEventListener('input', (e) => {
+            filters.search = e.target.value;
+            clearTimeout(searchDebounce);
+            searchDebounce = setTimeout(() => renderTable(), 80);
+        });
+        // ----- Side panel -----
+        async function openPanel(name) {
+            currentUnit = name;
+            $('side-panel').classList.add('open');
+            $('panel-overlay').classList.add('open');
+            $('side-panel').setAttribute('aria-hidden', 'false');
+            $('panel-name').textContent = name;
+            $('panel-description').textContent = 'Loading…';
+            $('panel-meta').innerHTML = '<div class="col-span-2 text-xs text-[var(--text-muted)]">Loading…</div>';
+            switchTab('overview');
+
+            try {
+                const r = await fetch('/api/system-services/' + encodeURIComponent(name));
+                const u = await r.json();
+                if (!r.ok) {
+                    // Ghost entries (e.g. transient mount units) can appear
+                    // in list-units but fail `systemctl show`. Keep the
+                    // panel open with an inline error instead of slamming
+                    // it shut — the toast alone left users wondering.
+                    showPanelError(name, u.error || 'Failed to load unit');
+                    return;
+                }
+                populatePanel(u);
+            } catch (e) {
+                showPanelError(name, 'Network error: ' + e.message);
+            }
+        }
+
+        // Error state for the side panel: keeps it open on the Overview
+        // tab with an explanation and a Retry button.
+        function showPanelError(name, message) {
+            toast(message, 'error');
+            $('panel-description').textContent = message;
+            $('panel-state-dot').className = 'state-dot state-failed';
+            $('panel-badge-state').className = 'badge badge-red';
+            $('panel-badge-state').textContent = 'error';
+            $('panel-badge-enabled').className = 'badge badge-gray';
+            $('panel-badge-enabled').textContent = '—';
+            $('panel-badge-override').style.display = 'none';
+            for (const id of ['btn-start', 'btn-stop', 'btn-restart', 'btn-reload', 'btn-enable', 'btn-disable', 'btn-mask', 'btn-unmask']) {
+                $(id).disabled = true;
+            }
+            switchTab('overview');
+            const meta = $('panel-meta');
+            meta.innerHTML = '';
+            const item = el('div', { class: 'meta-item', style: 'grid-column:1 / -1' });
+            const retry = el('button', {
+                class: 'row-action-btn restart',
+                style: 'height:auto;padding:0.5rem 0.75rem;width:auto;display:inline-flex;gap:0.375rem',
+                onclick: () => openPanel(name),
+            });
+            retry.innerHTML = '<i data-lucide="refresh-ccw" class="w-3.5 h-3.5"></i><span>Retry</span>';
+            item.append('Failed to load details for this unit. It may be a transient entry. ', retry);
+            meta.appendChild(item);
+            lucide.createIcons();
+        }
+
+        function closePanel() {
+            $('side-panel').classList.remove('open');
+            $('panel-overlay').classList.remove('open');
+            $('side-panel').setAttribute('aria-hidden', 'true');
+            currentUnit = null;
+        }
+
+        $('panel-overlay').onclick = closePanel;
+
+        function populatePanel(u) {
+            $('panel-description').textContent = u.description || '—';
+            $('panel-state-dot').className = 'state-dot ' + stateClassFor(u);
+
+            $('panel-badge-state').className = 'badge ' + (u.is_failed ? 'badge-red' : u.is_running ? 'badge-green' : u.active_state === 'active' ? 'badge-yellow' : u.unit_file_state === 'static' ? 'badge-purple' : 'badge-gray');
+            $('panel-badge-state').textContent = u.state_label || u.active_state;
+            $('panel-badge-enabled').className = 'badge ' + (u.is_enabled ? 'badge-blue' : 'badge-gray');
+            $('panel-badge-enabled').textContent = u.unit_file_state || 'no preset';
+            $('panel-badge-override').style.display = u.has_override ? 'inline-flex' : 'none';
+
+            // Action availability
+            $('btn-start').disabled = !u.can_start || u.is_active;
+            $('btn-stop').disabled = !u.can_stop || !u.is_active;
+            $('btn-restart').disabled = !u.can_stop;
+            $('btn-reload').disabled = !u.can_reload;
+            $('btn-enable').disabled = u.is_enabled;
+            $('btn-disable').disabled = !u.is_enabled;
+
+            // Metadata grid
+            const meta = $('panel-meta');
+            meta.innerHTML = '';
+            const rows = [
+                ['Type', u.type_kind || u.type],
+                ['Load', u.load_state],
+                ['Active', `${u.active_state} (${u.sub_state || '—'})`],
+                ['Preset', u.unit_file_state || '—'],
+                ['Main PID', u.main_pid || '—'],
+                ['Memory', u.memory_current ? humanBytes(u.memory_current) : '—'],
+                ['Memory peak', u.memory_peak ? humanBytes(u.memory_peak) : '—'],
+                ['Last active', u.active_enter_timestamp && u.active_enter_timestamp !== '[not set]' ? u.active_enter_timestamp : '—'],
+                ['Fragment path', u.fragment_path || '—'],
+                ['Drop-in', u.drop_in_paths || '—'],
+            ];
+            for (const [k, v] of rows) {
+                const item = el('div', { class: 'meta-item' });
+                item.innerHTML = `<div class="meta-key">${escapeHtml(k)}</div><div class="meta-val font-mono">${escapeHtml(v)}</div>`;
+                meta.appendChild(item);
+            }
+            if (u.requires || u.wants) {
+                const deps = el('div', { class: 'meta-item', style: 'grid-column:1 / -1' });
+                deps.innerHTML = `<div class="meta-key">Dependencies</div><div class="meta-val font-mono">${escapeHtml((u.requires || '') + (u.wants ? ' • wants: ' + u.wants : ''))}</div>`;
+                meta.appendChild(deps);
+            }
+
+            // Cache for later refresh
+            currentUnit = u;
+        }
+
+        function humanBytes(n) {
+            if (!n) return '0 B';
+            const u = ['B', 'K', 'M', 'G', 'T'];
+            let i = 0;
+            while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+            return n.toFixed(1) + ' ' + u[i];
+        }
+
+        // ----- Tabs -----
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.onclick = () => switchTab(btn.dataset.tab);
+        });
+
+        function switchTab(name) {
+            activeTab = name;
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+            document.querySelectorAll('.tab-pane').forEach(p => p.style.display = 'none');
+            $('tab-' + name).style.display = 'block';
+            if (name === 'unit-file' && currentUnit) loadUnitFile();
+            if (name === 'logs' && currentUnit) loadLogs();
+            if (name === 'dependencies' && currentUnit) loadGraph();
+        }
+
+        async function loadUnitFile() {
+            if (!currentUnit) return;
+            const pre = $('unit-file-content');
+            pre.textContent = 'Loading…';
+            try {
+                const r = await fetch('/api/system-services/' + encodeURIComponent(currentUnit.name) + '/unit');
+                const data = await r.json();
+                if (!r.ok) {
+                    pre.textContent = data.error || 'Failed to load unit file';
+                    return;
+                }
+                pre.textContent = data.content || '(empty)';
+            } catch (e) {
+                pre.textContent = 'Network error: ' + e.message;
+            }
+        }
+
+        function reloadUnitFile() { loadUnitFile(); }
+
+        async function loadLogs() {
+            if (!currentUnit) return;
+            // Reload means: stop streaming, fetch history, redraw.
+            if (logStreamState.active) stopLogStream();
+            const target = $('logs-content');
+            target.innerHTML = '';
+            const lines = $('log-lines').value;
+            try {
+                const r = await fetch('/api/system-services/' + encodeURIComponent(currentUnit.name) + '/logs?lines=' + lines);
+                const data = await r.json();
+                if (!r.ok) {
+                    target.textContent = data.error || 'Failed to load logs';
+                    return;
+                }
+                const logs = data.logs || [];
+                if (logs.length === 0) {
+                    target.textContent = '(no log entries)';
+                    setLogLineCount(0);
+                    return;
+                }
+                appendLogLines(logs);
+                if ($('log-autoscroll').checked) scrollLogsToBottom();
+            } catch (e) {
+                target.textContent = 'Network error: ' + e.message;
+            }
+        }
+
+        // ----- Dependency graph -----
+        async function loadGraph() {
+            if (!currentUnit) return;
+            const canvas = $('graph-canvas');
+            const empty = $('graph-empty');
+            if (empty) empty.textContent = 'Loading…';
+            try {
+                const depth = $('graph-depth').value || 2;
+                const r = await fetch(`/api/system-services/${encodeURIComponent(currentUnit.name)}/graph?depth=${depth}`);
+                const data = await r.json();
+                if (!r.ok) {
+                    canvas.innerHTML = `<div class="empty-state" style="color:var(--accent-red)">${escapeHtml(data.error || 'Failed to load')}</div>`;
+                    return;
+                }
+                renderGraph(data);
+            } catch (e) {
+                canvas.innerHTML = `<div class="empty-state" style="color:var(--accent-red)">Network error: ${escapeHtml(e.message)}</div>`;
+            }
+        }
+        $('graph-depth').addEventListener('change', loadGraph);
+
+        function renderGraph(data) {
+            const canvas = $('graph-canvas');
+            canvas.innerHTML = '';
+            const nodes = data.nodes || [];
+            const edges = data.edges || [];
+            if (nodes.length <= 1 && edges.length === 0) {
+                canvas.innerHTML = '<div class="empty-state" style="color:var(--text-muted);text-align:center;padding:2rem">No dependencies found.</div>';
+                return;
+            }
+
+            // Layout: place root at center, deps above, reverse-deps below
+            // Group nodes by level (0=root, 1=direct, 2=transitive)
+            const byLevel = {};
+            for (const n of nodes) {
+                const lvl = n.level || 0;
+                if (!byLevel[lvl]) byLevel[lvl] = [];
+                byLevel[lvl].push(n);
+            }
+            const levels = Object.keys(byLevel).map(Number).sort((a, b) => a - b);
+
+            // Compute a vertical position per level, and within each level, place nodes left-to-right
+            const nodeWidth = 180;
+            const nodeHeight = 56;
+            const vGap = 30;
+            const hGap = 24;
+            const positions = {};
+            for (const lvl of levels) {
+                const list = byLevel[lvl];
+                list.sort((a, b) => a.name.localeCompare(b.name));
+                const totalWidth = list.length * nodeWidth + (list.length - 1) * hGap;
+                const startX = -totalWidth / 2 + nodeWidth / 2;
+                list.forEach((n, i) => {
+                    positions[n.name] = {
+                        x: startX + i * (nodeWidth + hGap),
+                        y: lvl * (nodeHeight + vGap),
+                        node: n,
+                    };
+                });
+            }
+
+            // Compute total bounds
+            let minX = 0, maxX = 0, maxY = 0;
+            for (const k in positions) {
+                const p = positions[k];
+                if (p.x < minX) minX = p.x;
+                if (p.x > maxX) maxX = p.x;
+                if (p.y > maxY) maxY = p.y;
+            }
+            const padding = 16;
+            const w = (maxX - minX) + nodeWidth + padding * 2;
+            const h = maxY + nodeHeight + padding * 2;
+            const offsetX = -minX + padding;
+            const offsetY = padding;
+
+            // Build SVG
+            const svgNS = 'http://www.w3.org/2000/svg';
+            const svg = document.createElementNS(svgNS, 'svg');
+            svg.setAttribute('width', w);
+            svg.setAttribute('height', h);
+            svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+            svg.style.display = 'block';
+            svg.style.cursor = 'zoom-in';
+            let zoomLevel = 1;
+            const baseVB = [0, 0, w, h];
+            svg.addEventListener('dblclick', function(e) {
+                const rect = this.getBoundingClientRect();
+                const mx = e.clientX - rect.left;
+                const my = e.clientY - rect.top;
+                const vw = rect.width;
+                const vh = rect.height;
+                const bx = (mx / vw) * baseVB[2] + baseVB[0];
+                const by = (my / vh) * baseVB[3] + baseVB[1];
+                if (zoomLevel < 4) {
+                    zoomLevel *= 1.5;
+                    const nw = baseVB[2] / zoomLevel;
+                    const nh = baseVB[3] / zoomLevel;
+                    const cx = bx - nw / 2;
+                    const cy = by - nh / 2;
+                    this.setAttribute('viewBox', `${cx} ${cy} ${nw} ${nh}`);
+                    this.style.cursor = 'zoom-out';
+                } else {
+                    zoomLevel = 1;
+                    this.setAttribute('viewBox', baseVB.join(' '));
+                    this.style.cursor = 'zoom-in';
+                }
+            });
+
+            // Arrow marker
+            const defs = document.createElementNS(svgNS, 'defs');
+            defs.innerHTML = `
+                <marker id="arrow-req" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#3b82f6"/>
+                </marker>
+                <marker id="arrow-want" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#8b5cf6"/>
+                </marker>
+                <marker id="arrow-other" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+                </marker>
+            `;
+            svg.appendChild(defs);
+
+            // Edges
+            for (const e of edges) {
+                const from = positions[e.from];
+                const to = positions[e.to];
+                if (!from || !to) continue;
+                const x1 = from.x + offsetX;
+                const y1 = from.y + offsetY + nodeHeight;
+                const x2 = to.x + offsetX;
+                const y2 = to.y + offsetY;
+                const midY = (y1 + y2) / 2;
+                const path = document.createElementNS(svgNS, 'path');
+                let d;
+                if (e.type === 'After' || e.type === 'Before') {
+                    // Curve for ordering
+                    d = `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
+                } else {
+                    d = `M ${x1} ${y1} L ${x2} ${y2}`;
+                }
+                path.setAttribute('d', d);
+                let color = '#64748b';
+                if (e.type === 'Requires') color = '#3b82f6';
+                else if (e.type === 'Wants') color = '#8b5cf6';
+                path.setAttribute('stroke', color);
+                path.setAttribute('stroke-width', e.type === 'Requires' ? 2 : 1);
+                if (e.type === 'Wants') path.setAttribute('stroke-dasharray', '4 2');
+                path.setAttribute('fill', 'none');
+                const marker = e.type === 'Requires' ? 'arrow-req' : e.type === 'Wants' ? 'arrow-want' : 'arrow-other';
+                path.setAttribute('marker-end', `url(#${marker})`);
+                const title = document.createElementNS(svgNS, 'title');
+                title.textContent = `${e.from} ${e.type} ${e.to}`;
+                path.appendChild(title);
+                svg.appendChild(path);
+            }
+
+            // Nodes
+            for (const name in positions) {
+                const p = positions[name];
+                const n = p.node;
+                const cx = p.x + offsetX;
+                const cy = p.y + offsetY;
+                const g = document.createElementNS(svgNS, 'g');
+                g.setAttribute('transform', `translate(${cx - nodeWidth / 2}, ${cy})`);
+                const rect = document.createElementNS(svgNS, 'rect');
+                rect.setAttribute('width', nodeWidth);
+                rect.setAttribute('height', nodeHeight);
+                rect.setAttribute('rx', 6);
+                const isRoot = n.level === 0;
+                const isMissing = n.missing;
+                if (isRoot) {
+                    rect.setAttribute('fill', '#1e3a8a');
+                    rect.setAttribute('stroke', '#3b82f6');
+                    rect.setAttribute('stroke-width', 1.5);
+                } else if (isMissing) {
+                    rect.setAttribute('fill', '#1a1a25');
+                    rect.setAttribute('stroke', '#475569');
+                    rect.setAttribute('stroke-width', 1);
+                    rect.setAttribute('stroke-dasharray', '4 2');
+                } else if (n.active_state === 'active') {
+                    rect.setAttribute('fill', '#0d3320');
+                    rect.setAttribute('stroke', '#10b981');
+                    rect.setAttribute('stroke-width', 1);
+                } else {
+                    rect.setAttribute('fill', '#1a1a25');
+                    rect.setAttribute('stroke', '#334155');
+                    rect.setAttribute('stroke-width', 1);
+                }
+                g.appendChild(rect);
+
+                const title = document.createElementNS(svgNS, 'title');
+                title.textContent = name + (n.active_state ? ` (${n.active_state})` : '');
+                g.appendChild(title);
+
+                const text = document.createElementNS(svgNS, 'text');
+                text.setAttribute('x', nodeWidth / 2);
+                text.setAttribute('y', 22);
+                text.setAttribute('text-anchor', 'middle');
+                text.setAttribute('fill', '#f1f5f9');
+                text.setAttribute('font-size', '11');
+                text.setAttribute('font-family', 'JetBrains Mono, monospace');
+                text.setAttribute('font-weight', isRoot ? 'bold' : 'normal');
+                text.textContent = name.length > 24 ? name.substring(0, 22) + '…' : name;
+                g.appendChild(text);
+
+                const sub = document.createElementNS(svgNS, 'text');
+                sub.setAttribute('x', nodeWidth / 2);
+                sub.setAttribute('y', 40);
+                sub.setAttribute('text-anchor', 'middle');
+                sub.setAttribute('fill', isMissing ? '#94a3b8' : (n.active_state === 'active' ? '#10b981' : '#94a3b8'));
+                sub.setAttribute('font-size', '9');
+                const subText = isMissing ? 'missing' : (n.active_state || '—');
+                sub.textContent = subText;
+                g.appendChild(sub);
+
+                svg.appendChild(g);
+            }
+
+            canvas.appendChild(svg);
+        }
+
+        $('log-lines').addEventListener('change', loadLogs);
+        let logFilterDebounce = null;
+        $('log-filter').addEventListener('input', (e) => {
+            clearTimeout(logFilterDebounce);
+            logFilterDebounce = setTimeout(() => {
+                logFilter = e.target.value.trim().toLowerCase();
+                applyLogFilter();
+            }, 150);
+        });
+        $('log-priority').addEventListener('change', () => {
+            if (logStreamState.active) {
+                stopLogStream();
+                startLogStream();
+            }
+        });
+
+        // ----- Live log streaming (SSE) -----
+        const logStreamState = { active: false, unit: null, source: null, priority: null };
+
+        // Substring filter for the Logs tab (mirrors /logs): hides
+        // non-matching lines and highlights the match.
+        let logFilter = '';
+        function renderLogLine(div, text) {
+            div.className = 'log-line';
+            if (!logFilter) {
+                div.textContent = text;
+                return;
+            }
+            const idx = text.toLowerCase().indexOf(logFilter);
+            if (idx === -1) {
+                div.textContent = text;
+                div.classList.add('filtered-out');
+                return;
+            }
+            div.innerHTML = escapeHtml(text.slice(0, idx)) + '<mark>' +
+                escapeHtml(text.slice(idx, idx + logFilter.length)) + '</mark>' +
+                escapeHtml(text.slice(idx + logFilter.length));
+        }
+        function applyLogFilter() {
+            const target = $('logs-content');
+            let visible = 0;
+            for (const div of target.children) {
+                // textContent strips any previous <mark>, so re-render
+                // from the raw text each time the filter changes.
+                renderLogLine(div, div.textContent);
+                if (!div.classList.contains('filtered-out')) visible++;
+            }
+            const total = target.children.length;
+            $('log-line-count').textContent = logFilter
+                ? `${visible} of ${total} lines`
+                : (total === 1 ? '1 line' : `${total} lines`);
+        }
+        function appendLogLines(lines) {
+            const target = $('logs-content');
+            const frag = document.createDocumentFragment();
+            for (const l of lines) {
+                const div = document.createElement('div');
+                renderLogLine(div, l);
+                frag.appendChild(div);
+            }
+            target.appendChild(frag);
+            const max = 5000;
+            while (target.children.length > max) {
+                target.removeChild(target.firstChild);
+            }
+            const count = target.children.length;
+            setLogLineCount(count);
+            if (logFilter) applyLogFilter();
+        }
+
+        function setLogLineCount(n) {
+            $('log-line-count').textContent = n === 1 ? '1 line' : `${n} lines`;
+        }
+
+        function scrollLogsToBottom() {
+            const target = $('logs-content');
+            target.scrollTop = target.scrollHeight;
+        }
+
+        function setStreamStatus(state) {
+            const el = $('log-stream-status');
+            const dot = el.querySelector('span');
+            const label = el.querySelector('span:last-child');
+            if (state === 'live') {
+                dot.className = 'w-1.5 h-1.5 rounded-full bg-[var(--accent-green)]';
+                label.textContent = 'live';
+            } else if (state === 'paused') {
+                dot.className = 'w-1.5 h-1.5 rounded-full bg-[var(--accent-yellow)]';
+                label.textContent = 'paused';
+            } else {
+                dot.className = 'w-1.5 h-1.5 rounded-full bg-[var(--text-muted)]';
+                label.textContent = 'idle';
+            }
+        }
+
+        function toggleLogStream() {
+            if (logStreamState.active) stopLogStream();
+            else startLogStream();
+        }
+
+        function startLogStream() {
+            if (!currentUnit) return;
+            stopLogStream();
+            logStreamState.unit = currentUnit.name;
+            logStreamState.priority = $('log-priority').value;
+            const lines = parseInt($('log-lines').value, 10) || 100;
+            const target = $('logs-content');
+            target.innerHTML = '';
+
+            const url = `/api/system-services/${encodeURIComponent(logStreamState.unit)}/logs/stream?priority=${encodeURIComponent(logStreamState.priority)}&lines=${lines}`;
+            const es = new EventSource(url);
+            logStreamState.source = es;
+            // Optimistically mark active so the button reflects the
+            // user intent; we'll revert on error.
+            setStreamingButtonState(true);
+
+            es.onopen = () => {
+                logStreamState.active = true;
+                setStreamStatus('live');
+            };
+
+            es.onmessage = (ev) => {
+                try {
+                    const data = JSON.parse(ev.data);
+                    if (data.ended) {
+                        stopLogStream();
+                        return;
+                    }
+                    const wasAtBottom = isLogsAtBottom();
+                    appendLogLines([data.line]);
+                    if ($('log-autoscroll').checked && wasAtBottom) scrollLogsToBottom();
+                } catch (e) {
+                    // ignore malformed frame
+                }
+            };
+
+            es.onerror = () => {
+                if (logStreamState.source === es) {
+                    setStreamStatus('idle');
+                    setStreamingButtonState(false);
+                }
+            };
+        }
+
+        function setStreamingButtonState(active) {
+            const btn = $('log-stream-btn');
+            if (!btn) return;
+            const icon = btn.querySelector('i');
+            const label = btn.querySelector('span');
+            if (icon) icon.setAttribute('data-lucide', active ? 'pause' : 'play');
+            if (label) label.textContent = active ? 'Pause' : 'Stream';
+            btn.title = active ? 'Stop live stream' : 'Toggle live stream';
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+        function stopLogStream() {
+            if (logStreamState.source) {
+                logStreamState.source.close();
+                logStreamState.source = null;
+            }
+            logStreamState.active = false;
+            setStreamStatus('idle');
+            setStreamingButtonState(false);
+        }
+
+        function clearLogsView() {
+            $('logs-content').innerHTML = '';
+            setLogLineCount(0);
+        }
+
+        function isLogsAtBottom() {
+            const target = $('logs-content');
+            return (target.scrollHeight - target.scrollTop - target.clientHeight) < 30;
+        }
+
+        // Stop streaming when switching units or closing the panel
+        const _origClosePanel2 = closePanel;
+        closePanel = function() {
+            if (logStreamState.active) stopLogStream();
+            _origClosePanel2();
+        };
+        const _origOpenPanel2 = openPanel;
+        openPanel = async function(name) {
+            if (logStreamState.active) stopLogStream();
+            return _origOpenPanel2(name);
+        };
+
+        // ----- Actions (start/stop/etc) -----
+        function rowAction(event, name, action) {
+            event.stopPropagation();
+            currentUnit = allUnits.find(u => u.name === name) || { name };
+            pendingAction = { name, action, fromRow: true };
+            openAuth(action);
+        }
+
+        function handleAction(action) {
+            if (!currentUnit) return;
+            const name = currentUnit.name;
+            pendingAction = { name, action, fromRow: false };
+            openAuth(action);
+        }
+
+        async function openAuth(action) {
+            const labels = {
+                start: 'Start unit', stop: 'Stop unit', restart: 'Restart unit',
+                reload: 'Reload unit', enable: 'Enable at boot', disable: 'Disable at boot',
+                mask: 'Mask unit', unmask: 'Unmask unit',
+            };
+            // Mask is destructive (it links the unit to /dev/null,
+            // preventing any start until unmasked). Show an extra
+            // confirmation so the user can back out.
+            if (action === 'mask') {
+                if (!await uiConfirm(`Mask "${pendingAction.name}"?`, 'This will link the unit to /dev/null and prevent it from being started. You can reverse it later with "Unmask".', true)) {
+                    return;
+                }
+            }
+            $('auth-title').textContent = labels[action] || 'Confirm action';
+            $('auth-message').textContent = `Enter your sudo password (not the app login) to ${action} "${pendingAction.name}".`;
+            $('auth-password').value = '';
+            $('auth-error').style.display = 'none';
+            $('auth-modal').classList.add('active');
+            setTimeout(() => $('auth-password').focus(), 100);
+        }
+
+        function closeAuth() {
+            $('auth-modal').classList.remove('active');
+            pendingAction = null;
+        }
+
+        $('auth-password').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') $('auth-execute').click();
+        });
+
+        $('auth-execute').onclick = async () => {
+            const password = $('auth-password').value;
+            const btn = $('auth-execute');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>';
+            const pending = pendingAction || {};
+            try {
+                // Bulk path: run the action on each selected unit,
+                // then report a summary (wrong password aborts all).
+                if (pending.bulk) {
+                    const { names, action } = pending;
+                    let ok = 0;
+                    const failed = [];
+                    for (const name of names) {
+                        try {
+                            const r = await fetch('/api/system-services/' + encodeURIComponent(name) + '/' + action, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ password }),
+                            });
+                            const data = await r.json().catch(() => ({}));
+                            if (!r.ok) {
+                                if (data.code === 'permission') {
+                                    $('auth-error').textContent = data.error || 'Wrong password';
+                                    $('auth-error').style.display = 'block';
+                                    $('auth-password').value = '';
+                                    $('auth-password').focus();
+                                    return;
+                                }
+                                failed.push(name);
+                            } else {
+                                ok++;
+                            }
+                        } catch (e) {
+                            failed.push(name);
+                        }
+                    }
+                    closeAuth();
+                    clearSelection();
+                    await loadUnits(false);
+                    if (failed.length === 0) toast(`${action}: ${ok}/${names.length} ok`, 'success');
+                    else toast(`${action}: ${ok} ok, ${failed.length} failed (${failed.slice(0, 3).join(', ')}${failed.length > 3 ? '…' : ''})`, 'error');
+                    return;
+                }
+                const { name, action } = pending;
+                const r = await fetch('/api/system-services/' + encodeURIComponent(name) + '/' + action, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password }),
+                });
+                const data = await r.json().catch(() => ({}));
+                if (!r.ok) {
+                    if (data.code === 'permission') {
+                        $('auth-error').textContent = data.error || 'Wrong password';
+                        $('auth-error').style.display = 'block';
+                        $('auth-password').value = '';
+                        $('auth-password').focus();
+                        return;
+                    }
+                    toast(data.error || 'Action failed', 'error');
+                    closeAuth();
+                    return;
+                }
+                toast(data.output || `${action} ok`, 'success');
+                closeAuth();
+                await loadUnits(false);
+                if (currentUnit && currentUnit.name === name && !pendingAction?.fromRow) {
+                    openPanel(name);
+                }
+            } catch (e) {
+                toast('Network error: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Confirm';
+            }
+        };
+
+        // ----- Edit modal -----
+        function openEditModal() {
+            if (!currentUnit) return;
+            $('edit-content').value = $('unit-file-content').textContent;
+            $('edit-password').value = '';
+            $('edit-error').style.display = 'none';
+            $('edit-target-path').textContent = `/etc/systemd/system/${currentUnit.name}.d/99-manager.conf`;
+            $('edit-modal').classList.add('active');
+            setTimeout(() => $('edit-content').focus(), 100);
+        }
+
+        function closeEdit() {
+            $('edit-modal').classList.remove('active');
+        }
+
+        $('edit-password').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') $('edit-save').click();
+        });
+
+        $('edit-save').onclick = async () => {
+            if (!currentUnit) return;
+            const content = $('edit-content').value;
+            const password = $('edit-password').value;
+            const btn = $('edit-save');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Saving…';
+            try {
+                const r = await fetch('/api/system-services/' + encodeURIComponent(currentUnit.name) + '/unit', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content, password }),
+                });
+                const data = await r.json().catch(() => ({}));
+                if (!r.ok) {
+                    if (data.code === 'permission') {
+                        $('edit-error').textContent = data.error || 'Wrong password';
+                        $('edit-error').style.display = 'block';
+                        $('edit-password').value = '';
+                        $('edit-password').focus();
+                        return;
+                    }
+                    $('edit-error').textContent = data.error || 'Save failed';
+                    $('edit-error').style.display = 'block';
+                    return;
+                }
+                toast('Drop-in saved; daemon reloaded', 'success');
+                closeEdit();
+                await loadUnits(false);
+                openPanel(currentUnit.name);
+            } catch (e) {
+                $('edit-error').textContent = 'Network error: ' + e.message;
+                $('edit-error').style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Save & reload';
+            }
+        };
+
+        // ESC closes modals/panel
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            if ($('edit-modal').classList.contains('active')) { closeEdit(); return; }
+            if ($('auth-modal').classList.contains('active')) { closeAuth(); return; }
+            if ($('side-panel').classList.contains('open')) { closePanel(); return; }
+        });
+
+        // Failed chip jumps straight to the Failed filter.
+        $('failed-chip').onclick = () => {
+            document.querySelectorAll('#state-tabs .filter-tab').forEach(b => {
+                b.classList.toggle('active', b.dataset.state === 'failed');
+            });
+            filters.state = 'failed';
+            loadUnits();
+        };
+
+        // ----- Bulk actions -----
+        function bulkAction(action) {
+            if (selectedUnits.size === 0) return;
+            pendingAction = { names: [...selectedUnits], action, bulk: true };
+            const labels = {
+                start: 'Start units', stop: 'Stop units', restart: 'Restart units',
+                enable: 'Enable at boot', disable: 'Disable at boot',
+            };
+            $('auth-title').textContent = labels[action] || 'Confirm action';
+            $('auth-message').textContent = `Enter your sudo password (not the app login) to ${action} ${pendingAction.names.length} selected unit(s).`;
+            $('auth-password').value = '';
+            $('auth-error').style.display = 'none';
+            $('auth-modal').classList.add('active');
+            setTimeout(() => $('auth-password').focus(), 100);
+        }
+
+        // Initial load + auto-refresh every 5s (skipped while paused)
+        loadUnits();
+        setInterval(() => { if (!livePaused) loadUnits(false); }, 5000);
+    </script>
+</body>
+</html>

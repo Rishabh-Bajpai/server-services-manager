@@ -1,0 +1,22 @@
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F"]
+ignore = [
+    "E402",   # module level import not at top — intentional for eventlet.monkey_patch()
+    "F401",   # imported but unused — keep for explicit re-exports / lazy imports
+    "E501",   # line too long — UI templates and tests have long lines
+    "E701",   # multiple statements on one line — intentional for terse error handling
+    "E741",   # ambiguous variable name l — used in short loops
+    "F541",   # f-string without placeholder — intentional for static strings
+]
+exclude = [".venv", "venv", "__pycache__", ".git", ".pytest_cache", ".ruff_cache"]
+
+[tool.ruff.lint.pycodestyle]
+max-line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
