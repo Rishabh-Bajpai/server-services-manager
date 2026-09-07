@@ -93,6 +93,9 @@
             overflow-x: auto;
         }
         .tree-scroll, .items-scroll {
+            /* Fallback cap; fitPanels() sets the exact measured
+               max-height on load + resize so panels never overflow
+               the viewport (the old fixed 300px offset did). */
             max-height: calc(100dvh - 300px);
         }
         .tree-scroll { overflow-y: auto; }
@@ -362,6 +365,10 @@
                 <i data-lucide="clipboard-paste" class="w-3.5 h-3.5"></i>
                 <span class="hidden sm:inline">Paste</span>
             </button>
+            <button class="btn" onclick="openInVSCode()" id="btn-code" disabled title="Open in VS Code for editing (select one item)">
+                <i data-lucide="code" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">VS Code</span>
+            </button>
             <button class="btn" onclick="downloadZip()" id="btn-zip" disabled title="Download selected as zip">
                 <i data-lucide="archive" class="w-3.5 h-3.5"></i>
                 <span class="hidden sm:inline">Zip</span>
@@ -499,26 +506,6 @@
         </div>
     </div>
 
-    <div class="modal-backdrop" id="modal-edit" onclick="if(event.target===this) closeEditor()">
-        <div class="modal modal-wide p-0 overflow-hidden">
-            <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-[var(--border-subtle)]">
-                <h3 class="text-sm font-semibold flex items-center gap-2 min-w-0">
-                    <i data-lucide="pencil" class="w-4 h-4 text-[var(--accent-green)] flex-shrink-0"></i>
-                    <span class="font-mono truncate" id="edit-path">—</span>
-                </h3>
-                <div class="flex items-center gap-2 flex-shrink-0">
-                    <span class="text-[11px] text-[var(--text-muted)]" id="edit-info"></span>
-                    <button class="btn" onclick="closeEditor()">Cancel</button>
-                    <button class="btn btn-primary" onclick="saveEditor()">Save</button>
-                </div>
-            </div>
-            <div class="p-4">
-                <textarea id="edit-area" class="text-input font-mono" style="min-height:50dvh;white-space:pre" spellcheck="false"></textarea>
-                <div id="edit-error" class="text-xs text-[var(--accent-red)] mt-2 hidden"></div>
-            </div>
-        </div>
-    </div>
-
     <div class="modal-backdrop" id="modal-props" onclick="if(event.target===this) closeProps()">
         <div class="modal">
             <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
@@ -537,8 +524,8 @@
             <div class="flex items-center justify-between gap-2 px-4 py-3 border-b border-[var(--border-subtle)]">
                 <h3 class="text-sm font-semibold font-mono truncate" id="viewer-title">—</h3>
                 <div class="flex items-center gap-1 flex-shrink-0">
-                    <button class="btn btn-icon" id="viewer-edit" style="display:none" title="Edit as text">
-                        <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                    <button class="btn btn-icon" id="viewer-code" style="display:none" title="Open in VS Code for editing">
+                        <i data-lucide="code" class="w-3.5 h-3.5"></i>
                     </button>
                     <button class="btn btn-icon" id="viewer-download" title="Download">
                         <i data-lucide="download" class="w-3.5 h-3.5"></i>
@@ -1138,6 +1125,7 @@
             document.getElementById('btn-zip').disabled = n === 0;
             document.getElementById('btn-delete').disabled = n === 0;
             document.getElementById('btn-paste').disabled = !clipboard;
+            document.getElementById('btn-code').disabled = n !== 1;
             document.getElementById('sel-info').textContent = n ? `${n} selected` : '';
             document.getElementById('clip-info').textContent = clipboard
                 ? `${clipboard.mode === 'cut' ? 'Cut' : 'Copied'} ${clipboard.paths.length} item(s) — navigate, then Paste`
@@ -1393,8 +1381,6 @@
                     h += ctxItem('eye', 'Open viewer', '↵↵', 'ctxViewer');
                 if (singleFile || (singleIt && singleIt.is_dir))
                     h += ctxItem('download', singleFile ? 'Download' : 'Zip download', '', singleFile ? 'ctxDownload' : 'ctxZip');
-                if (singleFile)
-                    h += ctxItem('pencil', 'Edit', '', 'ctxEdit');
                 h += ctxItem('code', 'Open in VS Code', '', 'ctxCode');
                 h += `<div class="ctx-sep"></div>`;
                 h += ctxItem('pencil', 'Rename', 'F2', 'ctxRename', false, n !== 1);
@@ -1435,7 +1421,6 @@
             const it = single ? entries.find(e => e.path === single) : null;
             if (a === 'ctxOpen' && it && it.is_dir) navigateTo(it.path);
             else if (a === 'ctxViewer' && it && !it.is_dir) openViewer(it.path, it.name);
-            else if (a === 'ctxEdit' && it && !it.is_dir) openEditor(it.path);
             else if (a === 'ctxCode') openInVSCode();
             else if (a === 'ctxDownload') downloadSelected();
             else if (a === 'ctxRename') promptRename();
@@ -1517,64 +1502,6 @@
             return `<div class="empty-state">${escapeHtml(data.name)}<br><span class="text-[var(--text-muted)] text-xs">${humanizeSize(data.size)} · ${escapeHtml(data.mime || data.kind)}</span><br><a class="text-[var(--accent-blue)] underline" href="${dl}">Download</a></div>`;
         }
 
-        let editPath = null;
-        function openEditor(path) {
-            editPath = path;
-            document.getElementById('edit-path').textContent = path;
-            document.getElementById('edit-area').value = '';
-            document.getElementById('edit-info').textContent = 'loading…';
-            document.getElementById('edit-error').classList.add('hidden');
-            document.getElementById('modal-edit').classList.add('open');
-            setTimeout(() => document.getElementById('edit-area').focus(), 50);
-            api('/api/files/preview?path=' + encodeURIComponent(path))
-                .then(({ status, data }) => {
-                    if (status >= 400) {
-                        document.getElementById('edit-error').textContent = data.error || 'HTTP ' + status;
-                        document.getElementById('edit-error').classList.remove('hidden');
-                        document.getElementById('edit-info').textContent = '';
-                        return;
-                    }
-                    if (data.kind !== 'text' || !data.content && data.size > 0) {
-                        document.getElementById('edit-error').textContent = 'Only text files can be edited.';
-                        document.getElementById('edit-error').classList.remove('hidden');
-                        document.getElementById('edit-info').textContent = '';
-                        return;
-                    }
-                    if (data.too_large_for_inline_text) {
-                        document.getElementById('edit-error').textContent = `File is ${humanizeSize(data.size)} — too large for the browser editor; use SSH.`;
-                        document.getElementById('edit-error').classList.remove('hidden');
-                        document.getElementById('edit-info').textContent = '';
-                        return;
-                    }
-                    document.getElementById('edit-area').value = data.content || '';
-                    document.getElementById('edit-info').textContent =
-                        `${humanizeSize(data.size)}${data.encoding && data.encoding !== 'utf-8' ? ' · ' + data.encoding : ''}`;
-                });
-        }
-        function closeEditor() {
-            document.getElementById('modal-edit').classList.remove('open');
-            editPath = null;
-        }
-        function saveEditor() {
-            if (!editPath) return;
-            const content = document.getElementById('edit-area').value;
-            api('/api/files/save', { method: 'POST', body: JSON.stringify({ path: editPath, content }) })
-                .then(({ status, data }) => {
-                    if (status >= 400) {
-                        document.getElementById('edit-error').textContent = data.error || 'HTTP ' + status;
-                        document.getElementById('edit-error').classList.remove('hidden');
-                        return;
-                    }
-                    const saved = editPath;
-                    closeEditor();
-                    toast(`Saved ${saved} (${humanizeSize(data.size)})`, 'success');
-                    refreshAll();
-                    // Keep the viewer + preview pane in sync when open.
-                    if (viewerPath === saved) openViewer(saved, saved.split('/').pop());
-                    else if (previewVisible && selected.has(saved)) previewFile(saved);
-                });
-        }
-
         let viewerPath = null;
         function openViewer(path, name) {
             viewerPath = path;
@@ -1583,9 +1510,10 @@
             document.getElementById('modal-viewer').classList.add('open');
             document.getElementById('viewer-download').onclick = () =>
                 window.open('/api/files/download?path=' + encodeURIComponent(path), '_blank');
-            const editBtn = document.getElementById('viewer-edit');
-            editBtn.style.display = 'none';
-            editBtn.onclick = () => openEditor(path);
+            // Editing lives in /code now: offer a jump there for text.
+            const codeBtn = document.getElementById('viewer-code');
+            codeBtn.style.display = 'none';
+            codeBtn.onclick = () => window.open('/code?path=' + encodeURIComponent(path), '_blank');
             api('/api/files/preview?path=' + encodeURIComponent(path))
                 .then(({ status, data }) => {
                     if (status >= 400) {
@@ -1595,13 +1523,7 @@
                     }
                     document.getElementById('viewer-body').innerHTML = previewHTML(data, path, true);
                     lucide.createIcons();
-                    // Offer editing only for server-approved text types.
-                    if (data.kind === 'text' && !data.too_large_for_inline_text) {
-                        api('/api/files/editable-types?path=' + encodeURIComponent(path))
-                            .then(({ status: s2, data: d2 }) => {
-                                if (s2 < 400 && d2.editable) editBtn.style.display = '';
-                            });
-                    }
+                    if (data.kind === 'text') codeBtn.style.display = '';
                 });
         }
         function closeViewer() {
@@ -1976,16 +1898,11 @@
             const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName || '');
             if (e.key === 'Escape') {
                 if (document.getElementById('modal-viewer').classList.contains('open')) closeViewer();
-                else if (document.getElementById('modal-edit').classList.contains('open')) closeEditor();
                 else if (document.getElementById('modal-prompt').classList.contains('open')) closePrompt();
                 else if (document.getElementById('modal-props').classList.contains('open')) closeProps();
                 else if (document.getElementById('modal-perm').classList.contains('open')) closePerm();
                 else { hideCtx(); selected.clear(); renderCenter(); }
                 return;
-            }
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's'
-                && document.getElementById('modal-edit').classList.contains('open')) {
-                e.preventDefault(); saveEditor(); return;
             }
             if (typing) return;
             if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelected(); }
@@ -2008,6 +1925,19 @@
             showCtx(e.clientX, e.clientY, 'bg');
         });
 
+        // Measure each scroll panel from its real on-screen top to
+        // the viewport bottom (minus margin). Fixed offsets drift
+        // whenever header content changes and overflow the page.
+        function fitPanels() {
+            for (const sel of ['.tree-scroll', '.items-scroll', '#preview-pane']) {
+                document.querySelectorAll(sel).forEach(el => {
+                    const top = el.getBoundingClientRect().top;
+                    el.style.maxHeight = Math.max(200, Math.floor(window.innerHeight - top - 16)) + 'px';
+                });
+            }
+        }
+        window.addEventListener('resize', fitPanels);
+
         // ------------------------------------------------------------------
         // Init
         // ------------------------------------------------------------------
@@ -2017,6 +1947,8 @@
         buildBreadcrumb();
         loadTree(true);
         loadDir('.');
+        fitPanels();
+        setTimeout(fitPanels, 1000);  // after late font/CDN layout shifts
     </script>
 </body>
 </html>

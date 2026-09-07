@@ -1623,6 +1623,30 @@ hid by default, and there was no editor at all. Fixed:
 3 new tests (save round-trip + mode, guards, route).
 Full suite: 882 passed; secrets clean.
 
+### Route 16e — /files as VS Code complement (editor UI removed)  [x]
+
+Editing moved to `/code`, so `/files` shed its duplicate
+editor and became the file manager:
+
+- **Removed from UI:** editor modal, viewer Edit button,
+  right-click Edit, `Ctrl+S` hook (~100 lines). The
+  backend (`save_text`, `POST /api/files/save`, tests)
+  stays as an API surface.
+- **Promoted:** toolbar `VS Code` button (single
+  selection) next to Paste; viewer header gains a VS Code
+  jump for text files (shown only for `kind === 'text'`).
+  Text stays read-only in preview; no silent
+  last-write-wins conflicts with the IDE anymore.
+- **Height overflow fixed:** tree/list/preview panels used
+  a hardcoded `calc(100dvh - 300px)` that overflowed the
+  page. `fitPanels()` now measures each panel's real top
+  to the viewport bottom on load, resize, and late layout
+  shifts. Measured live: all panels end 16px above the
+  viewport bottom (704/720).
+
+**Verified live** (zero JS errors, `node --check` clean).
+Full suite: 882 passed; secrets clean.
+
 ### Route 17 — VS Code Server (`/code`)  [x]
 
 Full VS Code (code-server 4.135.0 / Code 1.135.0) embedded
