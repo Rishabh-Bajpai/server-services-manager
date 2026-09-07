@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="resources/banner.png" alt="Server Services Manager" width="100%"/>
+</p>
+
 # Server Services Manager
 
 > A web-based sysadmin console for Linux servers: managed services with auto-restart, a real-time system monitor, multi-tab PTY terminal, full file explorer, embedded VS Code Server, Docker browser, systemd unit control, cron, firewall, backups, package updates, disk analysis, SSH keys, cluster peers, health checks, and a plugin system.
