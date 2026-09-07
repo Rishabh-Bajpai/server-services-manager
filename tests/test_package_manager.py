@@ -265,22 +265,46 @@ def test_list_updates_returns_cached(monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_install_packages_creates_job(monkeypatch):
+    """Job lifecycle without touching the real package manager.
+
+    This used to run a live `sudo apt-get install` on CI runners
+    (passwordless sudo there) and assert completion within 3s —
+    slow, environment-dependent, and flaky. Fake the subprocess
+    layer instead; the job state machine is what's under test.
+    """
+    import subprocess as _sp
     monkeypatch.setattr(pm, "detect_manager", lambda: "apt")
     monkeypatch.setattr(pm.os.path, "expanduser", lambda p: "/tmp" if p.startswith("~") else p)
+    monkeypatch.setattr(
+        pm.subprocess, "run",
+        lambda *a, **k: _sp.CompletedProcess(a[0] if a else [], 0, "", ""),
+    )
+
+    class _FakeProc:
+        returncode = 0
+
+        def communicate(self, *a, **k):
+            return ("", "")
+
+        def wait(self, *a, **k):
+            return 0
+
+    monkeypatch.setattr(pm.subprocess, "Popen", lambda *a, **k: _FakeProc())
     job_id = install_packages(["vim", "curl"])
     job = get_job(job_id)
     assert job is not None
     assert job["packages"] == ["vim", "curl"]
     assert job["manager"] == "apt"
-    assert job["ended_at"] == 0  # still running
-    # Wait briefly for the thread (the underlying popen will likely fail in tests)
-    deadline = time.time() + 3
+    # Wait briefly for the background thread to finish.
+    deadline = time.time() + 10
     while time.time() < deadline:
         j = get_job(job_id)
         if j["ended_at"] != 0:
             break
         time.sleep(0.05)
-    assert get_job(job_id)["ended_at"] != 0
+    final = get_job(job_id)
+    assert final["ended_at"] != 0
+    assert final["success"] is True
 
 
 def test_install_packages_empty_list_no_op(monkeypatch):
