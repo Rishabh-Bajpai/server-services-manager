@@ -29,6 +29,9 @@ jobs:
         pip install ruff
         ruff check --output-format=github .
       continue-on-error: true
+    - name: Scan for accidentally-committed secrets
+      run: |
+        python3 tools/check-secrets.py all
     - name: Test with pytest
       run: |
         python -m pytest tests/ -v --tb=short

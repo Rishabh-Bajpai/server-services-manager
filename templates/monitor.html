@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>System Monitor - Server Services Manager</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -90,46 +90,46 @@
         .sort-btn .sort-arrow { display: inline-block; margin-left: 2px; font-size: 10px; opacity: 0.3; }
         .sort-btn.sorted .sort-arrow { opacity: 1; color: var(--accent-blue); }
 
-        .chart-container { position: relative; height: 120px; }
+        .col-resize {
+            position: absolute; right: 0; top: 0; height: 100%; width: 10px;
+            margin-right: -5px; cursor: col-resize; z-index: 20;
+        }
+        .col-resize:hover, .col-resize.dragging { background: rgba(59,130,246,0.45); }
+
+        .chart-container { position: relative; height: 120px; overflow: hidden; }
+        @media (max-width: 640px) { .chart-container { height: 100px; } }
     </style>
 </head>
 <body class="bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-screen">
-    <div class="max-w-7xl mx-auto p-3 sm:p-6">
-        <!-- Header -->
-        <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6 animate-fade-in">
-            <div class="flex items-center gap-3">
-                <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-                    <i data-lucide="activity" class="w-5 h-5 text-white"></i>
-                </div>
-                <div>
-                    <h1 class="text-lg sm:text-xl font-bold tracking-tight bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">System Monitor</h1>
-                    <p class="text-[var(--text-muted)] text-xs font-medium hidden sm:block">Real-time host metrics</p>
-                </div>
-            </div>
-            <div class="flex items-center gap-2 flex-wrap justify-end">
-                <span id="connection-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-[var(--accent-green)]/10 text-[var(--accent-green)] border border-[var(--accent-green)]/20">
-                    <span class="w-2 h-2 rounded-full bg-current pulse-dot"></span>
-                    <span class="hidden sm:inline">Connected</span>
-                </span>
-                <a href="/" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
-                    <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Dashboard</span>
-                </a>
-                <a href="/control" class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
-                    <i data-lucide="gamepad-2" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Control</span>
-                </a>
-                <a href="/logout" class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20 rounded-lg hover:bg-[var(--accent-red)]/20 transition-all text-sm font-medium">
-                    <i data-lucide="log-out" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Logout</span>
-                </a>
-            </div>
-        </header>
 
+    {% import "_macros.html" as ui %}
+{% set actions %}
+            <span id="connection-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-[var(--accent-green)]/10 text-[var(--accent-green)] border border-[var(--accent-green)]/20">
+                <span class="w-2 h-2 rounded-full bg-current pulse-dot"></span>
+                <span class="hidden sm:inline">Connected</span>
+            </span>
+{% endset %}
+{% set page_info %}
+        <p style="margin-bottom:0.75rem">A live health overview of <strong>this machine</strong> — the computer the manager runs on, not the programs it manages.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li><strong>CPU, memory, disks, and network</strong> update every couple of seconds with short history charts.</li>
+            <li><strong>Top processes</strong> shows what's eating resources right now; click a column to sort, and <strong>Pause</strong> freezes the list so you can read it.</li>
+            <li>Numbers here come straight from the operating system, so they always match tools like <strong>top</strong>.</li>
+        </ul>
+        {% endset %}
+{{ ui.header(
+            title="System Monitor",
+            icon="activity",
+            icon_color="var(--accent-green)",
+            actions=actions,
+            current='/monitor',
+            info=page_info,
+        ) }}
+<main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6">
         <!-- Top Row: System Info + CPU -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
             <!-- System Info -->
-            <div class="card p-3 sm:p-5 animate-fade-in" style="animation-delay: 0.05s">
+            <div class="card p-5 animate-fade-in" style="animation-delay: 0.05s">
                 <div class="flex items-center gap-2 mb-4">
                     <div class="section-icon bg-[var(--accent-cyan)]/10">
                         <i data-lucide="server" class="w-4 h-4 text-[var(--accent-cyan)]"></i>
@@ -137,9 +137,9 @@
                     <span class="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">System</span>
                 </div>
                 <div class="space-y-3 text-sm">
-                    <div class="flex justify-between items-center">
-                        <span class="text-[var(--text-muted)]">Hostname</span>
-                        <span class="font-mono text-[var(--text-primary)]" id="sys-hostname">--</span>
+                    <div class="flex justify-between items-center gap-2">
+                        <span class="text-[var(--text-muted)] shrink-0">Hostname</span>
+                        <span class="font-mono text-[var(--text-primary)] text-right break-all" id="sys-hostname">--</span>
                     </div>
                     <div class="flex justify-between items-center">
                         <span class="text-[var(--text-muted)]">Kernel</span>
@@ -183,7 +183,7 @@
         <!-- Memory + Swap + Network Chart -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
             <!-- Memory Chart -->
-            <div class="card p-3 sm:p-5 animate-fade-in" style="animation-delay: 0.15s">
+            <div class="card p-5 animate-fade-in" style="animation-delay: 0.15s">
                 <div class="flex items-center justify-between mb-3">
                     <div class="flex items-center gap-2">
                         <div class="section-icon bg-[var(--accent-blue)]/10">
@@ -207,7 +207,7 @@
             </div>
 
             <!-- Swap -->
-            <div class="card p-3 sm:p-5 animate-fade-in" style="animation-delay: 0.2s">
+            <div class="card p-5 animate-fade-in" style="animation-delay: 0.2s">
                 <div class="flex items-center justify-between mb-3">
                     <div class="flex items-center gap-2">
                         <div class="section-icon bg-[var(--accent-purple)]/10">
@@ -244,7 +244,7 @@
             </div>
 
             <!-- Network Chart -->
-            <div class="card p-3 sm:p-5 animate-fade-in" style="animation-delay: 0.25s">
+            <div class="card p-5 animate-fade-in" style="animation-delay: 0.25s">
                 <div class="flex items-center gap-2 mb-3">
                     <div class="section-icon bg-[var(--accent-cyan)]/10">
                         <i data-lucide="wifi" class="w-4 h-4 text-[var(--accent-cyan)]"></i>
@@ -278,7 +278,7 @@
         </div>
 
         <!-- Disk IO -->
-        <div class="card p-3 sm:p-4 mb-4 animate-fade-in" style="animation-delay: 0.28s">
+        <div class="card p-5 mb-4 animate-fade-in" style="animation-delay: 0.28s">
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
                     <div class="section-icon bg-[var(--accent-yellow)]/10" style="width:1.5rem;height:1.5rem">
@@ -293,30 +293,55 @@
             </div>
         </div>
 
+        <!-- Pinned services (borrowed idea from Laranode LAMP cards, generalized) -->
+        <div class="card p-5 mb-4 animate-fade-in" style="animation-delay: 0.28s">
+            <div class="flex items-center gap-2 mb-3">
+                <div class="section-icon bg-[var(--accent-cyan)]/10">
+                    <i data-lucide="server-cog" class="w-4 h-4 text-[var(--accent-cyan)]"></i>
+                </div>
+                <span class="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Key Services</span>
+                <span class="ml-auto text-[10px] text-[var(--text-muted)] font-mono hidden sm:inline">docker · ssh · cron</span>
+            </div>
+            <div id="pinned-services" class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                <div class="text-[var(--text-muted)] text-xs">Loading…</div>
+            </div>
+        </div>
+
         <!-- Processes -->
-        <div class="card p-3 sm:p-5 animate-fade-in" style="animation-delay: 0.3s">
-            <div class="flex items-center gap-2 mb-4">
+        <div class="card p-5 animate-fade-in overflow-hidden flex flex-col" style="animation-delay: 0.3s">
+            <div class="flex items-center gap-2 mb-4 shrink-0">
                 <div class="section-icon bg-[var(--accent-yellow)]/10">
                     <i data-lucide="list" class="w-4 h-4 text-[var(--accent-yellow)]"></i>
                 </div>
                 <span class="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Top Processes</span>
+                <span class="ml-auto text-[10px] text-[var(--text-muted)] font-mono hidden sm:inline">click header to sort · drag edge to resize</span>
+                <button id="procs-pause-btn" class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] bg-white/5 hover:bg-white/10 border border-[var(--border-subtle)] transition-all shrink-0" title="Pause live updates (freezes the table so you can select and copy text)">
+                    <i data-lucide="pause" class="w-3 h-3"></i><span>Pause</span>
+                </button>
             </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm text-left">
-                    <thead>
+            <div class="overflow-x-auto overflow-y-auto max-h-[420px] overscroll-contain rounded-lg border border-[var(--border-subtle)]">
+                <table id="procs-table" class="w-full text-sm text-left min-w-[480px] table-fixed">
+                    <colgroup>
+                        <col style="width:72px">
+                        <col>
+                        <col style="width:92px">
+                        <col style="width:92px">
+                        <col style="width:128px">
+                    </colgroup>
+                    <thead class="sticky top-0 bg-[var(--bg-card)] z-10">
                         <tr class="text-[var(--text-muted)] text-xs uppercase border-b border-[var(--border-subtle)]">
-                            <th class="pb-2 font-semibold"><span class="sort-btn" data-col="pid" data-type="num">PID <span class="sort-arrow">▲</span></span></th>
-                            <th class="pb-2 font-semibold"><span class="sort-btn" data-col="name" data-type="str">Name <span class="sort-arrow">▲</span></span></th>
-                            <th class="pb-2 text-right font-semibold"><span class="sort-btn" data-col="cpu" data-type="num">CPU <span class="sort-arrow">▲</span></span></th>
-                            <th class="pb-2 text-right font-semibold"><span class="sort-btn" data-col="memory" data-type="num">MEM <span class="sort-arrow">▲</span></span></th>
-                            <th class="pb-2 font-semibold"><span class="sort-btn" data-col="status" data-type="str">State <span class="sort-arrow">▲</span></span></th>
+                            <th class="py-2.5 px-3 font-semibold whitespace-nowrap relative"><span class="sort-btn" data-col="pid" data-type="num">PID <span class="sort-arrow">▲</span></span></th>
+                            <th class="py-2.5 px-3 font-semibold relative"><span class="sort-btn" data-col="name" data-type="str">Name <span class="sort-arrow">▲</span></span></th>
+                            <th class="py-2.5 px-3 text-right font-semibold whitespace-nowrap relative"><span class="sort-btn" data-col="cpu" data-type="num">CPU <span class="sort-arrow">▲</span></span></th>
+                            <th class="py-2.5 px-3 text-right font-semibold whitespace-nowrap relative"><span class="sort-btn" data-col="memory" data-type="num">MEM <span class="sort-arrow">▲</span></span></th>
+                            <th class="py-2.5 px-3 font-semibold whitespace-nowrap relative"><span class="sort-btn" data-col="status" data-type="str">State <span class="sort-arrow">▲</span></span></th>
                         </tr>
                     </thead>
                     <tbody id="procs-body" class="font-mono text-xs"></tbody>
                 </table>
             </div>
         </div>
-    </div>
+    </main>
 
     <script>
         lucide.createIcons();
@@ -334,11 +359,17 @@
         });
 
         const MAX_POINTS = 60;
-        const timeLabels = [];
-        const cpuAvgHistory = [];
-        const memHistory = [];
-        const netRecvHistory = [];
-        const netSentHistory = [];
+        // Fixed 60-point window for every chart: pre-fill with nulls so
+        // the x-axis never rescales. New values enter from the right
+        // (push + shift), the left stays empty until the window fills.
+        // spanGaps:false (set in makeChartConfig) breaks the line at
+        // nulls, so a fresh page shows an empty plot that fills rightward.
+        const timeLabels = Array.from({ length: MAX_POINTS }, () => '');
+        const nullWindow = () => new Array(MAX_POINTS).fill(null);
+        const cpuAvgHistory = nullWindow();
+        const memHistory = nullWindow();
+        const netRecvHistory = nullWindow();
+        const netSentHistory = nullWindow();
         let cpuCoreHistories = [];
 
         let sortCol = 'cpu';
@@ -357,6 +388,9 @@
         ];
 
         function makeChartConfig(datasets, yMax) {
+            // spanGaps:false keeps the line broken across the leading
+            // nulls, so the x-axis stays a fixed 60-point window.
+            datasets = datasets.map(d => ({ spanGaps: false, ...d }));
             return {
                 type: 'line',
                 data: { labels: timeLabels, datasets },
@@ -379,7 +413,7 @@
         function initCpuChart(numCores) {
             const datasets = [];
             for (let i = 0; i < numCores; i++) {
-                cpuCoreHistories[i] = [];
+                cpuCoreHistories[i] = nullWindow();
                 datasets.push({
                     data: cpuCoreHistories[i],
                     borderColor: coreColors[i % coreColors.length] + '55',
@@ -450,15 +484,26 @@
             const tbody = document.getElementById('procs-body');
             tbody.innerHTML = sorted.map(p => `
                 <tr class="proc-row border-b border-[var(--border-subtle)] last:border-0">
-                    <td class="py-2 text-[var(--text-muted)]">${p.pid}</td>
-                    <td class="py-2 text-[var(--text-primary)] truncate max-w-[120px] font-medium">${p.name}</td>
-                    <td class="py-2 text-right font-semibold ${p.cpu > 50 ? 'text-[var(--accent-red)]' : p.cpu > 20 ? 'text-[var(--accent-yellow)]' : 'text-[var(--text-secondary)]'}">${p.cpu.toFixed(1)}%</td>
-                    <td class="py-2 text-right text-[var(--text-secondary)]">${p.memory.toFixed(1)}%</td>
-                    <td class="py-2"><span class="status-badge ${p.status === 'running' ? 'bg-[var(--accent-green)]/10 text-[var(--accent-green)] border border-[var(--accent-green)]/20' : 'bg-white/5 text-[var(--text-muted)] border border-[var(--border-subtle)]'}">${p.status}</span></td>
+                    <td class="py-2.5 px-3 text-[var(--text-muted)] truncate">${p.pid}</td>
+                    <td class="py-2.5 px-3 text-[var(--text-primary)] truncate font-medium" title="${p.name}">${p.name}</td>
+                    <td class="py-2.5 px-3 text-right font-semibold truncate ${p.cpu > 50 ? 'text-[var(--accent-red)]' : p.cpu > 20 ? 'text-[var(--accent-yellow)]' : 'text-[var(--text-secondary)]'}">${p.cpu.toFixed(1)}%</td>
+                    <td class="py-2.5 px-3 text-right text-[var(--text-secondary)] truncate">${p.memory.toFixed(1)}%</td>
+                    <td class="py-2.5 px-3 truncate"><span class="status-badge ${p.status === 'running' ? 'bg-[var(--accent-green)]/10 text-[var(--accent-green)] border border-[var(--accent-green)]/20' : 'bg-white/5 text-[var(--text-muted)] border border-[var(--border-subtle)]'}">${p.status}</span></td>
                 </tr>
             `).join('');
         }
 
+        function applySortUI() {
+            document.querySelectorAll('.sort-btn').forEach(b => {
+                const active = b.dataset.col === sortCol;
+                b.classList.toggle('sorted', active);
+                b.querySelector('.sort-arrow').textContent = active ? (sortDir === 'asc' ? '▲' : '▼') : '▲';
+            });
+        }
+        // Seed sort from server-side preference (borrowed from Laranode top-sort).
+        fetch('/api/monitor/sort', { credentials: 'same-origin' }).then(r => r.json()).then(p => {
+            if (p && p.sort) { sortCol = p.sort; sortDir = p.direction || sortDir; applySortUI(); updateTable(); }
+        }).catch(() => {});
         document.querySelectorAll('.sort-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const col = btn.dataset.col;
@@ -468,15 +513,79 @@
                     sortCol = col;
                     sortDir = btn.dataset.type === 'str' ? 'asc' : 'desc';
                 }
-                document.querySelectorAll('.sort-btn').forEach(b => {
-                    b.classList.remove('sorted');
-                    b.querySelector('.sort-arrow').textContent = '▲';
-                });
-                btn.classList.add('sorted');
-                btn.querySelector('.sort-arrow').textContent = sortDir === 'asc' ? '▲' : '▼';
+                applySortUI();
                 updateTable();
+                fetch('/api/monitor/sort', { method: 'POST', credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sort: sortCol, direction: sortDir }) }).catch(() => {});
             });
         });
+
+        // Pause / resume live process updates. Freezes the table so text
+        // can be selected and copied; charts and bars keep updating.
+        let processesPaused = false;
+        const procsPauseBtn = document.getElementById('procs-pause-btn');
+        procsPauseBtn.addEventListener('click', () => {
+            processesPaused = !processesPaused;
+            procsPauseBtn.innerHTML = processesPaused
+                ? '<i data-lucide="play" class="w-3 h-3"></i><span>Resume</span>'
+                : '<i data-lucide="pause" class="w-3 h-3"></i><span>Pause</span>';
+            procsPauseBtn.title = processesPaused
+                ? 'Resume live updates'
+                : 'Pause live updates (freezes the table so you can select and copy text)';
+            procsPauseBtn.classList.toggle('text-[var(--accent-yellow)]', processesPaused);
+            lucide.createIcons();
+        });
+
+        // Draggable column widths for the processes table. Widths are
+        // applied to the <colgroup> (table is table-fixed) and persisted
+        // to localStorage so they survive reloads.
+        (function initProcColResize() {
+            const table = document.getElementById('procs-table');
+            const cols = [...table.querySelectorAll('colgroup col')];
+            const ths = [...table.querySelectorAll('thead th')];
+            const KEY = 'ssm-proc-colwidths';
+            const MIN_W = 56;
+            try {
+                const saved = JSON.parse(localStorage.getItem(KEY) || 'null');
+                if (Array.isArray(saved)) saved.forEach((w, i) => {
+                    if (w && cols[i]) cols[i].style.width = w + 'px';
+                });
+            } catch (e) { /* ignore corrupt prefs */ }
+            ths.forEach((th, i) => {
+                if (i >= cols.length) return;
+                const grip = document.createElement('span');
+                grip.className = 'col-resize';
+                grip.title = 'Drag to resize column';
+                th.appendChild(grip);
+                grip.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    grip.classList.add('dragging');
+                    document.body.style.cursor = 'col-resize';
+                    document.body.style.userSelect = 'none';
+                    const startX = e.clientX;
+                    const startW = th.getBoundingClientRect().width;
+                    const onMove = (ev) => {
+                        const w = Math.max(MIN_W, Math.round(startW + ev.clientX - startX));
+                        cols[i].style.width = w + 'px';
+                    };
+                    const onUp = () => {
+                        document.removeEventListener('mousemove', onMove);
+                        document.removeEventListener('mouseup', onUp);
+                        grip.classList.remove('dragging');
+                        document.body.style.cursor = '';
+                        document.body.style.userSelect = '';
+                        try {
+                            localStorage.setItem(KEY, JSON.stringify(cols.map(c =>
+                                parseInt(c.style.width, 10) || null)));
+                        } catch (err) { /* storage unavailable */ }
+                    };
+                    document.addEventListener('mousemove', onMove);
+                    document.addEventListener('mouseup', onUp);
+                });
+            });
+        })();
 
         let cpuChartInitialized = false;
 
@@ -586,8 +695,8 @@
             netChart.data.labels = timeLabels;
             netChart.update('none');
 
-            // Processes
-            if (s.processes) {
+            // Processes (skipped while paused so rows can be copied)
+            if (s.processes && !processesPaused) {
                 processesData = s.processes;
                 updateTable();
             }
@@ -595,6 +704,40 @@
                 console.error('Monitor update error:', e);
             }
         });
+
+        // Pinned services overview (one fetch, no polling — systemd state changes slowly).
+        function escSvc(s) { return String(s == null ? '' : s).replace(/[<>"&]/g, c => ({'<':'&lt;','>':'&gt;','"':'&quot;','&':'&amp;'}[c])); }
+        function fmtSvcMem(b) {
+            if (!b) return '—';
+            if (b < 1024) return b + ' B';
+            const u = ['KB','MB','GB']; let v = b/1024;
+            for (const x of u) { if (v < 1024) return v.toFixed(1)+' '+x; v/=1024; }
+            return v.toFixed(1)+' TB';
+        }
+        fetch('/api/monitor/services?units=docker.service,ssh.service,cron.service', { credentials:'same-origin' })
+            .then(r => r.json()).then(j => {
+                const wrap = document.getElementById('pinned-services');
+                const items = (j.services||[]).filter(s => s.exists);
+                if (!items.length) { wrap.innerHTML = '<div class="text-[var(--text-muted)] text-xs">No pinned units found on this host.</div>'; return; }
+                wrap.innerHTML = items.map(s => {
+                    const active = s.active_state === 'active';
+                    const dot = active ? 'var(--accent-green)' : 'var(--accent-red)';
+                    // Backend maps systemd UINT64_MAX/"[not set]" to 0; also
+                    // guard client-side so a huge sentinel never renders EB.
+                    const mem = (s.memory_bytes == null || s.memory_bytes >= 2**63) ? '—' : fmtSvcMem(s.memory_bytes);
+                    const cpu = (s.cpu_nsec == null || s.cpu_nsec >= 2**63) ? '—' : (s.cpu_nsec/1e9).toFixed(1) + 's';
+                    return `<div class="rounded-lg border border-[var(--border-subtle)] p-3">
+                        <div class="flex items-center gap-2 font-mono text-xs">
+                            <span class="w-2 h-2 rounded-full" style="background:${dot}"></span>
+                            <span class="truncate" title="${escSvc(s.name)}">${escSvc(s.name)}</span>
+                            <span class="ml-auto text-[var(--text-muted)]">${escSvc(s.active_state||'—')}/${escSvc(s.sub_state||'—')}</span>
+                        </div>
+                        <div class="mt-2 text-[11px] text-[var(--text-muted)] font-mono">pid ${escSvc(s.main_pid||'—')} · ${escSvc(mem)} · ${escSvc(cpu)} cpu</div>
+                    </div>`;
+                }).join('');
+            }).catch(() => {
+                document.getElementById('pinned-services').innerHTML = '<div class="text-[var(--text-muted)] text-xs">Unavailable.</div>';
+            });
     </script>
 </body>
 </html>

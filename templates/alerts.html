@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alert History - Server Services Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --border-subtle: #1e1e2a;
+            --border-active: #2d2d3a;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --accent-orange: #f97316;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+        * { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        code, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+        body {
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(ellipse at top left, rgba(245, 158, 11, 0.04) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(239, 68, 68, 0.04) 0%, transparent 50%);
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+
+        .badge {
+            display: inline-flex; align-items: center; gap: 0.25rem;
+            padding: 0.125rem 0.5rem; border-radius: 0.375rem;
+            font-size: 0.6875rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .badge-green { background: rgba(16,185,129,0.12); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.25); }
+        .badge-red { background: rgba(239,68,68,0.12); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.25); }
+        .badge-blue { background: rgba(59,130,246,0.12); color: var(--accent-blue); border: 1px solid rgba(59,130,246,0.25); }
+        .badge-yellow { background: rgba(245,158,11,0.12); color: var(--accent-yellow); border: 1px solid rgba(245,158,11,0.25); }
+        .badge-gray { background: rgba(100,116,139,0.12); color: var(--text-secondary); border: 1px solid rgba(100,116,139,0.25); }
+        .badge-purple { background: rgba(139,92,246,0.12); color: var(--accent-purple); border: 1px solid rgba(139,92,246,0.25); }
+        .badge-cyan { background: rgba(6,182,212,0.12); color: var(--accent-cyan); border: 1px solid rgba(6,182,212,0.25); }
+        .badge-orange { background: rgba(249,115,22,0.12); color: var(--accent-orange); border: 1px solid rgba(249,115,22,0.25); }
+
+        .filter-tab {
+            padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+            font-size: 0.8125rem; font-weight: 600;
+            color: var(--text-secondary); background: transparent;
+            border: 1px solid var(--border-subtle);
+            cursor: pointer; transition: all 0.15s ease;
+        }
+        .filter-tab:hover { background: rgba(255,255,255,0.04); color: var(--text-primary); }
+        .filter-tab.active { background: rgba(245,158,11,0.12); color: var(--accent-yellow); border-color: rgba(245,158,11,0.35); }
+
+        .search-input, .select-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.5rem 0.875rem;
+            color: var(--text-primary);
+            font-size: 0.8125rem; outline: none;
+            transition: border-color 0.15s;
+            width: 100%; min-width: 200px;
+        }
+        .search-input:focus, .select-input:focus { border-color: var(--accent-yellow); }
+
+        .panel-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+        }
+
+        .events-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; min-width: 640px; }
+        .events-table thead th {
+            position: sticky; top: 0; z-index: 1;
+            text-align: left; font-size: 0.6875rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-muted); padding: 0.75rem 1rem;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .events-table tbody td {
+            padding: 0.625rem 1rem;
+            border-bottom: 1px solid var(--border-subtle);
+            font-size: 0.8125rem; color: var(--text-primary);
+            vertical-align: middle;
+        }
+        .events-table tbody tr:last-child td { border-bottom: none; }
+        .events-table tbody tr:hover td { background: rgba(255,255,255,0.02); }
+        .table-scroll { max-height: min(560px, calc(100dvh - 280px)); min-height: 200px; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+
+        .summary-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            padding: 1rem 1.25rem;
+            display: flex; flex-direction: column; gap: 0.25rem;
+        }
+        .summary-value {
+            font-size: 1.5rem; font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .summary-label {
+            font-size: 0.6875rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-muted);
+        }
+
+        .channel-row {
+            display: grid;
+            grid-template-columns: 1fr auto auto auto auto auto;
+            gap: 1rem;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .channel-row:last-child { border-bottom: none; }
+        .channel-row .label { font-weight: 600; text-transform: capitalize; }
+        .channel-row .num { font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem; }
+        .channel-row .pct-bar {
+            width: 80px; height: 6px; background: var(--bg-secondary); border-radius: 3px; overflow: hidden;
+        }
+        .channel-row .pct-fill { height: 100%; background: var(--accent-green); transition: width 0.3s; }
+
+        .btn {
+            display: inline-flex; align-items: center; gap: 0.375rem;
+            padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+            font-size: 0.8125rem; font-weight: 600;
+            background: var(--bg-secondary); border: 1px solid var(--border-subtle);
+            color: var(--text-primary); cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .btn:hover { background: var(--border-subtle); }
+        .btn-primary { background: var(--accent-yellow); color: #1a1a0a; border-color: var(--accent-yellow); }
+        .btn-primary:hover { background: #fbbf24; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .empty-state {
+            text-align: center; padding: 3rem 1.5rem;
+            color: var(--text-muted);
+        }
+
+        .toast-container {
+            position: fixed; top: 1rem; right: 1rem;
+            z-index: 100; display: flex; flex-direction: column; gap: 0.5rem;
+        }
+        .toast {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem; font-size: 0.8125rem;
+            color: var(--text-primary);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            animation: fadeIn 0.2s ease-out;
+        }
+        .toast.success { border-left: 3px solid var(--accent-green); }
+        .toast.error { border-left: 3px solid var(--accent-red); }
+        .toast.info { border-left: 3px solid var(--accent-cyan); }
+        @keyframes sk { 0%,100%{opacity:.4} 50%{opacity:.8} }
+        .sk { display:inline-block; height:14px; border-radius:4px; background:var(--border-subtle); animation:sk 1.5s ease-in-out infinite; }
+    </style>
+</head>
+<body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
+    {% import "_macros.html" as ui %}
+    {% set actions %}
+    {% endset %}
+    {% set page_info %}
+        <p style="margin-bottom:0.75rem">Every message the manager has <strong>sent you</strong> — about sick programs or services changing state — lands here with a delivery receipt.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li>Each row shows <strong>which channel</strong> carried it (phone app, webhook, email), <strong>whether it arrived</strong>, and how long it took.</li>
+            <li>Use the time buttons and filters to narrow down, and the <strong>per-channel stats</strong> to spot a channel that keeps failing.</li>
+            <li>Think of it as the difference between "the manager shouted" and "somebody heard" — this page proves the second part.</li>
+        </ul>
+        {% endset %}
+    {{ ui.header(
+        title="Alert History",
+        icon="megaphone",
+        icon_color="var(--accent-yellow)",
+        badge_html='<span class="badge badge-yellow">notification log</span>',
+        actions=actions,
+        current='/alerts',
+        info=page_info,
+    ) }}
+    {% set subheader %}
+        <div class="flex gap-1">
+            <button class="filter-tab active" data-range="all" onclick="setRange('all', this)" title="Show all history">All</button>
+            <button class="filter-tab" data-range="1h" onclick="setRange('1h', this)" title="Show the last hour">1h</button>
+            <button class="filter-tab" data-range="24h" onclick="setRange('24h', this)" title="Show the last 24 hours">24h</button>
+            <button class="filter-tab" data-range="7d" onclick="setRange('7d', this)" title="Show the last 7 days">7d</button>
+            <button class="filter-tab" data-range="30d" onclick="setRange('30d', this)" title="Show the last 30 days">30d</button>
+        </div>
+        <select id="filter-channel" class="select-input" style="max-width:160px" onchange="loadEvents()" title="Show one channel only">
+            <option value="">All channels</option>
+            <option value="ntfy">ntfy</option>
+            <option value="webhook">webhook</option>
+            <option value="telegram">telegram</option>
+            <option value="email">email</option>
+        </select>
+        <select id="filter-success" class="select-input" style="max-width:140px" onchange="loadEvents()" title="Show delivered or failed only">
+            <option value="">All results</option>
+            <option value="1">Success only</option>
+            <option value="0">Failures only</option>
+        </select>
+        <input id="filter-service" type="text" class="text-input" placeholder="Filter by service…" style="max-width:220px" oninput="debouncedLoad()">
+        <span class="flex-1"></span>
+        <span id="event-count" class="text-xs text-[var(--text-muted)] font-mono whitespace-nowrap"></span>
+        <a href="/api/alerts/export.csv" class="btn" target="_blank">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Export CSV</span>
+        </a>
+        <button class="btn" id="btn-pause" onclick="togglePause()" title="Pause the 30s auto-refresh">
+            <i data-lucide="pause" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline" id="pause-label">Pause</span>
+        </button>
+        <button class="btn" onclick="loadAll()" title="Reload the delivery history">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Refresh</span>
+        </button>
+    {% endset %}
+    {{ ui.subheader(subheader) }}
+
+    <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6 space-y-4">
+        <div class="text-xs text-[var(--text-muted)]">Every notification the app sends (health transitions, program state changes) is logged here with its channel, recipient, result, and latency — so a silent channel is debuggable instead of mysterious.</div>
+        <section id="summary-cards" class="grid grid-cols-2 sm:grid-cols-5 gap-3"></section>
+
+        <section class="panel-card">
+            <div class="p-4 border-b border-[var(--border-subtle)]">
+                <h2 class="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <i data-lucide="bar-chart-3" class="w-4 h-4 text-[var(--accent-yellow)]"></i>
+                    Per-channel delivery stats
+                </h2>
+                <div id="channel-stats"></div>
+            </div>
+        </section>
+
+        <section class="panel-card">
+            <div class="table-scroll">
+                <table class="events-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 9rem">Time</th>
+                            <th style="width: 6rem">Channel</th>
+                            <th style="width: 5rem">Result</th>
+                            <th style="width: 18%">Service</th>
+                            <th>Recipient</th>
+                            <th style="width: 6rem">Latency</th>
+                            <th>Error</th>
+                        </tr>
+                    </thead>
+                    <tbody id="events-tbody">
+                        <tr><td colspan="7" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:25%"></span><span class="sk" style="width:15%;margin-left:1rem"></span><span class="sk" style="width:20%;margin-left:1rem"></span></div></td></tr>
+                        <tr><td colspan="7" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:35%"></span><span class="sk" style="width:10%;margin-left:1rem"></span><span class="sk" style="width:15%;margin-left:1rem"></span></div></td></tr>
+                        <tr><td colspan="7" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:20%"></span><span class="sk" style="width:12%;margin-left:1rem"></span><span class="sk" style="width:30%;margin-left:1rem"></span></div></td></tr>
+                        <tr><td colspan="7" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:40%"></span><span class="sk" style="width:8%;margin-left:1rem"></span></div></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <div id="toasts" class="toast-container"></div>
+
+    <script>
+    let range = 'all';
+    let filterTimer = null;
+
+    function debouncedLoad() {
+        if (filterTimer) clearTimeout(filterTimer);
+        filterTimer = setTimeout(loadEvents, 250);
+    }
+
+    function toast(message, kind) {
+        kind = kind || 'info';
+        const el = document.createElement('div');
+        el.className = 'toast ' + kind;
+        el.textContent = message;
+        document.getElementById('toasts').appendChild(el);
+        setTimeout(() => el.remove(), 3500);
+    }
+    function escAttr(s) { return String(s == null ? '' : s).replace(/[<>"&]/g, c => ({'<':'&lt;','>':'&gt;','"':'&quot;','&':'&amp;'}[c])); }
+    function fmtAgo(ts) {
+        if (!ts) return '—';
+        const sec = Math.floor(Date.now() / 1000 - ts);
+        if (sec < 60) return sec + 's ago';
+        if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
+        if (sec < 86400) return Math.floor(sec / 3600) + 'h ago';
+        return Math.floor(sec / 86400) + 'd ago';
+    }
+    function fmtTimestamp(ts) {
+        if (!ts) return '—';
+        const d = new Date(ts * 1000);
+        return d.toLocaleString();
+    }
+    function fmtLatency(ms) {
+        if (ms == null) return '—';
+        if (ms < 1000) return ms.toFixed(0) + ' ms';
+        return (ms / 1000).toFixed(2) + ' s';
+    }
+    function channelBadgeClass(ch) {
+        if (ch === 'ntfy') return 'badge-purple';
+        if (ch === 'webhook') return 'badge-blue';
+        if (ch === 'telegram') return 'badge-cyan';
+        if (ch === 'email') return 'badge-orange';
+        return 'badge-gray';
+    }
+    function api(path) {
+        return fetch(path).then(r => {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        });
+    }
+    let paused = false;
+    let lastTotal = null;  // total deliveries in range (for the setup explainer)
+    function togglePause() {
+        paused = !paused;
+        document.getElementById('pause-label').textContent = paused ? 'Resume' : 'Pause';
+    }
+
+    function setRange(r, btn) {
+        range = r;
+        document.querySelectorAll('.filter-tab').forEach(b => b.classList.toggle('active', b === btn));
+        loadAll();
+    }
+
+    function sinceQuery() {
+        if (range === 'all') return '';
+        return '&since=' + range;
+    }
+
+    function loadAll() {
+        if (paused) return;
+        loadSummary();
+        loadEvents();
+    }
+
+    function loadSummary() {
+        api('/api/alerts/stats?' + (sinceQuery() ? sinceQuery().slice(1) : ''))
+            .then(d => {
+                lastTotal = (d.summary || {}).total || 0;
+                renderSummary(d);
+            })
+            .catch(e => {
+                document.getElementById('summary-cards').innerHTML =
+                    `<div class="summary-card"><div class="summary-label">Error</div><div class="text-xs text-[var(--accent-red)]">Could not load stats: ${escAttr(e.message)}</div></div>`;
+                document.getElementById('channel-stats').innerHTML =
+                    `<div class="empty-state text-sm text-[var(--accent-red)]">Could not load channel stats.</div>`;
+            });
+    }
+
+    function renderSummary(d) {
+        const s = d.summary || {};
+        const cards = document.getElementById('summary-cards');
+        const successRate = (s.success_rate * 100).toFixed(1) + '%';
+        const rateColor = s.success_rate >= 0.95 ? 'var(--accent-green)' :
+                          s.success_rate >= 0.8 ? 'var(--accent-yellow)' : 'var(--accent-red)';
+        cards.innerHTML = `
+            <div class="summary-card">
+                <div class="summary-label">Total</div>
+                <div class="summary-value">${s.total || 0}</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Delivered</div>
+                <div class="summary-value" style="color:var(--accent-green)">${s.success || 0}</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Failed</div>
+                <div class="summary-value" style="color:var(--accent-red)">${s.failed || 0}</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Success rate</div>
+                <div class="summary-value" style="color:${rateColor}">${successRate}</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Channels</div>
+                <div class="summary-value">${s.channels || 0}</div>
+            </div>`;
+        renderChannels(d.channels || []);
+    }
+
+    function renderChannels(rows) {
+        const el = document.getElementById('channel-stats');
+        if (!rows.length) {
+            el.innerHTML = `<div class="empty-state text-sm">No deliveries in this range yet.</div>`;
+            return;
+        }
+        el.innerHTML = rows.map(r => {
+            const pct = (r.success_rate * 100).toFixed(1);
+            const color = r.success_rate >= 0.95 ? 'var(--accent-green)' :
+                          r.success_rate >= 0.8 ? 'var(--accent-yellow)' : 'var(--accent-red)';
+            const lastFail = r.last_failure ? fmtAgo(r.last_failure) : '—';
+            return `<div class="channel-row">
+                <div>
+                    <div class="label">${escAttr(r.channel)}</div>
+                    <div class="text-xs text-[var(--text-muted)]">last fail: ${escAttr(lastFail)}</div>
+                </div>
+                <div class="num">${r.ok}/${r.total}</div>
+                <div class="num" style="color:${color}">${pct}%</div>
+                <div class="pct-bar"><div class="pct-fill" style="width:${pct}%;background:${color}"></div></div>
+                <div class="num text-[var(--text-muted)]">${r.avg_latency_ms.toFixed(0)} ms</div>
+                <div class="num text-[var(--text-muted)]">${fmtAgo(r.last_attempt)}</div>
+            </div>`;
+        }).join('');
+    }
+
+    function loadEvents() {
+        const params = new URLSearchParams();
+        params.set('limit', '200');
+        if (range !== 'all') params.set('since', range);
+        const channel = document.getElementById('filter-channel').value;
+        if (channel) params.set('channel', channel);
+        const success = document.getElementById('filter-success').value;
+        if (success !== '') params.set('success', success);
+        const service = document.getElementById('filter-service').value.trim();
+        if (service) params.set('service', service);
+
+        api('/api/alerts/events?' + params.toString())
+            .then(d => renderEvents(d.events || []))
+            .catch(e => {
+                document.getElementById('events-tbody').innerHTML =
+                    `<tr><td colspan="7"><div class="empty-state text-[var(--accent-red)]">Failed to load events: ${escAttr(e.message)}</div></td></tr>`;
+                toast('Failed to load events: ' + e.message, 'error');
+            });
+    }
+
+    function filtersActive() {
+        return range !== 'all'
+            || document.getElementById('filter-channel').value !== ''
+            || document.getElementById('filter-success').value !== ''
+            || document.getElementById('filter-service').value.trim() !== '';
+    }
+
+    function renderEvents(rows) {
+        const tbody = document.getElementById('events-tbody');
+        document.getElementById('event-count').textContent = rows.length + ' events';
+        if (!rows.length) {
+            // Teach, don't just shrug: an empty log with no filters means
+            // no notifier is configured yet — show how to get first blood.
+            if (!filtersActive() && (lastTotal === 0 || lastTotal === null)) {
+                tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state" style="text-align:left;max-width:640px;margin:0 auto">
+                    <div class="font-semibold text-[var(--text-primary)] mb-1">No notifications have been sent yet.</div>
+                    <div class="text-xs mb-2">This log fills when a health check flips or a program changes state <em>and</em> a notifier is configured. Add one to <code class="font-mono">config.yaml</code>, restart, and trigger a transition (e.g. stop a program with a health check):</div>
+                    <pre class="font-mono text-[11px] bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded p-3 overflow-x-auto text-left">notifications:\n  - type: ntfy\n    topic: my-alerts</pre>
+                    <div class="text-xs mt-2">Live status lives on <a class="text-[var(--accent-blue)] underline" href="/notifications">/notifications</a>; validator on <a class="text-[var(--accent-blue)] underline" href="/config">/config</a>.</div>
+                </div></td></tr>`;
+            } else {
+                tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">No deliveries match these filters.</div></td></tr>`;
+            }
+            return;
+        }
+        tbody.innerHTML = rows.map(r => {
+            const resultBadge = r.success
+                ? '<span class="badge badge-green"><i data-lucide="check" style="width:10px;height:10px"></i>OK</span>'
+                : '<span class="badge badge-red"><i data-lucide="x" style="width:10px;height:10px"></i>FAIL</span>';
+            return `<tr>
+                <td class="font-mono text-xs">
+                    <div>${fmtTimestamp(r.timestamp)}</div>
+                    <div class="text-[var(--text-muted)]">${fmtAgo(r.timestamp)}</div>
+                </td>
+                <td><span class="badge ${channelBadgeClass(r.channel)}">${escAttr(r.channel)}</span></td>
+                <td>${resultBadge}</td>
+                <td class="font-mono text-xs">${escAttr(r.service) || '—'}</td>
+                <td class="font-mono text-xs break-all" title="${escAttr(r.recipient)}">${escAttr(r.recipient) || '—'}</td>
+                <td class="font-mono text-xs">${fmtLatency(r.latency_ms)}</td>
+                <td class="font-mono text-xs break-all" style="color:var(--accent-red)">${escAttr(r.error) || ''}</td>
+            </tr>`;
+        }).join('');
+        lucide.createIcons();
+    }
+
+    lucide.createIcons();
+    loadAll();
+    setInterval(loadAll, 30000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <linearGradient id="s" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#bg)"/>
+  <g transform="translate(128,128)">
+    <rect x="-36" y="-44" width="72" height="88" rx="8" fill="url(#s)" opacity="0.3"/>
+    <rect x="-28" y="-36" width="56" height="72" rx="6" fill="url(#s)"/>
+    <rect x="-16" y="-28" width="10" height="14" rx="2" fill="#1e293b" opacity="0.4"/>
+    <rect x="6" y="-28" width="10" height="14" rx="2" fill="#1e293b" opacity="0.4"/>
+    <rect x="-16" y="-8" width="10" height="14" rx="2" fill="#1e293b" opacity="0.4"/>
+    <rect x="6" y="-8" width="10" height="14" rx="2" fill="#1e293b" opacity="0.4"/>
+    <rect x="-16" y="12" width="10" height="14" rx="2" fill="#1e293b" opacity="0.4"/>
+    <rect x="6" y="12" width="10" height="14" rx="2" fill="#1e293b" opacity="0.4"/>
+    <circle cx="0" cy="30" r="18" fill="none" stroke="#e2e8f0" stroke-width="3" opacity="0.5"/>
+    <circle cx="0" cy="30" r="9" fill="none" stroke="#e2e8f0" stroke-width="2.5" opacity="0.5"/>
+    <line x1="0" y1="21" x2="0" y2="12" stroke="#e2e8f0" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
+    <line x1="9" y1="30" x2="18" y2="30" stroke="#e2e8f0" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
+    <line x1="0" y1="39" x2="0" y2="48" stroke="#e2e8f0" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
+    <line x1="-9" y1="30" x2="-18" y2="30" stroke="#e2e8f0" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>
+  </g>
+</svg>

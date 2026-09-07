@@ -1,0 +1,1338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Docker - Server Services Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --border-subtle: #1e1e2a;
+            --border-active: #2d2d3a;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --accent-orange: #f97316;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+        * { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        code, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+        body {
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(ellipse at top left, rgba(6, 182, 212, 0.04) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(59, 130, 246, 0.04) 0%, transparent 50%);
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        @keyframes flash-update { 0% { background: rgba(59, 130, 246, 0.15); } 100% { background: transparent; } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        .animate-slide-in-right { animation: slideInRight 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+        .row-flash { animation: flash-update 0.8s ease-out; }
+
+        .state-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            display: inline-block; flex-shrink: 0;
+        }
+        .state-running { background: var(--accent-green); box-shadow: 0 0 8px rgba(16, 185, 129, 0.6); }
+        .state-exited { background: var(--text-muted); }
+        .state-restarting { background: var(--accent-yellow); box-shadow: 0 0 8px rgba(245, 158, 11, 0.5); animation: pulse-soft 1.4s ease-in-out infinite; }
+        .state-paused { background: var(--accent-purple); }
+        .state-dead { background: var(--accent-red); box-shadow: 0 0 8px rgba(239, 68, 68, 0.5); }
+        .state-created { background: var(--accent-cyan); }
+
+        .badge {
+            display: inline-flex; align-items: center; gap: 0.25rem;
+            padding: 0.125rem 0.5rem; border-radius: 0.375rem;
+            font-size: 0.6875rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .badge-green { background: rgba(16,185,129,0.12); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.25); }
+        .badge-red { background: rgba(239,68,68,0.12); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.25); }
+        .badge-yellow { background: rgba(245,158,11,0.12); color: var(--accent-yellow); border: 1px solid rgba(245,158,11,0.25); }
+        .badge-blue { background: rgba(59,130,246,0.12); color: var(--accent-blue); border: 1px solid rgba(59,130,246,0.25); }
+        .badge-purple { background: rgba(139,92,246,0.12); color: var(--accent-purple); border: 1px solid rgba(139,92,246,0.25); }
+        .badge-gray { background: rgba(100,116,139,0.12); color: var(--text-secondary); border: 1px solid rgba(100,116,139,0.25); }
+        .badge-cyan { background: rgba(6,182,212,0.12); color: var(--accent-cyan); border: 1px solid rgba(6,182,212,0.25); }
+
+        .row-action-btn {
+            width: 28px; height: 28px;
+            display: inline-flex; align-items: center; justify-content: center;
+            border-radius: 0.375rem;
+            background: rgba(255,255,255,0.04);
+            color: var(--text-secondary);
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .row-action-btn:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+        .row-action-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+        .row-action-btn.start:hover { background: rgba(16,185,129,0.15); color: var(--accent-green); }
+        .row-action-btn.stop:hover { background: rgba(239,68,68,0.15); color: var(--accent-red); }
+        .row-action-btn.restart:hover { background: rgba(59,130,246,0.15); color: var(--accent-blue); }
+
+        .search-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.5rem 0.875rem 0.5rem 2.25rem;
+            color: var(--text-primary);
+            font-size: 0.8125rem;
+            width: 100%;
+            transition: all 0.15s ease;
+        }
+        .search-input:focus { outline: none; border-color: var(--accent-blue); box-shadow: 0 0 0 2px rgba(59,130,246,0.2); }
+
+        .panel-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+        }
+
+        .tab-button {
+            padding: 0.5rem 0.875rem;
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+        .tab-button:hover { color: var(--text-primary); }
+        .tab-button.active { color: var(--accent-cyan); border-bottom-color: var(--accent-cyan); }
+
+        .log-line {
+            font-family: 'JetBrains Mono', ui-monospace, monospace;
+            font-size: 0.75rem;
+            line-height: 1.55;
+            color: var(--text-primary);
+            white-space: pre-wrap;
+            word-break: break-all;
+            padding: 0.0625rem 0.5rem;
+        }
+        .log-line.new { background: rgba(6, 182, 212, 0.08); }
+
+        .stat-bar {
+            background: var(--bg-secondary);
+            border-radius: 999px;
+            height: 6px;
+            overflow: hidden;
+            position: relative;
+        }
+        .stat-bar-fill {
+            height: 100%;
+            border-radius: 999px;
+            transition: width 0.4s ease;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1.5rem;
+            color: var(--text-muted);
+        }
+
+        .modal-backdrop {
+            position: fixed; inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 50;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .modal-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            max-width: 28rem;
+            width: 90%;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+        .btn {
+            padding: 0.5rem 0.875rem;
+            border-radius: 0.5rem;
+            font-size: 0.8125rem;
+            font-weight: 600;
+            border: 1px solid var(--border-subtle);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: inline-flex; align-items: center; gap: 0.375rem;
+        }
+        .btn:hover { background: var(--border-subtle); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--accent-cyan); color: #062029; border-color: var(--accent-cyan); }
+        .btn-primary:hover { background: #22c5dd; }
+        .btn-danger { background: rgba(239,68,68,0.15); color: var(--accent-red); border-color: rgba(239,68,68,0.3); }
+        .btn-danger:hover { background: rgba(239,68,68,0.25); }
+
+        .table-wrap {
+            overflow-x: auto; overflow-y: auto;
+            max-height: calc(100dvh - 280px);
+            min-height: 160px;
+            overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+            border-radius: 0.75rem;
+        }
+        @media (max-width: 640px) { .table-wrap { max-height: calc(100dvh - 300px); } }
+        .data-table {
+            width: 100%; min-width: 640px;
+            table-layout: fixed;
+            border-collapse: collapse;
+        }
+        .data-table thead th { position: sticky; top: 0; z-index: 1; }
+        .data-table th {
+            text-align: left;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            padding: 0.625rem 0.875rem;
+            border-bottom: 1px solid var(--border-subtle);
+            background: var(--bg-card);
+        }
+        .data-table td {
+            padding: 0.625rem 0.875rem;
+            font-size: 0.8125rem;
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--border-subtle);
+            vertical-align: middle;
+        }
+        .data-table tr.row-clickable { cursor: pointer; }
+        .data-table tr.row-clickable:hover td { background: rgba(255,255,255,0.02); }
+        .data-table tr.row-selected td { background: rgba(6, 182, 212, 0.06); }
+
+        .spinner {
+            display: inline-block;
+            width: 14px; height: 14px;
+            border: 2px solid var(--border-subtle);
+            border-top-color: var(--accent-cyan);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+
+        .toast-container {
+            position: fixed; top: 1rem; right: 1rem;
+            z-index: 100;
+            display: flex; flex-direction: column; gap: 0.5rem;
+        }
+        .toast {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem;
+            font-size: 0.8125rem;
+            color: var(--text-primary);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            animation: fadeIn 0.2s ease-out;
+        }
+        .toast.success { border-left: 3px solid var(--accent-green); }
+        .toast.error { border-left: 3px solid var(--accent-red); }
+        .toast.info { border-left: 3px solid var(--accent-cyan); }
+
+        /* Two-column layout only while the detail panel is open;
+           otherwise the empty 24rem track would squeeze the table. */
+        @media (min-width: 1024px) {
+            #view-containers.with-detail { grid-template-columns: minmax(0, 1fr) 24rem; }
+        }
+    </style>
+</head>
+<body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
+    {% import "_macros.html" as ui %}
+    {% set actions %}
+    {% endset %}
+    {% set page_info %}
+        <p style="margin-bottom:0.75rem">Docker runs apps in isolated boxes called <strong>containers</strong>. This page lists them all so you can check on them without terminal commands.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li>Click a container for <strong>Details</strong> (settings), <strong>Stats</strong> (live CPU/memory use), and <strong>Logs</strong> (what it's printing right now).</li>
+            <li><strong>Stacks</strong> groups containers that belong together; <strong>Images</strong> are the blueprints containers are made from.</li>
+            <li>If this page says Docker is unavailable, your user usually just needs Docker access — it prints the exact command to fix that.</li>
+        </ul>
+        {% endset %}
+    {{ ui.header(
+        title="Docker Containers",
+        icon="container",
+        icon_color="var(--accent-cyan)",
+        badge_id="docker-version",
+        actions=actions,
+        current='/docker',
+        info=page_info,
+    ) }}
+    {% set subheader %}
+        <button class="tab-button active" data-view="containers" onclick="switchView('containers')" title="List all containers">
+            <i data-lucide="container" class="w-3.5 h-3.5"></i> Containers
+        </button>
+        <button class="tab-button" data-view="stacks" onclick="switchView('stacks')" title="Group containers by project">
+            <i data-lucide="layers" class="w-3.5 h-3.5"></i> Stacks
+        </button>
+        <button class="tab-button" data-view="images" onclick="switchView('images')" title="Container blueprints stored locally">
+            <i data-lucide="hard-drive" class="w-3.5 h-3.5"></i> Images
+        </button>
+        <button class="tab-button" data-view="daemon" onclick="switchView('daemon')" title="Docker engine status and version">
+            <i data-lucide="server" class="w-3.5 h-3.5"></i> Daemon
+        </button>
+        <span id="view-count" class="text-xs text-[var(--text-muted)] font-mono"></span>
+        <span class="flex-1"></span>
+        <label class="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer">
+            <input id="filter-all" type="checkbox" checked onchange="loadContainers()"
+                   class="rounded border-[var(--border-subtle)]">
+            Show stopped
+        </label>
+        <button id="live-btn" class="btn" onclick="toggleLive()" title="Pause live auto-refresh (keeps rows clickable)">
+            <i data-lucide="pause" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline" id="live-btn-label">Live</span>
+        </button>
+    {% endset %}
+    {{ ui.subheader(subheader) }}
+
+    <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6">
+        <div id="availability-banner"></div>
+
+        <div id="bulk-bar" class="panel-card p-3 mb-4 items-center gap-2 text-sm" style="display:none">
+            <span id="bulk-count" class="font-semibold text-[var(--accent-cyan)] whitespace-nowrap">0 selected</span>
+            <span class="flex-1"></span>
+            <button class="btn" onclick="bulkAction('start')" title="Start all selected containers"><i data-lucide="play" class="w-3.5 h-3.5"></i> Start</button>
+            <button class="btn" onclick="bulkAction('stop')" title="Stop all selected containers"><i data-lucide="square" class="w-3.5 h-3.5"></i> Stop</button>
+            <button class="btn" onclick="bulkAction('restart')" title="Restart all selected containers"><i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> Restart</button>
+            <button class="btn" onclick="clearSelection()" title="Unselect everything"><i data-lucide="x" class="w-3.5 h-3.5"></i> Clear</button>
+        </div>
+        <div id="view-containers" class="grid grid-cols-1 gap-4">
+            <section>
+                <div class="panel-card overflow-hidden">
+                    <div class="p-4 border-b border-[var(--border-subtle)] flex items-center gap-3 flex-wrap">
+                        <div class="relative flex-1 min-w-[10rem]">
+                            <i data-lucide="search" class="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+                            <input id="search" type="text" class="search-input" placeholder="Filter by name or image..." oninput="renderRows()">
+                        </div>
+                        <div id="state-tabs" class="flex items-center gap-1">
+                            <button class="tab-button active" data-state="all" onclick="setStateFilter('all')" title="Show containers in any state">All</button>
+                            <button class="tab-button" data-state="running" onclick="setStateFilter('running')" title="Show running containers only">Running</button>
+                            <button class="tab-button" data-state="stopped" onclick="setStateFilter('stopped')" title="Show stopped containers only">Stopped</button>
+                            <button class="tab-button" data-state="paused" onclick="setStateFilter('paused')" title="Show paused containers only">Paused</button>
+                            <button class="tab-button" data-state="restarting" onclick="setStateFilter('restarting')" title="Show restarting containers only">Restarting</button>
+                        </div>
+                        <span id="row-count" class="text-xs text-[var(--text-muted)] font-mono whitespace-nowrap"></span>
+                    </div>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 2rem" onclick="event.stopPropagation()"><input type="checkbox" id="select-all" title="Select all visible containers"></th>
+                                    <th style="width: 1.5rem"></th>
+                                    <th style="width: 26%">Name</th>
+                                    <th style="width: 22%">Image</th>
+                                    <th style="width: 16%">State</th>
+                                    <th style="width: 16%">Ports</th>
+                                    <th style="width: 7rem" class="text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="container-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <aside id="detail-panel" class="hidden">
+                <div class="panel-card sticky top-20 animate-slide-in-right">
+                    <div class="p-4 border-b border-[var(--border-subtle)]">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="min-w-0">
+                                <div id="detail-name" class="text-base font-semibold truncate"></div>
+                                <div id="detail-image" class="text-xs text-[var(--text-muted)] font-mono truncate"></div>
+                            </div>
+                            <button class="row-action-btn" onclick="closeDetail()" title="Close">
+                                <i data-lucide="x" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                        <div class="flex flex-wrap gap-1.5 mt-3">
+                            <button id="btn-start" class="btn" onclick="lifecycle('start')" title="Start this container">
+                                <i data-lucide="play" class="w-3.5 h-3.5"></i> Start
+                            </button>
+                            <button id="btn-stop" class="btn" onclick="lifecycle('stop')" title="Stop this container">
+                                <i data-lucide="square" class="w-3.5 h-3.5"></i> Stop
+                            </button>
+                            <button id="btn-restart" class="btn" onclick="lifecycle('restart')" title="Restart this container">
+                                <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> Restart
+                            </button>
+                            <button id="btn-remove" class="btn btn-danger" onclick="confirmRemove()" title="Delete this container (asks first)">
+                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Remove
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="border-b border-[var(--border-subtle)] px-2 flex gap-0.5">
+                        <button class="tab-button active" data-tab="details" onclick="switchTab('details')" title="Container settings and network">
+                            <i data-lucide="info" class="w-3.5 h-3.5"></i> Details
+                        </button>
+                        <button class="tab-button" data-tab="stats" onclick="switchTab('stats')" title="Live CPU, memory, and network use">
+                            <i data-lucide="activity" class="w-3.5 h-3.5"></i> Stats
+                        </button>
+                        <button class="tab-button" data-tab="logs" onclick="switchTab('logs')" title="What the container is printing">
+                            <i data-lucide="terminal" class="w-3.5 h-3.5"></i> Logs
+                        </button>
+                    </div>
+
+                    <div class="p-4 max-h-[60vh] overflow-y-auto">
+                        <div id="tab-details" class="space-y-3 text-xs">
+                            <div class="empty-state">Loading…</div>
+                        </div>
+                        <div id="tab-stats" class="space-y-3 text-xs hidden">
+                            <div class="empty-state">Click refresh to load stats</div>
+                        </div>
+                        <div id="trend-wrap" class="hidden mt-3">
+                            <div class="text-[var(--text-muted)] uppercase tracking-wider text-[0.625rem] mb-1">Trend (last ~2 min)</div>
+                            <div style="position:relative;height:90px"><canvas id="trend-chart"></canvas></div>
+                        </div>
+                        <div id="tab-logs" class="hidden">
+                            <div class="flex items-center justify-between mb-2 text-xs">
+                                <div class="flex items-center gap-2">
+                                    <button id="btn-logs-toggle" class="btn" onclick="toggleLogStream()" title="Start or pause the live log feed">
+                                        <i data-lucide="play" class="w-3 h-3"></i> <span id="btn-logs-toggle-label">Start</span>
+                                    </button>
+                                    <label class="flex items-center gap-1.5 text-[var(--text-muted)] cursor-pointer">
+                                        <input id="follow-tail" type="checkbox" checked class="rounded">
+                                        Follow
+                                    </label>
+                                </div>
+                                <button class="btn" onclick="clearLogs()" title="Empty the visible log view">
+                                    <i data-lucide="trash" class="w-3 h-3"></i> Clear
+                                </button>
+                            </div>
+                            <div id="log-output" class="bg-[var(--bg-primary)] border border-[var(--border-subtle)] rounded p-2 h-80 overflow-y-auto font-mono text-xs"></div>
+                        </div>
+                     </div>
+                 </div>
+             </aside>
+         </div>
+
+        <div id="view-stacks" class="hidden">
+            <div class="panel-card overflow-hidden">
+                <div class="p-4 border-b border-[var(--border-subtle)] flex items-center gap-3 flex-wrap">
+                    <span class="text-sm font-semibold">Compose stacks</span>
+                    <div class="relative flex-1 min-w-[10rem]">
+                        <i data-lucide="search" class="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+                        <input id="stack-search" type="text" class="search-input" placeholder="Filter stacks or containers..." oninput="renderStacks()">
+                    </div>
+                    <span id="stack-count" class="text-xs text-[var(--text-muted)] font-mono whitespace-nowrap"></span>
+                    <span class="flex-1"></span>
+                    <button class="btn" onclick="setAllStacks(true)" title="Expand all stacks"><i data-lucide="chevrons-down" class="w-3.5 h-3.5"></i> Expand</button>
+                    <button class="btn" onclick="setAllStacks(false)" title="Collapse all stacks"><i data-lucide="chevrons-up" class="w-3.5 h-3.5"></i> Collapse</button>
+                </div>
+                <div id="stacks-list" class="table-wrap divide-y divide-[var(--border-subtle)]"></div>
+            </div>
+        </div>
+
+        <div id="view-daemon" class="hidden">
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4" id="daemon-cards"></div>
+            <div class="panel-card overflow-hidden">
+                <div class="p-4 border-b border-[var(--border-subtle)] flex items-center gap-3 flex-wrap">
+                    <span class="text-sm font-semibold">Docker daemon</span>
+                    <span class="flex-1"></span>
+                    <button class="btn btn-danger" onclick="restartDaemon()" title="Restart the Docker engine itself (all containers pause briefly)">
+                        <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> Restart Docker
+                    </button>
+                </div>
+                <div id="daemon-details" class="p-4 text-sm"></div>
+            </div>
+        </div>
+
+        <div id="view-images" class="hidden">
+            <div class="panel-card overflow-hidden">
+                <div class="p-4 border-b border-[var(--border-subtle)] flex items-center gap-3 flex-wrap">
+                    <div class="relative flex-1 min-w-[10rem]">
+                        <i data-lucide="search" class="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+                        <input id="image-search" type="text" class="search-input" placeholder="Filter by tag or id..." oninput="renderImages()">
+                    </div>
+                    <span id="prune-info" class="text-xs text-[var(--text-muted)] font-mono"></span>
+                    <button id="btn-prune" class="btn" onclick="pruneImages()" title="Delete dangling images">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Prune
+                    </button>
+                    <span id="image-count" class="text-xs text-[var(--text-muted)] font-mono whitespace-nowrap"></span>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 30%">Repository:Tag</th>
+                                <th style="width: 14%">ID</th>
+                                <th style="width: 18%">Created</th>
+                                <th style="width: 18%">Size</th>
+                                <th style="width: 4.5rem" class="text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="image-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+     </main>
+
+    <div id="remove-modal" onclick="if(event.target===this) closeRemoveModal()" class="modal-backdrop hidden">
+        <div class="modal-card">
+            <h3 class="text-lg font-semibold mb-2">Remove container?</h3>
+            <p class="text-sm text-[var(--text-secondary)] mb-4">
+                Permanently remove <span id="remove-name" class="font-mono text-[var(--text-primary)]"></span>?
+            </p>
+            <label class="flex items-center gap-2 text-xs text-[var(--text-secondary)] mb-4 cursor-pointer">
+                <input id="remove-force" type="checkbox" class="rounded">
+                Force (kill and remove even if running)
+            </label>
+            <label class="flex items-center gap-2 text-xs text-[var(--text-secondary)] mb-4 cursor-pointer">
+                <input id="remove-volumes" type="checkbox" class="rounded">
+                Also remove anonymous volumes
+            </label>
+            <div class="flex gap-2 justify-end">
+                <button class="btn" onclick="closeRemoveModal()" title="Keep the container">Cancel</button>
+                <button class="btn btn-danger" onclick="executeRemove()" title="Delete the container now">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Remove
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toasts" class="toast-container"></div>
+
+    <script>
+    // ----- State -----
+    let containers = [];
+    let selected = null;
+    let detail = null;
+    let activeTab = 'details';
+    let logEventSource = null;
+    let statsTimer = null;
+    let images = [];
+    let currentView = 'containers';
+    let stateFilter = 'all';
+    let livePaused = false;
+    const selectedIds = new Set();
+    // Rolling 60-point trend for the Stats tab (same fixed-window
+    // pattern as /monitor: pre-filled nulls, spanGaps breaks the line).
+    const TREND_N = 60;
+    let trendCpu = new Array(TREND_N).fill(null);
+    let trendMem = new Array(TREND_N).fill(null);
+    let trendChart = null;
+    let trendFor = null;
+
+    // ----- Helpers -----
+    function stateDotClass(state) {
+        if (state === 'running') return 'state-running';
+        if (state === 'exited') return 'state-exited';
+        if (state === 'restarting') return 'state-restarting';
+        if (state === 'paused') return 'state-paused';
+        if (state === 'dead') return 'state-dead';
+        if (state === 'created') return 'state-created';
+        return 'state-exited';
+    }
+    function stateBadgeClass(state) {
+        if (state === 'running') return 'badge-green';
+        if (state === 'exited' || state === 'dead') return 'badge-red';
+        if (state === 'restarting' || state === 'paused') return 'badge-yellow';
+        if (state === 'created') return 'badge-cyan';
+        return 'badge-gray';
+    }
+    function toast(message, kind) {
+        kind = kind || 'info';
+        const el = document.createElement('div');
+        el.className = 'toast ' + kind;
+        el.textContent = message;
+        document.getElementById('toasts').appendChild(el);
+        setTimeout(() => el.remove(), 3500);
+    }
+    function fmtBytes(n) {
+        if (n == null) return '—';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        let i = 0;
+        while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+        return n.toFixed(i ? 1 : 0) + ' ' + units[i];
+    }
+    function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+    function fmtAge(seconds) {
+        if (!seconds) return '—';
+        const d = Math.floor(seconds / 86400);
+        const h = Math.floor((seconds % 86400) / 3600);
+        if (d > 0) return d + 'd ' + h + 'h';
+        if (h > 0) return h + 'h';
+        const m = Math.floor((seconds % 3600) / 60);
+        return m + 'm';
+    }
+    function escAttr(s) { return String(s || '').replace(/[<>"&]/g, c => ({'<':'&lt;','>':'&gt;','"':'&quot;','&':'&amp;'}[c])); }
+    function api(path, opts) {
+        return fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts || {}))
+            .then(r => r.json().then(data => ({ ok: r.ok, status: r.status, data })));
+    }
+
+    // ----- Availability -----
+    function checkAvailability() {
+        return api('/api/docker/availability').then(({ data }) => {
+            const banner = document.getElementById('availability-banner');
+            const version = document.getElementById('docker-version');
+            if (data.available) {
+                banner.innerHTML = '';
+                if (data.version) {
+                    version.textContent = 'v' + data.version;
+                    version.classList.remove('hidden');
+                }
+            } else {
+                banner.innerHTML = `
+                    <div class="panel-card border-yellow-500/30 border p-4 mb-4">
+                        <div class="flex items-start gap-3">
+                            <i data-lucide="alert-triangle" class="w-5 h-5 text-[var(--accent-yellow)] flex-shrink-0 mt-0.5"></i>
+                            <div class="min-w-0">
+                                <div class="font-semibold text-sm mb-1">Docker is not available</div>
+                                <div class="text-xs text-[var(--text-secondary)]">${escAttr(data.reason || 'Unknown error')}</div>
+                            </div>
+                        </div>
+                    </div>`;
+                version.classList.add('hidden');
+                lucide.createIcons();
+            }
+            return data.available;
+        });
+    }
+
+    // ----- List & render -----
+    function loadContainers() {
+        const all = document.getElementById('filter-all').checked;
+        return api('/api/docker/containers?all=' + (all ? 'true' : 'false'))
+            .then(({ ok, data }) => {
+                if (!ok) {
+                    toast(data.error || 'Failed to load containers', 'error');
+                    containers = [];
+                    renderRows();
+                    return;
+                }
+                containers = data.containers || [];
+                renderRows();
+                if (currentView === 'stacks') renderStacks();
+                else updateViewCount();
+                if (selected) {
+                    const fresh = containers.find(c => c.full_id === selected || c.name === selected);
+                    if (fresh) {
+                        selected = fresh.full_id;
+                        loadDetail();
+                    } else {
+                        closeDetail();
+                    }
+                }
+            });
+    }
+    function loadImages() {
+        return api('/api/docker/images')
+            .then(({ ok, data }) => {
+                if (!ok) {
+                    toast(data.error || 'Failed to load images', 'error');
+                    images = [];
+                    renderImages();
+                    return;
+                }
+                images = data.images || [];
+                renderImages();
+                const dangling = images.filter(i => !(i.tags && i.tags.length));
+                const bytes = dangling.reduce((s, i) => s + (i.size || 0), 0);
+                document.getElementById('prune-info').textContent =
+                    dangling.length ? fmtBytes(bytes) + ' reclaimable (' + dangling.length + ' dangling)' : 'nothing to prune';
+            });
+    }
+    function switchView(view) {
+        currentView = view;
+        document.querySelectorAll('[data-view]').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.view === view);
+        });
+        document.getElementById('view-containers').classList.toggle('hidden', view !== 'containers');
+        document.getElementById('view-stacks').classList.toggle('hidden', view !== 'stacks');
+        document.getElementById('view-images').classList.toggle('hidden', view !== 'images');
+        document.getElementById('view-daemon').classList.toggle('hidden', view !== 'daemon');
+        document.getElementById('bulk-bar').style.display = 'none';
+        if (view === 'stacks') {
+            closeDetail();
+            renderStacks();
+        } else if (view === 'images') {
+            // Close the detail panel so the images view doesn't have a
+            // stranded aside; it has no detail of its own.
+            closeDetail();
+            loadImages();
+        } else if (view === 'daemon') {
+            closeDetail();
+            loadDaemon();
+        } else {
+            updateViewCount();
+        }
+    }
+    function updateViewCount() {
+        const el = document.getElementById('view-count');
+        if (currentView === 'containers') el.textContent = containers.length + ' containers';
+        else if (currentView === 'stacks') el.textContent = stackList().length + ' stacks';
+        else if (currentView === 'images') el.textContent = images.length + ' images';
+        else el.textContent = '';
+    }
+    function toggleLive() {
+        livePaused = !livePaused;
+        document.getElementById('live-btn-label').textContent = livePaused ? 'Paused' : 'Live';
+        document.getElementById('live-btn').title = livePaused ? 'Resume live auto-refresh' : 'Pause live auto-refresh (keeps rows clickable)';
+        if (!livePaused) loadContainers();
+    }
+    function renderImages() {
+        const tbody = document.getElementById('image-tbody');
+        const countEl = document.getElementById('image-count');
+        const filter = (document.getElementById('image-search').value || '').toLowerCase();
+        const list = images.filter(img => {
+            if (!filter) return true;
+            if ((img.id || '').toLowerCase().includes(filter)) return true;
+            if ((img.tags || []).some(t => t.toLowerCase().includes(filter))) return true;
+            return false;
+        });
+        countEl.textContent = list.length + (list.length === 1 ? ' image' : ' images');
+        if (list.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" class="empty-state">${images.length === 0 ? 'No images on this host yet.' : 'No images match the filter.'}</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = list.map(img => {
+            const tag = (img.tags && img.tags[0]) || '<untagged>';
+            const tagShort = tag.length > 40 ? tag.slice(0, 38) + '…' : tag;
+            const created = img.created ? new Date(img.created * 1000).toLocaleString() : '—';
+            return `<tr>
+                <td class="font-mono" title="${escapeHtml(tag)}">${escapeHtml(tagShort)}</td>
+                <td class="font-mono text-[var(--text-muted)]">${escapeHtml(img.id || '—')}</td>
+                <td class="text-[var(--text-muted)]">${escapeHtml(created)}</td>
+                <td class="text-[var(--text-muted)] font-mono">${escapeHtml(fmtBytes(img.size || 0))}</td>
+                <td class="text-right">
+                    <button class="row-action-btn stop" onclick="removeImage('${escapeHtml(img.id || '')}')" title="Remove this image">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    </button>
+                </td>
+            </tr>`;
+        }).join('');
+        lucide.createIcons();
+    }
+    async function removeImage(id) {
+        if (!await uiConfirm(`Remove image ${id}?`, 'This cannot be undone.', true)) return;
+        api('/api/docker/images/' + encodeURIComponent(id), { method: 'DELETE' })
+            .then(({ ok, data }) => {
+                if (!ok) {
+                    toast(data.error || 'Failed to remove', 'error');
+                    return;
+                }
+                toast('Image removed', 'success');
+                loadImages();
+            });
+    }
+    function setStateFilter(s) {
+        stateFilter = s;
+        document.querySelectorAll('#state-tabs .tab-button').forEach(b => {
+            b.classList.toggle('active', b.dataset.state === s);
+        });
+        renderRows();
+    }
+    function stateMatches(c) {
+        if (stateFilter === 'all') return true;
+        if (stateFilter === 'running') return c.state === 'running';
+        if (stateFilter === 'stopped') return c.state === 'exited' || c.state === 'dead' || c.state === 'created';
+        if (stateFilter === 'paused') return c.state === 'paused';
+        if (stateFilter === 'restarting') return c.state === 'restarting';
+        return true;
+    }
+    // Render published tcp ports as clickable links (basic: assume
+    // http on the host port via the current hostname).
+    function portsHtml(ports) {
+        if (!ports) return '—';
+        return String(ports).split(',').map(p => {
+            const piece = p.trim();
+            const m = piece.match(/^(?:\*|[\d.]+):(\d+)->(\d+)\/(tcp)$/);
+            if (m) {
+                const url = 'http://' + window.location.hostname + ':' + m[1];
+                return `<a href="${url}" target="_blank" rel="noopener" class="text-[var(--accent-cyan)] hover:underline" title="${escAttr(piece)} → ${url}" onclick="event.stopPropagation()">${escAttr(piece)}</a>`;
+            }
+            return `<span title="${escAttr(piece)}">${escAttr(piece)}</span>`;
+        }).join(', ');
+    }
+    function toggleSelect(id, box) {
+        if (box.checked) selectedIds.add(id);
+        else selectedIds.delete(id);
+        syncBulkBar();
+    }
+    function clearSelection() {
+        selectedIds.clear();
+        document.querySelectorAll('.row-select').forEach(b => { b.checked = false; });
+        syncBulkBar();
+    }
+    function syncBulkBar() {
+        const bar = document.getElementById('bulk-bar');
+        const show = currentView === 'containers' && selectedIds.size > 0;
+        bar.style.display = show ? 'flex' : 'none';
+        document.getElementById('bulk-count').textContent = selectedIds.size + ' selected';
+        const visible = [...document.querySelectorAll('.row-select')];
+        const all = document.getElementById('select-all');
+        if (all) all.checked = visible.length > 0 && visible.every(b => b.checked);
+    }
+    async function bulkAction(action) {
+        const ids = [...selectedIds];
+        if (!ids.length) return;
+        const names = ids.map(id => { const c = containers.find(x => x.full_id === id); return c ? c.name : id; });
+        if (!await uiConfirm(`${action} ${ids.length} container(s)?`, names.slice(0, 5).join(', ') + (names.length > 5 ? '…' : ''), action !== 'start')) return;
+        let ok = 0;
+        const failed = [];
+        for (const id of ids) {
+            const { ok: good, data } = await api('/api/docker/containers/' + encodeURIComponent(id) + '/' + action, { method: 'POST' });
+            if (good) ok++;
+            else failed.push(id);
+        }
+        clearSelection();
+        loadContainers();
+        if (!failed.length) toast(action + ': ' + ok + '/' + ids.length + ' ok', 'success');
+        else toast(action + ': ' + ok + ' ok, ' + failed.length + ' failed', 'error');
+    }
+    function renderRows() {
+        const tbody = document.getElementById('container-tbody');
+        const q = (document.getElementById('search').value || '').toLowerCase();
+        const filtered = containers.filter(c =>
+            stateMatches(c) &&
+            (!q || c.name.toLowerCase().includes(q) || c.image.toLowerCase().includes(q))
+        );
+        document.getElementById('row-count').textContent = filtered.length + ' / ' + containers.length;
+        if (!filtered.length) {
+            tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">No containers</div></td></tr>`;
+            syncBulkBar();
+            return;
+        }
+        tbody.innerHTML = filtered.map(c => {
+            const stateClass = stateDotClass(c.state);
+            const badgeClass = stateBadgeClass(c.state);
+            const project = c.compose_project
+                ? `<span class="badge badge-purple ml-1.5">${escAttr(c.compose_project)}</span>` : '';
+            return `<tr class="row-clickable ${selected === c.full_id ? 'row-selected' : ''}" onclick="selectContainer('${escAttr(c.full_id)}')">
+                <td onclick="event.stopPropagation()"><input type="checkbox" class="row-select" data-id="${escAttr(c.full_id)}" ${selectedIds.has(c.full_id) ? 'checked' : ''} onchange="toggleSelect('${escAttr(c.full_id)}', this)" title="Select for bulk actions"></td>
+                <td><span class="state-dot ${stateClass}"></span></td>
+                <td>
+                    <div class="font-semibold truncate">${escAttr(c.name)}${project}</div>
+                    <div class="text-xs text-[var(--text-muted)] font-mono">${escAttr(c.id)}</div>
+                </td>
+                <td class="font-mono text-xs truncate" title="${escAttr(c.image)}">${escAttr(c.image)}</td>
+                <td>
+                    <span class="badge ${badgeClass}">${escAttr(c.state)}</span>
+                    <div class="text-xs text-[var(--text-muted)] mt-0.5 truncate">${escAttr(c.status)}</div>
+                </td>
+                <td class="font-mono text-xs truncate" title="${escAttr(c.ports)}">${portsHtml(c.ports)}</td>
+                <td class="text-right whitespace-nowrap">
+                    <button class="row-action-btn start" title="Start" onclick="event.stopPropagation(); lifecycleFor('${escAttr(c.full_id)}', 'start')" ${c.is_running ? 'disabled' : ''}>
+                        <i data-lucide="play" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <button class="row-action-btn stop" title="Stop" onclick="event.stopPropagation(); lifecycleFor('${escAttr(c.full_id)}', 'stop')" ${!c.is_running ? 'disabled' : ''}>
+                        <i data-lucide="square" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <button class="row-action-btn restart" title="Restart" onclick="event.stopPropagation(); lifecycleFor('${escAttr(c.full_id)}', 'restart')">
+                        <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+                    </button>
+                </td>
+            </tr>`;
+        }).join('');
+        lucide.createIcons();
+        syncBulkBar();
+        const all = document.getElementById('select-all');
+        if (all && !all.dataset.wired) {
+            all.dataset.wired = '1';
+            all.onchange = () => {
+                document.querySelectorAll('.row-select').forEach(b => {
+                    b.checked = all.checked;
+                    if (all.checked) selectedIds.add(b.dataset.id);
+                    else selectedIds.delete(b.dataset.id);
+                });
+                syncBulkBar();
+            };
+        }
+    }
+
+    function lifecycleFor(id, action) {
+        const prev = selected;
+        selected = id;
+        return lifecycle(action).finally(() => {
+            selected = prev;
+        });
+    }
+
+    // ----- Detail panel -----
+    function selectContainer(id) {
+        if (trendFor !== id) {
+            // New container: restart the trend window from empty.
+            trendFor = id;
+            trendCpu = new Array(TREND_N).fill(null);
+            trendMem = new Array(TREND_N).fill(null);
+            trendChart = null;
+        }
+        selected = id;
+        document.getElementById('detail-panel').classList.remove('hidden');
+        document.getElementById('view-containers').classList.add('with-detail');
+        renderRows();
+        if (activeTab === 'logs') startLogStream();
+        if (activeTab === 'stats') startStatsPolling();
+        loadDetail();
+    }
+    function closeDetail() {
+        selected = null;
+        detail = null;
+        document.getElementById('detail-panel').classList.add('hidden');
+        document.getElementById('view-containers').classList.remove('with-detail');
+        stopLogStream();
+        stopStatsPolling();
+        renderRows();
+    }
+    function loadDetail() {
+        if (!selected) return;
+        return api('/api/docker/containers/' + encodeURIComponent(selected))
+            .then(({ ok, data }) => {
+                if (!ok) { toast(data.error || 'Failed to load', 'error'); return; }
+                detail = data;
+                document.getElementById('detail-name').textContent = data.name;
+                document.getElementById('detail-image').textContent = data.image;
+                const running = data.is_running;
+                document.getElementById('btn-start').disabled = running;
+                document.getElementById('btn-stop').disabled = !running;
+                renderDetails();
+            });
+    }
+    function renderDetails() {
+        if (!detail) return;
+        const d = detail;
+        const el = document.getElementById('tab-details');
+        el.innerHTML = `
+            <div>
+                <div class="text-[var(--text-muted)] uppercase tracking-wider text-[0.625rem] mb-1">ID</div>
+                <div class="font-mono">${escAttr(d.full_id)}</div>
+            </div>
+            <div>
+                <div class="text-[var(--text-muted)] uppercase tracking-wider text-[0.625rem] mb-1">State</div>
+                <span class="badge ${stateBadgeClass(d.state)}">${escAttr(d.state)}</span>
+                <span class="text-[var(--text-secondary)] ml-2">${escAttr(d.status)}</span>
+            </div>
+            <div>
+                <div class="text-[var(--text-muted)] uppercase tracking-wider text-[0.625rem] mb-1">Image</div>
+                <div class="font-mono">${escAttr(d.image)} <span class="text-[var(--text-muted)]">(${escAttr(d.image_id)})</span></div>
+            </div>
+            ${d.command ? `<div>
+                <div class="text-[var(--text-muted)] uppercase tracking-wider text-[0.625rem] mb-1">Command</div>
+                <div class="font-mono break-all">${escAttr(d.command)}</div>
+            </div>` : ''}
+            <div>
+                <div class="text-[var(--text-muted)] uppercase tracking-wider text-[0.625rem] mb-1">Ports</div>
+                <div class="font-mono text-[0.6875rem]">${escAttr(d.ports) || '—'}</div>
+            </div>
+            ${d.network ? `<div>
+                <div class="text-[var(--text-muted)] uppercase tracking-wider text-[0.625rem] mb-1">Networks</div>
+                <div class="font-mono text-[0.6875rem]">${escAttr(d.network)}</div>
+            </div>` : ''}
+            ${d.mounts ? `<div>
+                <div class="text-[var(--text-muted)] uppercase tracking-wider text-[0.625rem] mb-1">Mounts</div>
+                <div class="font-mono text-[0.6875rem]">${escAttr(d.mounts)}</div>
+            </div>` : ''}
+            ${Object.keys(d.labels || {}).length ? `<div>
+                <div class="text-[var(--text-muted)] uppercase tracking-wider text-[0.625rem] mb-1">Labels</div>
+                <div class="font-mono text-[0.6875rem] break-all">${Object.entries(d.labels).map(([k,v]) => escAttr(k)+'='+escAttr(v)).join('<br>')}</div>
+            </div>` : ''}`;
+    }
+    function switchTab(tab) {
+        activeTab = tab;
+        // Scope to the detail panel: the subheader view switcher
+        // (Containers/Images) also uses .tab-button, and the old
+        // document-wide selector cleared its highlight whenever a
+        // detail tab was clicked.
+        document.querySelectorAll('#detail-panel [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        document.getElementById('tab-details').classList.toggle('hidden', tab !== 'details');
+        document.getElementById('tab-stats').classList.toggle('hidden', tab !== 'stats');
+        document.getElementById('tab-logs').classList.toggle('hidden', tab !== 'logs');
+        document.getElementById('trend-wrap').classList.toggle('hidden', tab !== 'stats');
+        if (tab === 'stats') startStatsPolling();
+        else stopStatsPolling();
+        if (tab === 'logs') startLogStream();
+        else stopLogStream();
+        if (tab === 'details' && detail) renderDetails();
+    }
+
+    // ----- Stats -----
+    function startStatsPolling() {
+        stopStatsPolling();
+        const tick = () => {
+            if (!selected || activeTab !== 'stats') return;
+            api('/api/docker/containers/' + encodeURIComponent(selected) + '/stats')
+                .then(({ ok, data }) => {
+                    if (!ok) return;
+                    renderStats(data);
+                });
+        };
+        tick();
+        statsTimer = setInterval(tick, 2000);
+    }
+    function stopStatsPolling() {
+        if (statsTimer) { clearInterval(statsTimer); statsTimer = null; }
+    }
+    function pushTrend(arr, v) {
+        arr.push(v);
+        if (arr.length > TREND_N) arr.shift();
+    }
+    function ensureTrendChart() {
+        if (trendChart) return;
+        const labels = Array.from({ length: TREND_N }, () => '');
+        trendChart = new Chart(document.getElementById('trend-chart'), {
+            type: 'line',
+            data: { labels, datasets: [
+                { data: trendCpu, borderColor: '#06b6d4', backgroundColor: 'rgba(6,182,212,0.08)', borderWidth: 1.5, fill: true, spanGaps: false },
+                { data: trendMem, borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.08)', borderWidth: 1.5, fill: true, spanGaps: false },
+            ]},
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                animation: { duration: 200 },
+                interaction: { intersect: false, mode: 'index' },
+                plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                scales: { x: { display: false }, y: { display: false, min: 0, max: 100, beginAtZero: true } },
+                elements: { point: { radius: 0 }, line: { tension: 0.3 } },
+            },
+        });
+    }
+    function renderStats(s) {
+        // Stopped containers can report nulls — coerce before toFixed
+        // or the whole stats update throws and polling goes silent.
+        const cpu = Number(s.cpu_percent) || 0;
+        const memPct = Number(s.memory_percent) || 0;
+        pushTrend(trendCpu, cpu);
+        pushTrend(trendMem, memPct);
+        ensureTrendChart();
+        trendChart.update('none');
+        if (activeTab === 'stats') document.getElementById('trend-wrap').classList.remove('hidden');
+        const el = document.getElementById('tab-stats');
+        el.innerHTML = `
+            <div>
+                <div class="flex justify-between mb-1"><span>CPU</span><span class="font-mono">${cpu.toFixed(1)}%</span></div>
+                <div class="stat-bar"><div class="stat-bar-fill" style="width:${Math.min(100, cpu)}%;background:var(--accent-cyan)"></div></div>
+            </div>
+            <div>
+                <div class="flex justify-between mb-1"><span>Memory</span><span class="font-mono">${fmtBytes(s.memory_usage)} / ${fmtBytes(s.memory_limit)} (${memPct.toFixed(1)}%)</span></div>
+                <div class="stat-bar"><div class="stat-bar-fill" style="width:${Math.min(100, memPct)}%;background:var(--accent-purple)"></div></div>
+            </div>
+            <div class="grid grid-cols-2 gap-3 mt-2">
+                <div class="panel-card p-2.5">
+                    <div class="text-[var(--text-muted)] text-[0.625rem] uppercase tracking-wider">Net RX</div>
+                    <div class="font-mono text-sm mt-0.5">${fmtBytes(s.network_rx)}</div>
+                </div>
+                <div class="panel-card p-2.5">
+                    <div class="text-[var(--text-muted)] text-[0.625rem] uppercase tracking-wider">Net TX</div>
+                    <div class="font-mono text-sm mt-0.5">${fmtBytes(s.network_tx)}</div>
+                </div>
+                <div class="panel-card p-2.5">
+                    <div class="text-[var(--text-muted)] text-[0.625rem] uppercase tracking-wider">Disk Read</div>
+                    <div class="font-mono text-sm mt-0.5">${fmtBytes(s.blk_read)}</div>
+                </div>
+                <div class="panel-card p-2.5">
+                    <div class="text-[var(--text-muted)] text-[0.625rem] uppercase tracking-wider">Disk Write</div>
+                    <div class="font-mono text-sm mt-0.5">${fmtBytes(s.blk_write)}</div>
+                </div>
+            </div>
+        `;
+    }
+
+    // ----- Logs -----
+    function startLogStream() {
+        stopLogStream();
+        if (!selected) return;
+        const btn = document.getElementById('btn-logs-toggle-label');
+        btn.textContent = 'Stop';
+        const url = '/api/docker/containers/' + encodeURIComponent(selected) + '/logs/stream?tail=100';
+        logEventSource = new EventSource(url);
+        const out = document.getElementById('log-output');
+        const follow = () => {
+            if (document.getElementById('follow-tail').checked) {
+                out.scrollTop = out.scrollHeight;
+            }
+        };
+        logEventSource.onmessage = (e) => {
+            try {
+                const payload = JSON.parse(e.data);
+                if (payload.ended) { stopLogStream(); return; }
+                if (payload.error) {
+                    const el = document.createElement('div');
+                    el.className = 'log-line text-[var(--accent-red)]';
+                    el.textContent = '[error] ' + payload.error;
+                    out.appendChild(el);
+                    follow();
+                    return;
+                }
+                if (payload.line != null) {
+                    const el = document.createElement('div');
+                    el.className = 'log-line new';
+                    el.textContent = payload.line;
+                    out.appendChild(el);
+                    // Cap DOM growth on long streams (matches the
+                    // system-services log viewer's 5000-line trim).
+                    while (out.children.length > 5000) {
+                        out.removeChild(out.firstChild);
+                    }
+                    setTimeout(() => el.classList.remove('new'), 1200);
+                    follow();
+                }
+            } catch (err) {
+                // ignore malformed
+            }
+        };
+        logEventSource.onerror = () => {
+            // EventSource will auto-retry; the server may have ended, but
+            // the user can stop the stream explicitly.
+        };
+    }
+    function stopLogStream() {
+        if (logEventSource) { logEventSource.close(); logEventSource = null; }
+        const btn = document.getElementById('btn-logs-toggle-label');
+        if (btn) btn.textContent = 'Start';
+    }
+    function toggleLogStream() {
+        if (logEventSource) stopLogStream();
+        else startLogStream();
+    }
+    function clearLogs() {
+        document.getElementById('log-output').innerHTML = '';
+    }
+
+    // ----- Lifecycle -----
+    function lifecycle(action) {
+        if (!selected) return Promise.resolve();
+        return api('/api/docker/containers/' + encodeURIComponent(selected) + '/' + action, { method: 'POST' })
+            .then(({ ok, data }) => {
+                if (!ok) { toast(data.error || 'Action failed', 'error'); return; }
+                toast(action + ' ok: ' + (data.output || selected), 'success');
+                setTimeout(loadContainers, 400);
+            });
+    }
+    function confirmRemove() {
+        if (!selected) return;
+        const c = containers.find(x => x.full_id === selected);
+        document.getElementById('remove-name').textContent = (c && c.name) || (detail && detail.name) || selected;
+        // NB: 'open' class required — the shared header macro emits
+        // `.modal-backdrop { display: none }` after this page's styles.
+        document.getElementById('remove-modal').classList.remove('hidden');
+        document.getElementById('remove-modal').classList.add('open');
+    }
+    function closeRemoveModal() {
+        document.getElementById('remove-modal').classList.add('hidden');
+        document.getElementById('remove-modal').classList.remove('open');
+    }
+    function executeRemove() {
+        if (!selected) return;
+        const force = document.getElementById('remove-force').checked;
+        const volumes = document.getElementById('remove-volumes').checked;
+        const params = new URLSearchParams();
+        if (force) params.set('force', 'true');
+        if (volumes) params.set('volumes', 'true');
+        api('/api/docker/containers/' + encodeURIComponent(selected) + '?' + params, { method: 'DELETE' })
+            .then(({ ok, data }) => {
+                if (!ok) { toast(data.error || 'Remove failed', 'error'); return; }
+                toast('removed ' + selected, 'success');
+                closeRemoveModal();
+                closeDetail();
+                loadContainers();
+            });
+    }
+
+    // ----- Stacks (client-side grouping by compose project) -----
+    function stackList() {
+        const groups = {};
+        for (const c of containers) {
+            const key = c.compose_project || '(standalone)';
+            (groups[key] = groups[key] || []).push(c);
+        }
+        return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
+    }
+    // Expanded/collapsed state per stack (in-memory; resets on reload).
+    // All stacks start collapsed.
+    const expandedStacks = new Set();
+    function setAllStacks(open) {
+        const stacks = stackList();
+        expandedStacks.clear();
+        if (open) stacks.forEach(([name]) => expandedStacks.add(name));
+        renderStacks();
+    }
+    function toggleStack(name) {
+        if (expandedStacks.has(name)) expandedStacks.delete(name);
+        else expandedStacks.add(name);
+        renderStacks();
+    }
+    // Jump from a stack container to its detail in the Containers view.
+    function goToContainer(id) {
+        switchView('containers');
+        selectContainer(id);
+    }
+    function renderStacks() {
+        const list = document.getElementById('stacks-list');
+        const q = (document.getElementById('stack-search').value || '').toLowerCase();
+        const stacks = stackList().map(([name, items]) => {
+            if (!q) return [name, items];
+            if (name.toLowerCase().includes(q)) return [name, items];
+            const hits = items.filter(c => c.name.toLowerCase().includes(q) ||
+                (c.image || '').toLowerCase().includes(q));
+            return hits.length ? [name, hits] : null;
+        }).filter(Boolean);
+        document.getElementById('stack-count').textContent = stacks.length + ' stacks';
+        updateViewCount();
+        if (!stacks.length) {
+            const filtering = (document.getElementById('stack-search').value || '').trim() !== '';
+            list.innerHTML = `<div class="empty-state">${filtering ? 'No stacks match the filter.' : 'No containers'}</div>`;
+            return;
+        }
+        list.innerHTML = stacks.map(([name, items]) => {
+            const running = items.filter(c => c.is_running).length;
+            const dot = running === items.length ? 'var(--accent-green)' : running === 0 ? 'var(--accent-red)' : 'var(--accent-yellow)';
+            const open = expandedStacks.has(name);
+            const safeName = escAttr(name).replace(/'/g, '&#39;');
+            const rows = items.map(c => `
+                <div class="flex items-center gap-3 px-4 py-2 text-xs border-t border-[var(--border-subtle)] hover:bg-white/[0.02] cursor-pointer" onclick="goToContainer('${escAttr(c.full_id)}')" title="Open in Containers view">
+                    <span class="w-1.5 h-1.5 rounded-full flex-shrink-0" style="background:${stateDotColor(c.state)}"></span>
+                    <span class="font-mono truncate" title="${escAttr(c.name)}">${escAttr(c.name)}</span>
+                    <span class="font-mono text-[var(--text-muted)] truncate hidden md:inline" title="${escAttr(c.image)}">${escAttr(c.image)}</span>
+                    <span class="ml-auto badge ${stateBadgeClass(c.state)} flex-shrink-0">${escAttr(c.state)}</span>
+                    <span class="text-[var(--text-muted)] font-mono hidden sm:inline flex-shrink-0">${escAttr(c.status)}</span>
+                </div>`).join('');
+            return `<div>
+                <div class="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-white/[0.02]" onclick="toggleStack('${safeName}')">
+                    <i data-lucide="chevron-${open ? 'down' : 'right'}" class="w-4 h-4 text-[var(--text-muted)] flex-shrink-0"></i>
+                    <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${dot}"></span>
+                    <span class="font-semibold text-sm truncate" title="${escAttr(name)}">${escAttr(name)}</span>
+                    <span class="text-[11px] text-[var(--text-muted)] font-mono whitespace-nowrap">${running}/${items.length} running</span>
+                    <span class="flex-1"></span>
+                    <span class="flex gap-1.5" onclick="event.stopPropagation()">
+                        <button class="btn" onclick="stackAction('${safeName}', 'start')" title="Start all in ${escAttr(name)}"><i data-lucide="play" class="w-3 h-3"></i></button>
+                        <button class="btn" onclick="stackAction('${safeName}', 'stop')" title="Stop all in ${escAttr(name)}"><i data-lucide="square" class="w-3 h-3"></i></button>
+                        <button class="btn" onclick="stackAction('${safeName}', 'restart')" title="Restart all in ${escAttr(name)}"><i data-lucide="rotate-cw" class="w-3 h-3"></i></button>
+                    </span>
+                </div>
+                ${open ? rows : ''}
+            </div>`;
+        }).join('');
+        lucide.createIcons();
+    }
+    function stateDotColor(state) {
+        if (state === 'running') return 'var(--accent-green)';
+        if (state === 'restarting') return 'var(--accent-yellow)';
+        if (state === 'paused') return 'var(--accent-purple)';
+        if (state === 'created') return 'var(--accent-cyan)';
+        return 'var(--accent-red)';
+    }
+    async function stackAction(project, action) {
+        const list = (stackList().find(([n]) => n === project) || [])[1] || [];
+        if (!list.length) return;
+        if (!await uiConfirm(`${action} stack "${project}"?`, `${action} ${list.length} container(s).`, action !== 'start')) return;
+        let ok = 0;
+        for (const c of list) {
+            const { ok: good } = await api('/api/docker/containers/' + encodeURIComponent(c.full_id) + '/' + action, { method: 'POST' });
+            if (good) ok++;
+        }
+        toast(action + ' ' + project + ': ' + ok + '/' + list.length + ' ok', ok === list.length ? 'success' : 'error');
+        loadContainers().then(renderStacks);
+    }
+
+    // ----- Daemon -----
+    async function loadDaemon() {
+        const { ok, data } = await api('/api/docker/daemon');
+        const cards = document.getElementById('daemon-cards');
+        const details = document.getElementById('daemon-details');
+        if (!ok) {
+            cards.innerHTML = '';
+            details.innerHTML = `<div class="empty-state">Failed to load: ${escAttr(data.error || 'unknown')}</div>`;
+            return;
+        }
+        const card = (label, value) => `
+            <div class="panel-card p-4">
+                <div class="text-[var(--text-muted)] text-[0.625rem] uppercase tracking-wider mb-1">${label}</div>
+                <div class="font-mono text-lg">${value}</div>
+            </div>`;
+        cards.innerHTML =
+            card('Version', escAttr(data.server_version || '—')) +
+            card('Containers', `${data.containers_running} running / ${data.containers_stopped} stopped`) +
+            card('Images', escAttr(String(data.images))) +
+            card('Storage', escAttr(data.storage_driver || '—'));
+        details.innerHTML = `
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 font-mono text-xs">
+                <div><span class="text-[var(--text-muted)]">OS: </span>${escAttr(data.os || '—')}</div>
+                <div><span class="text-[var(--text-muted)]">Kernel: </span>${escAttr(data.kernel || '—')}</div>
+                <div><span class="text-[var(--text-muted)]">Arch: </span>${escAttr(data.arch || '—')}</div>
+                <div><span class="text-[var(--text-muted)]">CPUs: </span>${escAttr(String(data.cpus))}</div>
+                <div><span class="text-[var(--text-muted)]">Memory: </span>${fmtBytes(data.memory_total)}</div>
+                <div><span class="text-[var(--text-muted)]">Paused: </span>${escAttr(String(data.containers_paused))}</div>
+            </div>
+            <p class="text-xs text-[var(--text-muted)] mt-3">Restarting stops all running containers briefly and may drop this page's connection for a few seconds.</p>`;
+    }
+    async function restartDaemon() {
+        if (!await uiConfirm('Restart Docker daemon?', 'All running containers stop briefly. The page may disconnect for a few seconds.', true)) return;
+        const pw = await uiPromptPassword('Restart Docker daemon', 'Enter your sudo password (not the app login). Used only for that one sudo call.', 'Restart');
+        if (pw == null) return;
+        const { ok, data } = await api('/api/docker/daemon/restart', {
+            method: 'POST', body: JSON.stringify({ password: pw }),
+        });
+        if (!ok) { toast(data.error || 'Restart failed', 'error'); return; }
+        toast('Restart requested — reconnecting…', 'success');
+        setTimeout(() => { checkAvailability().then(a => { if (a) loadContainers(); }); }, 5000);
+    }
+
+    // ----- Image prune -----
+    async function pruneImages() {
+        const dangling = images.filter(i => !(i.tags && i.tags.length)).length;
+        if (!await uiConfirm('Prune dangling images?', (dangling ? dangling + ' dangling image(s)' : 'No dangling images found') + ' will be deleted. This cannot be undone.', true)) return;
+        const { ok, data } = await api('/api/docker/images/prune', { method: 'POST' });
+        if (!ok) { toast(data.error || 'Prune failed', 'error'); return; }
+        toast('Pruned ' + data.deleted + ' image(s), reclaimed ' + fmtBytes(data.space_reclaimed), 'success');
+        loadImages();
+    }
+
+    // ----- Boot -----
+    lucide.createIcons();
+    checkAvailability().then(avail => {
+        if (avail) loadContainers();
+    });
+    setInterval(() => {
+        if (livePaused) return;
+        if (document.getElementById('filter-all').checked || activeTab !== 'stats') loadContainers();
+        // Keep the open detail panel fresh (Details tab only — never
+        // disturb Logs streaming or Stats polling).
+        if (selected && activeTab === 'details' && currentView === 'containers') loadDetail();
+    }, 15000);
+    </script>
+<script>
+
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const rm=document.getElementById('remove-modal');
+    if(rm && !rm.classList.contains('hidden')) { if(typeof closeRemoveModal==='function') closeRemoveModal(); return; }
+    const panel=document.getElementById('detail-panel');
+    if(panel && !panel.classList.contains('hidden')) { if(typeof closeDetail==='function') closeDetail(); }
+});
+
+</script>
+</body>
+</html>

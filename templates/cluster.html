@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cluster - Server Services Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --border-subtle: #1e1e2a;
+            --border-active: #2d2d3a;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-purple: #8b5cf6;
+            --accent-orange: #f97316;
+            --accent-cyan: #06b6d4;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+        * { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        code, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+        body {
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(ellipse at top left, rgba(6, 182, 212, 0.04) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(59, 130, 246, 0.04) 0%, transparent 50%);
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        .animate-pulse { animation: pulse 1.6s ease-in-out infinite; }
+        .badge {
+            display: inline-flex; align-items: center; gap: 0.25rem;
+            padding: 0.125rem 0.5rem; border-radius: 0.375rem;
+            font-size: 0.6875rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .badge-green { background: rgba(16,185,129,0.12); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.25); }
+        .badge-red { background: rgba(239,68,68,0.12); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.25); }
+        .badge-blue { background: rgba(59,130,246,0.12); color: var(--accent-blue); border: 1px solid rgba(59,130,246,0.25); }
+        .badge-yellow { background: rgba(245,158,11,0.12); color: var(--accent-yellow); border: 1px solid rgba(245,158,11,0.25); }
+        .badge-gray { background: rgba(100,116,139,0.12); color: var(--text-secondary); border: 1px solid rgba(100,116,139,0.25); }
+        .badge-purple { background: rgba(139,92,246,0.12); color: var(--accent-purple); border: 1px solid rgba(139,92,246,0.25); }
+        .panel-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+        }
+        .status-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            padding: 1rem 1.25rem;
+            display: flex; flex-direction: column; gap: 0.25rem;
+        }
+        .status-card .label { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+        .status-card .value { font-size: 1.25rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+        .btn {
+            display: inline-flex; align-items: center; gap: 0.375rem;
+            padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+            font-size: 0.8125rem; font-weight: 600;
+            background: var(--bg-secondary); border: 1px solid var(--border-subtle);
+            color: var(--text-primary); cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .btn:hover { background: var(--border-subtle); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--accent-blue); color: #061a30; border-color: var(--accent-blue); }
+        .btn-primary:hover { background: #60a5fa; }
+        .btn-danger { background: rgba(239,68,68,0.15); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.3); }
+        .btn-danger:hover { background: rgba(239,68,68,0.25); }
+        .text-input, .textarea-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.5rem 0.875rem;
+            color: var(--text-primary);
+            font-size: 0.8125rem; outline: none; width: 100%;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .text-input:focus, .textarea-input:focus { border-color: var(--accent-blue); }
+        .empty-state {
+            padding: 2rem 1rem; text-align: center;
+            color: var(--text-muted); font-size: 0.875rem;
+        }
+        .peer-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            padding: 1rem 1.25rem;
+            display: flex; flex-direction: column; gap: 0.625rem;
+            transition: border-color 0.15s ease;
+        }
+        .peer-card:hover { border-color: var(--border-active); }
+        .peer-card .status-dot {
+            width: 0.5rem; height: 0.5rem; border-radius: 50%;
+            background: var(--text-muted);
+            flex-shrink: 0;
+        }
+        .peer-card.reachable .status-dot { background: var(--accent-green); box-shadow: 0 0 8px rgba(16,185,129,0.4); }
+        .peer-card.unreachable .status-dot { background: var(--accent-red); }
+        .peer-card.unknown .status-dot { background: var(--text-muted); }
+        .peer-card.reachable { border-color: rgba(16,185,129,0.25); }
+        .peer-card.unreachable { border-color: rgba(239,68,68,0.25); }
+        .peer-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem; font-weight: 600;
+            color: var(--text-primary);
+        }
+        .peer-host {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+        .modal-backdrop {
+            position: fixed; inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 100;
+            display: none;
+            align-items: center; justify-content: center;
+        }
+        .modal-backdrop.open { display: flex; }
+        .mdns-chip {
+            display: inline-flex; align-items: center; gap: 0.25rem;
+            padding: 0.125rem 0.5rem; border-radius: 0.375rem;
+            font-size: 0.6875rem; font-weight: 600;
+            background: rgba(59,130,246,0.12); color: var(--accent-blue);
+            border: 1px solid rgba(59,130,246,0.25);
+        }
+        .modal {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            max-width: 480px; width: 90%;
+            max-height: calc(100vh - 2rem);
+            max-height: calc(100dvh - 2rem);
+            overflow-y: auto;
+        }
+        .node-scroll {
+            max-height: calc(100vh - 24rem);
+            max-height: calc(100dvh - 24rem);
+            overflow-y: auto;
+        }
+        .toast-container {
+            position: fixed; top: 1rem; right: 1rem; z-index: 100;
+            display: flex; flex-direction: column; gap: 0.5rem;
+        }
+        .toast {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.625rem 0.875rem;
+            font-size: 0.8125rem;
+            color: var(--text-primary);
+            min-width: 240px; max-width: 360px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            animation: fadeIn 0.2s ease-out forwards;
+        }
+        .toast.error { border-left: 3px solid var(--accent-red); }
+        .toast.success { border-left: 3px solid var(--accent-green); }
+        .toast.info { border-left: 3px solid var(--accent-blue); }
+    </style>
+</head>
+<body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
+    {% import "_macros.html" as ui %}
+    {% set actions %}
+    {% endset %}
+    {% set page_info %}
+        <p style="margin-bottom:0.75rem">If you run this manager on <strong>more than one machine</strong>, this page links them so you can hop between them.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li><strong>Add Peer</strong> registers another machine (address + shared secret). The dot shows whether it's reachable right now.</li>
+            <li>Opening a peer <strong>logs you in there automatically</strong> — no second password — using the shared secret.</li>
+            <li>Nothing is broadcast automatically. With no peers added, this page simply stays empty. One machine is the normal case.</li>
+        </ul>
+        {% endset %}
+    {{ ui.header(
+        title="Cluster",
+        icon="network",
+        icon_color="var(--accent-cyan)",
+        badge_id="enabled-badge",
+        actions=actions,
+        current='/cluster',
+        info=page_info,
+    ) }}
+    {% set subheader %}
+        <button class="btn" onclick="probeAll(this)" title="Probe reachability">
+            <i data-lucide="activity" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Probe</span>
+        </button>
+        <button class="btn" id="btn-mdns" onclick="mdnsBrowse()" title="mDNS browse (if zeroconf installed)">
+            <i data-lucide="search" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">mDNS</span>
+        </button>
+        <button class="btn btn-primary" onclick="openAdd()" title="Register another machine running this app">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            <span>Add Peer</span>
+        </button>
+    {% endset %}
+    {{ ui.subheader(subheader) }}
+
+    <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6 space-y-4">
+        <section class="panel-card p-4">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                    <h2 class="text-sm font-semibold flex items-center gap-2">
+                        <i data-lucide="server" class="w-4 h-4 text-[var(--accent-cyan)]"></i>
+                        This node
+                    </h2>
+                    <div class="text-xs text-[var(--text-secondary)] mt-1 font-mono" id="local-info">
+                        Loading…
+                    </div>
+                </div>
+                <span id="local-status" class="badge badge-green">
+                    <i data-lucide="check-circle" class="w-3 h-3"></i>
+                    online
+                </span>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div class="status-card">
+                <span class="label">Peers</span>
+                <span class="value text-[var(--accent-cyan)]" id="stat-total">—</span>
+            </div>
+            <div class="status-card">
+                <span class="label">Reachable</span>
+                <span class="value text-[var(--accent-green)]" id="stat-reachable">—</span>
+            </div>
+            <div class="status-card">
+                <span class="label">Unreachable</span>
+                <span class="value text-[var(--accent-red)]" id="stat-unreachable">—</span>
+            </div>
+            <div class="status-card">
+                <span class="label">Mode</span>
+                <span class="value text-[var(--text-secondary)]" id="stat-mode">—</span>
+            </div>
+        </section>
+
+        <section class="panel-card">
+            <div class="p-4 border-b border-[var(--border-subtle)]">
+                <h2 class="text-sm font-semibold flex items-center gap-2">
+                    <i data-lucide="list" class="w-4 h-4 text-[var(--accent-cyan)]"></i>
+                    Peer nodes (<span id="peer-count">0</span>)
+                </h2>
+            </div>
+            <div id="peers-grid" class="node-scroll p-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                <div class="empty-state col-span-full">Loading…</div>
+            </div>
+        </section>
+
+        <section class="panel-card p-4">
+            <h2 class="text-sm font-semibold flex items-center gap-2 mb-2">
+                <i data-lucide="info" class="w-4 h-4 text-[var(--text-muted)]"></i>
+                About
+            </h2>
+            <p class="text-xs text-[var(--text-secondary)] leading-relaxed">
+                Cluster mode is <strong>off by default</strong>. To enable it, add a
+                <code class="font-mono">cluster:</code> block to <code class="font-mono">config.yaml</code>:
+            </p>
+            <pre class="text-xs font-mono mt-2 p-3 bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded overflow-x-auto max-w-full">cluster:
+  enabled: true
+  secret: my-shared-secret     # must match on every peer
+  port: 8881
+  advertise: 192.168.1.100    # optional, override auto-detect</pre>
+            <p class="text-xs text-[var(--text-secondary)] leading-relaxed mt-3">
+                Cross-node API calls carry the shared secret in the
+                <code class="font-mono">X-SSM-Cluster-Secret</code> header.
+                LAN-only by design — for production deploy a TLS-terminating
+                reverse proxy in front of every node. The proxy endpoint
+                <code class="font-mono">/api/cluster/node/&lt;id&gt;/proxy/&lt;rest&gt;</code>
+                forwards the user's session cookie so they appear logged in
+                on the remote side.
+            </p>
+        </section>
+    </main>
+
+    <div class="modal-backdrop" id="modal-mdns" onclick="if(event.target===this) closeMdns()">
+        <div class="modal" style="max-width:36rem">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-semibold flex items-center gap-2">
+                    <i data-lucide="network" class="w-4 h-4 text-[var(--accent-blue)]"></i>
+                    mDNS results
+                </h3>
+                <button class="btn" onclick="closeMdns()" title="Close network scan results"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            <div id="mdns-list" class="space-y-2 max-h-[50vh] overflow-y-auto"></div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="modal-add" onclick="if(event.target===this) closeAdd()">
+        <div class="modal">
+            <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
+                <i data-lucide="plus" class="w-5 h-5 text-[var(--accent-cyan)]"></i>
+                Add peer
+            </h3>
+            <div class="space-y-3">
+                <div>
+                    <label class="text-xs text-[var(--text-secondary)] block mb-1">Host</label>
+                    <input id="add-host" class="text-input" placeholder="192.168.1.10">
+                </div>
+                <div>
+                    <label class="text-xs text-[var(--text-secondary)] block mb-1">Port</label>
+                    <input id="add-port" class="text-input" type="number" min="1" max="65535" value="8881">
+                </div>
+                <div>
+                    <label class="text-xs text-[var(--text-secondary)] block mb-1">Label (optional)</label>
+                    <input id="add-label" class="text-input" placeholder="homelab-node-1">
+                </div>
+                <div>
+                    <label class="text-xs text-[var(--text-secondary)] block mb-1">Secret (optional, falls back to local cluster.secret)</label>
+                    <input id="add-secret" class="text-input" type="password" placeholder="my-shared-secret">
+                </div>
+                <div id="add-error" class="text-xs text-[var(--accent-red)] hidden"></div>
+            </div>
+            <div class="flex justify-end gap-2 mt-4">
+                <button class="btn" onclick="closeAdd()" title="Close without adding">Cancel</button>
+                <button class="btn btn-primary" id="add-submit" onclick="submitAdd()" title="Save this peer">
+                    <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <script>
+        let localInfo = null;
+        let peersData = null;
+
+        function api(url, opts = {}) {
+            return fetch(url, {
+                credentials: 'same-origin',
+                ...opts,
+                headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+            }).then(r => r.json().then(j => ({ status: r.status, ok: r.ok, data: j })));
+        }
+
+        function toast(message, kind = 'info') {
+            const c = document.getElementById('toast-container');
+            const t = document.createElement('div');
+            t.className = `toast ${kind}`;
+            t.textContent = message;
+            c.appendChild(t);
+            setTimeout(() => t.remove(), 4000);
+        }
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+        }
+
+        // Escaper for values placed inside a double-quoted HTML
+        // attribute as a single-quoted JS string
+        // (onclick="fn('…')"). escapeHtml() is WRONG here: `&#39;`
+        // is HTML-decoded back to `'` before JS parses, breaking
+        // out of the string. Peer labels are free-text user input
+        // and mDNS hosts come from the LAN, so both must use this.
+        function escapeAttr(s) {
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/'/g, "\\'");
+        }
+
+        function loadLocal() {
+            api('/api/cluster/info').then(({ status, data }) => {
+                if (status >= 400) {
+                    document.getElementById('local-info').textContent = 'Failed to load local info';
+                    return;
+                }
+                localInfo = data;
+                renderLocal();
+            }).catch(err => {
+                document.getElementById('local-info').textContent =
+                    'Could not reach the server: ' + (err && err.message ? err.message : err);
+            });
+        }
+
+        function renderLocal() {
+            if (!localInfo) return;
+            const badge = document.getElementById('enabled-badge');
+            if (localInfo.enabled) {
+                badge.textContent = 'enabled';
+                badge.className = 'hidden sm:inline-flex badge badge-green';
+            } else {
+                badge.textContent = 'disabled';
+                badge.className = 'hidden sm:inline-flex badge badge-gray';
+            }
+            const info = document.getElementById('local-info');
+            info.textContent = `${localInfo.hostname} @ port ${localInfo.port}${localInfo.advertise ? ' (advertise ' + localInfo.advertise + ')' : ''}`;
+            document.getElementById('stat-mode').textContent = localInfo.enabled ? 'active' : 'manual';
+        }
+
+        function loadPeers() {
+            api('/api/cluster/nodes').then(({ status, data }) => {
+                if (status >= 400) {
+                    toast(data.error || `HTTP ${status}`, 'error');
+                    return;
+                }
+                peersData = data;
+                renderStats();
+                renderPeers();
+            }).catch(err => {
+                toast('failed to load peers: ' + (err && err.message ? err.message : err), 'error');
+                document.getElementById('peers-grid').innerHTML =
+                    '<div class="empty-state col-span-full">Could not reach the server. Click Probe to retry.</div>';
+            });
+        }
+
+        function renderStats() {
+            if (!peersData) return;
+            document.getElementById('stat-total').textContent = String(peersData.count);
+            document.getElementById('stat-reachable').textContent = String(peersData.reachable);
+            document.getElementById('stat-unreachable').textContent = String(peersData.unreachable);
+            document.getElementById('peer-count').textContent = String(peersData.count);
+        }
+
+        function statusClass(p) {
+            if (p.last_seen && !p.last_error) return 'reachable';
+            if (p.last_error) return 'unreachable';
+            return 'unknown';
+        }
+
+        function statusLabel(p) {
+            if (p.last_seen && !p.last_error) return 'reachable';
+            if (p.last_error) return 'unreachable: ' + p.last_error;
+            return 'never probed';
+        }
+
+        function renderPeers() {
+            const grid = document.getElementById('peers-grid');
+            const peers = (peersData && peersData.peers) || [];
+            if (!peers.length) {
+                grid.innerHTML = '<div class="empty-state col-span-full">No peers yet. Click <strong>Add Peer</strong> to add one, or run <strong>mDNS</strong> to browse the LAN.</div>';
+                return;
+            }
+            const cards = peers.map(p => {
+                const sc = statusClass(p);
+                return `
+                    <div class="peer-card ${sc}">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <div class="status-dot"></div>
+                                <div class="min-w-0">
+                                    <div class="peer-name" title="${escapeHtml(p.label)}">${escapeHtml(p.label)}</div>
+                                    <div class="peer-host">${escapeHtml(p.host)}:${p.port}</div>
+                                </div>
+                            </div>
+                            <button class="btn btn-danger" onclick="askRemove('${escapeAttr(p.id)}', '${escapeAttr(p.label)}')" title="Remove peer">
+                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                        <div class="flex items-center justify-between gap-2 text-xs text-[var(--text-secondary)]">
+                            <span>${escapeHtml(statusLabel(p))}</span>
+                            <span>${p.last_seen ? new Date(p.last_seen * 1000).toLocaleTimeString() : '—'}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            grid.innerHTML = cards;
+            lucide.createIcons();
+        }
+
+        function openAdd() {
+            document.getElementById('add-host').value = '';
+            document.getElementById('add-port').value = '8881';
+            document.getElementById('add-label').value = '';
+            // Pre-fill the secret with the local cluster secret
+            // if configured — the typical case is "all peers
+            // share the same secret".
+            document.getElementById('add-secret').value = (localInfo && localInfo.secret) || '';
+            document.getElementById('add-error').classList.add('hidden');
+            document.getElementById('modal-add').classList.add('open');
+            setTimeout(() => document.getElementById('add-host').focus(), 50);
+        }
+        function closeAdd() {
+            document.getElementById('modal-add').classList.remove('open');
+        }
+        function submitAdd() {
+            const host = document.getElementById('add-host').value.trim();
+            const port = parseInt(document.getElementById('add-port').value, 10);
+            const label = document.getElementById('add-label').value.trim();
+            const secret = document.getElementById('add-secret').value.trim();
+            if (!host) return showAddError('host is required');
+            if (!port || port < 1 || port > 65535) return showAddError('port must be 1-65535');
+            const btn = document.getElementById('add-submit');
+            btn.disabled = true;
+            api('/api/cluster/nodes', {
+                method: 'POST',
+                body: JSON.stringify({ host, port, label, secret }),
+            }).then(({ status, data }) => {
+                btn.disabled = false;
+                if (status === 200) {
+                    closeAdd();
+                    toast(`Added ${data.peer.label}`, 'success');
+                    loadPeers();
+                } else {
+                    showAddError(data.error || `HTTP ${status}`);
+                }
+            }).catch(err => {
+                btn.disabled = false;
+                showAddError('failed: ' + (err && err.message ? err.message : err));
+            });
+        }
+        function showAddError(msg) {
+            const el = document.getElementById('add-error');
+            el.textContent = msg;
+            el.classList.remove('hidden');
+        }
+
+        async function askRemove(peerId, label) {
+            if (!await uiConfirm(`Remove peer "${label}"?`, 'The peer will be removed from the cluster registry.', true)) return;
+            api('/api/cluster/nodes/' + encodeURIComponent(peerId), { method: 'DELETE' })
+                .then(({ status, data }) => {
+                    if (status === 200) {
+                        toast('Peer removed', 'success');
+                        loadPeers();
+                    } else {
+                        toast(data.error || `HTTP ${status}`, 'error');
+                    }
+                })
+                .catch(err => toast('failed: ' + (err && err.message ? err.message : err), 'error'));
+        }
+
+        function probeAll(btn) {
+            if (btn) btn.disabled = true;
+            api('/api/cluster/probe', { method: 'POST' })
+                .then(({ status, data }) => {
+                    if (btn) btn.disabled = false;
+                    if (status >= 400) {
+                        toast(data.error || `HTTP ${status}`, 'error');
+                        return;
+                    }
+                    const ok = (data.results || []).filter(r => r.ok).length;
+                    const total = (data.results || []).length;
+                    toast(`Probed ${ok}/${total} reachable`, ok === total ? 'success' : 'info');
+                    loadPeers();
+                })
+                .catch(err => {
+                    if (btn) btn.disabled = false;
+                    toast('failed: ' + (err && err.message ? err.message : err), 'error');
+                });
+        }
+
+        function mdnsBrowse() {
+            const btn = document.getElementById('btn-mdns');
+            if (btn) btn.disabled = true;
+            api('/api/cluster/mdns', { method: 'POST', body: JSON.stringify({ timeout: 2 }) })
+                .then(({ status, data }) => {
+                    if (btn) btn.disabled = false;
+                    if (status >= 400) {
+                        toast(data.error || `HTTP ${status}`, 'error');
+                        return;
+                    }
+                    const list = data.peers || [];
+                    const container = document.getElementById('mdns-list');
+                    container.innerHTML = '';
+                    if (!list.length) {
+                        container.innerHTML = '<div class="empty-state">mDNS returned no peers (zeroconf not installed or none found)</div>';
+                        document.getElementById('modal-mdns').classList.add('open');
+                        return;
+                    }
+                    container.innerHTML = list.map(p => {
+                        const host = p.host || '?';
+                        const port = p.port || '?';
+                        const type = p.type || 'ssm';
+                        return `<div class="panel-card p-3 flex items-center gap-3">
+                            <i data-lucide="server" class="w-5 h-5 text-[var(--accent-cyan)] flex-shrink-0"></i>
+                            <div class="min-w-0 flex-1">
+                                <div class="font-semibold text-sm truncate">${escapeHtml(host)}</div>
+                                <div class="text-xs text-[var(--text-muted)] flex flex-wrap gap-2 mt-0.5">
+                                    <span class="mdns-chip"><i data-lucide="wifi" class="w-3 h-3"></i> ${escapeHtml(type)}</span>
+                                    <span class="mdns-chip"><i data-lucide="plug" class="w-3 h-3"></i> port ${escapeHtml(String(port))}</span>
+                                </div>
+                            </div>
+                            <button class="btn" onclick="closeMdns(); fillPeerForm('${escapeAttr(host)}', '${escapeAttr(String(port))}')" title="Add this peer">
+                                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                                <span class="hidden sm:inline">Add</span>
+                            </button>
+                        </div>`;
+                    }).join('');
+                    document.getElementById('modal-mdns').classList.add('open');
+                    lucide.createIcons();
+                })
+                .catch(err => {
+                    if (btn) btn.disabled = false;
+                    toast('failed: ' + (err && err.message ? err.message : err), 'error');
+                });
+        }
+        function closeMdns() {
+            document.getElementById('modal-mdns').classList.remove('open');
+        }
+        function fillPeerForm(host, port) {
+            document.getElementById('add-host').value = host;
+            const labelEl = document.getElementById('add-label');
+            if (labelEl && !labelEl.value) labelEl.value = String(host).split('.')[0];
+            // Port arrives as a string (mDNS may omit it); coerce and
+            // leave validation to submitAdd.
+            const p = parseInt(port, 10);
+            document.getElementById('add-port').value = Number.isFinite(p) ? p : '';
+            openAdd();
+        }
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') { closeAdd(); closeMdns(); }
+        });
+
+        lucide.createIcons();
+        loadLocal();
+        loadPeers();
+    </script>
+</body>
+</html>

@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSH Keys - Server Services Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --border-subtle: #1e1e2a;
+            --border-active: #2d2d3a;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-purple: #8b5cf6;
+            --accent-orange: #f97316;
+            --accent-cyan: #06b6d4;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+        * { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        code, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+        body {
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(ellipse at top left, rgba(139, 92, 246, 0.04) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(6, 182, 212, 0.04) 0%, transparent 50%);
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        .badge {
+            display: inline-flex; align-items: center; gap: 0.25rem;
+            padding: 0.125rem 0.5rem; border-radius: 0.375rem;
+            font-size: 0.6875rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .badge-green { background: rgba(16,185,129,0.12); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.25); }
+        .badge-red { background: rgba(239,68,68,0.12); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.25); }
+        .badge-blue { background: rgba(59,130,246,0.12); color: var(--accent-blue); border: 1px solid rgba(59,130,246,0.25); }
+        .badge-yellow { background: rgba(245,158,11,0.12); color: var(--accent-yellow); border: 1px solid rgba(245,158,11,0.25); }
+        .badge-gray { background: rgba(100,116,139,0.12); color: var(--text-secondary); border: 1px solid rgba(100,116,139,0.25); }
+        .badge-purple { background: rgba(139,92,246,0.12); color: var(--accent-purple); border: 1px solid rgba(139,92,246,0.25); }
+        .panel-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+        }
+        .status-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            padding: 1rem 1.25rem;
+            display: flex; flex-direction: column; gap: 0.25rem;
+        }
+        .status-card .label { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+        .status-card .value { font-size: 1.25rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+        .btn {
+            display: inline-flex; align-items: center; gap: 0.375rem;
+            padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+            font-size: 0.8125rem; font-weight: 600;
+            background: var(--bg-secondary); border: 1px solid var(--border-subtle);
+            color: var(--text-primary); cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .btn:hover { background: var(--border-subtle); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--accent-blue); color: #061a30; border-color: var(--accent-blue); }
+        .btn-primary:hover { background: #60a5fa; }
+        .btn-danger { background: rgba(239,68,68,0.15); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.3); }
+        .btn-danger:hover { background: rgba(239,68,68,0.25); }
+        .text-input, .textarea-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.5rem 0.875rem;
+            color: var(--text-primary);
+            font-size: 0.8125rem; outline: none; width: 100%;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .textarea-input { resize: vertical; min-height: 100px; line-height: 1.5; }
+        .text-input:focus, .textarea-input:focus { border-color: var(--accent-blue); }
+        .empty-state {
+            padding: 2rem 1rem; text-align: center;
+            color: var(--text-muted); font-size: 0.875rem;
+        }
+        .key-algo {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--accent-blue);
+        }
+        .keys-wrap {
+            max-height: calc(100dvh - 260px);
+            overflow-y: auto;
+            overflow-x: auto;
+            /* NOTE: no min-width on the wrapper itself — the table
+               inside keeps min-width: 560px and scrolls. A min-width
+               here would force the whole page wider than the phone. */
+        }
+        .keys-table {
+            width: 100%;
+            min-width: 560px;
+            table-layout: fixed;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        .keys-table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: var(--bg-card);
+            font-size: 0.6875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-muted);
+            font-weight: 600;
+            text-align: left;
+            padding: 0.625rem 1rem;
+            border-bottom: 1px solid var(--border-active);
+        }
+        .keys-table th:nth-child(1), .keys-table td:nth-child(1) { width: 170px; }
+        .keys-table th:nth-child(3), .keys-table td:nth-child(3) { width: 130px; text-align: right; }
+        .keys-table td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border-subtle);
+            vertical-align: middle;
+            overflow: hidden;
+        }
+        .keys-table tbody tr:last-child td { border-bottom: none; }
+        .keys-table tbody tr:hover { background: var(--bg-secondary); }
+        .key-line {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .key-comment {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8125rem;
+            color: var(--text-primary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .modal-backdrop {
+            position: fixed; inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 100;
+            display: none;
+            align-items: center; justify-content: center;
+        }
+        .modal-backdrop.open { display: flex; }
+        .modal {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            max-width: 480px; width: 90%;
+        }
+        .toast-container {
+            position: fixed; top: 1rem; right: 1rem; z-index: 100;
+            display: flex; flex-direction: column; gap: 0.5rem;
+        }
+        .toast {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.625rem 0.875rem;
+            font-size: 0.8125rem;
+            color: var(--text-primary);
+            min-width: 240px; max-width: 360px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            animation: fadeIn 0.2s ease-out forwards;
+        }
+        .toast.error { border-left: 3px solid var(--accent-red); }
+        .toast.success { border-left: 3px solid var(--accent-green); }
+        .toast.info { border-left: 3px solid var(--accent-blue); }
+    </style>
+</head>
+<body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
+    {% import "_macros.html" as ui %}
+    {% set actions %}
+    {% endset %}
+    {% set page_info %}
+        <p style="margin-bottom:0.75rem">Controls <strong>who can log into this machine remotely</strong> without a password. Each entry is one trusted key, usually one per person or device.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li><strong>Add Key</strong> pastes in a new public key (the one starting with <strong>ssh-ed25519</strong> or <strong>ssh-rsa</strong>). Duplicates are rejected.</li>
+            <li>Removing a key <strong>instantly revokes</strong> that access. The page refuses to delete your very last key so you can't lock yourself out by accident.</li>
+        </ul>
+        {% endset %}
+    {{ ui.header(
+        title="SSH Keys",
+        icon="key-round",
+        icon_color="var(--accent-purple)",
+        badge_id="count-badge",
+        actions=actions,
+        current='/ssh',
+        info=page_info,
+    ) }}
+    {% set subheader %}
+        <input id="filter-input" class="text-input" style="max-width: 260px" placeholder="Filter by fingerprint or comment…" oninput="renderList()">
+        <span class="flex-1"></span>
+        <button class="btn" onclick="loadList()" title="Refresh">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">Refresh</span>
+        </button>
+        <button class="btn btn-primary" onclick="openAdd()" title="Trust a new public key">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            <span>Add Key</span>
+        </button>
+    {% endset %}
+    {{ ui.subheader(subheader) }}
+
+    <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6 space-y-4">
+        <div id="warning-banner"></div>
+
+        <section class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div class="status-card">
+                <span class="label">Authorized keys</span>
+                <span class="value text-[var(--accent-purple)]" id="stat-total">—</span>
+            </div>
+            <div class="status-card">
+                <span class="label">Algorithms</span>
+                <span class="value text-[var(--accent-blue)]" id="stat-algos">—</span>
+            </div>
+            <div class="status-card">
+                <span class="label">File</span>
+                <span class="value text-[var(--text-secondary)]" style="font-size:0.875rem" id="stat-file">—</span>
+            </div>
+            <div class="status-card">
+                <span class="label">Writable</span>
+                <span class="value" id="stat-writable">—</span>
+            </div>
+        </section>
+
+        <section class="panel-card">
+            <div class="p-4 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2">
+                <h2 class="text-sm font-semibold flex items-center gap-2">
+                    <i data-lucide="list" class="w-4 h-4 text-[var(--accent-purple)]"></i>
+                    Authorized keys
+                </h2>
+            </div>
+            <div class="keys-wrap">
+                <table class="keys-table">
+                    <thead>
+                        <tr>
+                            <th>Algorithm</th>
+                            <th>Key</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="keys-list">
+                        <tr><td colspan="3" class="empty-state">Loading…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel-card p-4">
+            <h2 class="text-sm font-semibold flex items-center gap-2 mb-2">
+                <i data-lucide="info" class="w-4 h-4 text-[var(--text-muted)]"></i>
+                About
+            </h2>
+            <p class="text-xs text-[var(--text-secondary)] leading-relaxed">
+                Manages <code class="font-mono">~/.ssh/authorized_keys</code>. The file is written atomically
+                (tempfile + rename) with mode <code class="font-mono">0600</code>. A backup is saved as
+                <code class="font-mono">authorized_keys.bak</code> before each removal. Refusing to remove
+                the last remaining key is the default — pass <code class="font-mono">confirm_last</code>
+                to override (you may lock yourself out).
+            </p>
+        </section>
+    </main>
+
+    <div class="modal-backdrop" id="modal-add" onclick="if(event.target===this) closeAdd()">
+        <div class="modal">
+            <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
+                <i data-lucide="key-round" class="w-5 h-5 text-[var(--accent-purple)]"></i>
+                Add SSH key
+            </h3>
+            <p class="text-xs text-[var(--text-secondary)] mb-3">
+                Paste the public key line (starts with the algorithm, e.g.
+                <code class="font-mono">ssh-ed25519</code>). Options like
+                <code class="font-mono">from="..."</code> are accepted.
+            </p>
+            <textarea id="add-key-text" class="textarea-input" rows="5"
+                placeholder="ssh-ed25519 AAAA... user@host"></textarea>
+            <div id="add-error" class="text-xs text-[var(--accent-red)] mt-2 hidden"></div>
+            <div class="flex justify-end gap-2 mt-4">
+                <button class="btn" onclick="closeAdd()" title="Close without adding">Cancel</button>
+                <button class="btn btn-primary" id="add-submit" onclick="submitAdd()" title="Save this key">
+                    <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="modal-remove" onclick="if(event.target===this) closeRemove()">
+        <div class="modal">
+            <h3 class="text-lg font-semibold mb-3 flex items-center gap-2 text-[var(--accent-red)]">
+                <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+                Remove key?
+            </h3>
+            <p class="text-sm text-[var(--text-secondary)] mb-2" id="remove-detail">
+                This will remove the key.
+            </p>
+            <p class="text-xs text-[var(--accent-red)] hidden" id="lockout-warning">
+                This is the only authorized key. Removing it may lock you out of the box.
+                Only proceed if you have another way in (console, password auth, another key).
+            </p>
+            <div class="flex justify-end gap-2 mt-4">
+                <button class="btn" onclick="closeRemove()" title="Keep this key">Cancel</button>
+                <button class="btn btn-danger" id="remove-confirm" onclick="confirmRemove()" title="Revoke this key now">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Remove
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <script>
+        let currentData = null;
+        let pendingRemove = null;   // {identifier, requires_confirm}
+        let filterText = '';
+
+        function api(url, opts = {}) {
+            return fetch(url, {
+                credentials: 'same-origin',
+                ...opts,
+                headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+            }).then(r => r.json().then(j => ({ status: r.status, ok: r.ok, data: j })));
+        }
+
+        function toast(message, kind = 'info') {
+            const c = document.getElementById('toast-container');
+            const t = document.createElement('div');
+            t.className = `toast ${kind}`;
+            t.textContent = message;
+            c.appendChild(t);
+            setTimeout(() => t.remove(), 4000);
+        }
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+        }
+
+        // Escaper for values placed inside a double-quoted HTML
+        // attribute as a single-quoted JS string
+        // (onclick="fn('…')"). escapeHtml() is WRONG here: `&#39;`
+        // is HTML-decoded back to `'` before JS parses, breaking
+        // out of the string (a key comment with a quote breaks the
+        // row's buttons, or worse). `\'` survives HTML parsing and
+        // escapes the quote for the JS layer instead.
+        function escapeAttr(s) {
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/'/g, "\\'");
+        }
+
+        function loadList() {
+            api('/api/ssh/keys').then(({ status, data }) => {
+                if (status >= 500) {
+                    toast(data.error || `HTTP ${status}`, 'error');
+                    return;
+                }
+                currentData = data;
+                renderStats();
+                renderWarning();
+                renderList();
+            }).catch(err => {
+                toast('failed to load keys: ' + (err && err.message ? err.message : err), 'error');
+                document.getElementById('keys-list').innerHTML =
+                    '<tr><td colspan="3" class="empty-state">Could not reach the server. Click Refresh to retry.</td></tr>';
+            });
+        }
+
+        function renderStats() {
+            const d = currentData;
+            if (!d) return;
+            const keys = d.keys || [];
+            document.getElementById('stat-total').textContent = String(keys.length);
+            const algos = [...new Set(keys.map(k => k.algorithm))];
+            document.getElementById('stat-algos').textContent = algos.length
+                ? algos.join(', ')
+                : '—';
+            document.getElementById('stat-file').textContent = d.file_exists ? 'exists' : 'missing';
+            const w = document.getElementById('stat-writable');
+            w.textContent = d.writable ? 'yes' : 'no';
+            w.className = 'value ' + (d.writable ? 'text-[var(--accent-green)]' : 'text-[var(--accent-red)]');
+            document.getElementById('count-badge').textContent = `${keys.length} key${keys.length === 1 ? '' : 's'}`;
+        }
+
+        function renderWarning() {
+            const d = currentData;
+            const banner = document.getElementById('warning-banner');
+            banner.innerHTML = '';
+            if (!d.ssh_dir_exists) {
+                banner.innerHTML = `
+                    <div class="panel-card p-4 border-[var(--accent-yellow)] bg-[var(--accent-yellow)]/5">
+                        <div class="flex items-start gap-3">
+                            <i data-lucide="alert-triangle" class="w-5 h-5 text-[var(--accent-yellow)] flex-shrink-0 mt-0.5"></i>
+                            <div>
+                                <div class="font-semibold text-sm">~/.ssh does not exist</div>
+                                <div class="text-xs text-[var(--text-secondary)] mt-1 font-mono">mkdir -p ~/.ssh && chmod 700 ~/.ssh</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                lucide.createIcons();
+                return;
+            }
+            if (!d.file_exists) {
+                banner.innerHTML = `
+                    <div class="panel-card p-4 border-[var(--border-subtle)]">
+                        <div class="flex items-start gap-3">
+                            <i data-lucide="info" class="w-5 h-5 text-[var(--accent-blue)] flex-shrink-0 mt-0.5"></i>
+                            <div class="text-sm text-[var(--text-secondary)]">
+                                No <code class="font-mono">authorized_keys</code> file yet — the first key you add will create it (mode 0600).
+                            </div>
+                        </div>
+                    </div>
+                `;
+                lucide.createIcons();
+            }
+        }
+
+        function renderList() {
+            const wrap = document.getElementById('keys-list');
+            const keys = (currentData && currentData.keys) || [];
+            filterText = document.getElementById('filter-input').value.toLowerCase().trim();
+            const filtered = filterText
+                ? keys.filter(k =>
+                    (k.fingerprint || '').toLowerCase().includes(filterText) ||
+                    (k.comment || '').toLowerCase().includes(filterText) ||
+                    (k.algorithm || '').toLowerCase().includes(filterText))
+                : keys;
+            if (!keys.length) {
+                wrap.innerHTML = '<tr><td colspan="3" class="empty-state">No keys yet. Click <strong>Add Key</strong> to add your first one.</td></tr>';
+                return;
+            }
+            if (!filtered.length) {
+                wrap.innerHTML = '<tr><td colspan="3" class="empty-state">No keys match the filter.</td></tr>';
+                return;
+            }
+            const rows = filtered.map(k => {
+                const opts = (k.options && k.options.length)
+                    ? `<span class="badge badge-yellow" title="${escapeHtml(k.options.join(' '))}">${k.options.length} option${k.options.length === 1 ? '' : 's'}</span>`
+                    : '';
+                return `
+                    <tr>
+                        <td>
+                            <div class="flex flex-col items-start gap-1">
+                                <span class="key-algo">${escapeHtml(k.algorithm)}</span>
+                                ${opts}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="key-comment" title="${escapeHtml(k.comment || '(no comment)')}">${escapeHtml(k.comment || '(no comment)')}</div>
+                            <div class="key-line" title="${escapeHtml(k.raw)}">${escapeHtml(k.raw)}</div>
+                        </td>
+                        <td>
+                            <div class="flex items-center justify-end gap-2">
+                                <button class="btn" onclick="copyText('${escapeAttr(k.raw)}')" title="Copy key">
+                                    <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                                </button>
+                                <button class="btn btn-danger" title="Revoke this key" onclick="askRemove('${escapeAttr(k.fingerprint)}', '${escapeAttr(k.comment || '')}', ${keys.length})">
+                                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            wrap.innerHTML = rows;
+            lucide.createIcons();
+        }
+
+        function copyText(text) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(
+                    () => toast('Copied to clipboard', 'success'),
+                    () => toast('Copy failed', 'error'),
+                );
+            } else {
+                toast('Clipboard not available', 'error');
+            }
+        }
+
+        function openAdd() {
+            document.getElementById('add-key-text').value = '';
+            document.getElementById('add-error').classList.add('hidden');
+            document.getElementById('modal-add').classList.add('open');
+            setTimeout(() => document.getElementById('add-key-text').focus(), 50);
+        }
+        function closeAdd() {
+            document.getElementById('modal-add').classList.remove('open');
+        }
+        function submitAdd() {
+            const text = document.getElementById('add-key-text').value.trim();
+            if (!text) {
+                showAddError('paste a public key first');
+                return;
+            }
+            const btn = document.getElementById('add-submit');
+            btn.disabled = true;
+            api('/api/ssh/keys', { method: 'POST', body: JSON.stringify({ key: text }) })
+                .then(({ status, data }) => {
+                    btn.disabled = false;
+                    if (status === 200) {
+                        closeAdd();
+                        toast(`Added key (${data.key.algorithm})`, 'success');
+                        loadList();
+                    } else {
+                        showAddError(data.error || `HTTP ${status}`);
+                    }
+                })
+                .catch(err => {
+                    btn.disabled = false;
+                    showAddError('failed: ' + (err && err.message ? err.message : err));
+                });
+        }
+        function showAddError(msg) {
+            const el = document.getElementById('add-error');
+            el.textContent = msg;
+            el.classList.remove('hidden');
+        }
+
+        function askRemove(identifier, comment, totalKeys) {
+            pendingRemove = { identifier, requires_confirm: totalKeys <= 1 };
+            const detail = document.getElementById('remove-detail');
+            detail.textContent = comment
+                ? `Remove key "${comment}"?`
+                : `Remove key ${identifier.slice(0, 24)}…?`;
+            const lockout = document.getElementById('lockout-warning');
+            lockout.classList.toggle('hidden', totalKeys > 1);
+            document.getElementById('modal-remove').classList.add('open');
+        }
+        function closeRemove() {
+            document.getElementById('modal-remove').classList.remove('open');
+            pendingRemove = null;
+        }
+        function confirmRemove() {
+            if (!pendingRemove) return;
+            const body = {};
+            if (pendingRemove.requires_confirm) body.confirm_last = true;
+            const btn = document.getElementById('remove-confirm');
+            btn.disabled = true;
+            api('/api/ssh/keys/' + encodeURIComponent(pendingRemove.identifier),
+                { method: 'DELETE', body: JSON.stringify(body) })
+                .then(({ status, data }) => {
+                    btn.disabled = false;
+                    if (status === 200) {
+                        closeRemove();
+                        toast(`Removed ${data.removed} key(s)`, 'success');
+                        loadList();
+                    } else if (status === 409 && data.requires_confirm) {
+                        // Shouldn't happen — UI already warned — but retry with confirm_last.
+                        // Shouldn't happen — UI already warned — but retry with confirm_last.
+                        api('/api/ssh/keys/' + encodeURIComponent(pendingRemove.identifier),
+                            { method: 'DELETE', body: JSON.stringify({ confirm_last: true }) })
+                            .then(({ status: s2, data: d2 }) => {
+                                btn.disabled = false;
+                                if (s2 === 200) {
+                                    closeRemove();
+                                    toast(`Removed ${d2.removed} key(s)`, 'success');
+                                    loadList();
+                                } else {
+                                    toast(d2.error || `HTTP ${s2}`, 'error');
+                                }
+                            });
+                    } else {
+                        toast(data.error || `HTTP ${status}`, 'error');
+                    }
+                })
+                .catch(err => {
+                    btn.disabled = false;
+                    toast('failed: ' + (err && err.message ? err.message : err), 'error');
+                });
+        }
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                closeAdd();
+                closeRemove();
+            }
+        });
+
+        lucide.createIcons();
+        loadList();
+    </script>
+</body>
+</html>

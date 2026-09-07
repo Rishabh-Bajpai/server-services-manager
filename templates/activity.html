@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Activity Log - Server Services Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --border-subtle: #1e1e2a;
+            --border-active: #2d2d3a;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --accent-orange: #f97316;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+        * { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        code, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+        body {
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(ellipse at top left, rgba(139, 92, 246, 0.04) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(59, 130, 246, 0.04) 0%, transparent 50%);
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+
+        .badge {
+            display: inline-flex; align-items: center; gap: 0.25rem;
+            padding: 0.125rem 0.5rem; border-radius: 0.375rem;
+            font-size: 0.6875rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .badge-green { background: rgba(16,185,129,0.12); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.25); }
+        .badge-red { background: rgba(239,68,68,0.12); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.25); }
+        .badge-blue { background: rgba(59,130,246,0.12); color: var(--accent-blue); border: 1px solid rgba(59,130,246,0.25); }
+        .badge-yellow { background: rgba(245,158,11,0.12); color: var(--accent-yellow); border: 1px solid rgba(245,158,11,0.25); }
+        .badge-gray { background: rgba(100,116,139,0.12); color: var(--text-secondary); border: 1px solid rgba(100,116,139,0.25); }
+        .badge-purple { background: rgba(139,92,246,0.12); color: var(--accent-purple); border: 1px solid rgba(139,92,246,0.25); }
+        .badge-cyan { background: rgba(6,182,212,0.12); color: var(--accent-cyan); border: 1px solid rgba(6,182,212,0.25); }
+        .badge-orange { background: rgba(249,115,22,0.12); color: var(--accent-orange); border: 1px solid rgba(249,115,22,0.25); }
+
+        .filter-tab {
+            padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+            font-size: 0.8125rem; font-weight: 600;
+            color: var(--text-secondary); background: transparent;
+            border: 1px solid var(--border-subtle);
+            cursor: pointer; transition: all 0.15s ease;
+        }
+        .filter-tab:hover { background: rgba(255,255,255,0.04); color: var(--text-primary); }
+        .filter-tab.active { background: rgba(139,92,246,0.12); color: var(--accent-purple); border-color: rgba(139,92,246,0.35); }
+
+        .search-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.5rem 0.875rem;
+            color: var(--text-primary);
+            font-size: 0.8125rem; outline: none;
+            transition: border-color 0.15s;
+            width: 100%; min-width: 200px;
+        }
+        .search-input:focus { border-color: var(--accent-purple); }
+
+        .table-wrap {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem; overflow: hidden;
+        }
+        .events-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; min-width: 640px; }
+        .events-table thead th {
+            text-align: left; font-size: 0.6875rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-muted); padding: 0.75rem 1rem;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-subtle);
+            position: sticky; top: 0; z-index: 2;
+        }
+        .events-table tbody td {
+            padding: 0.625rem 1rem;
+            border-bottom: 1px solid var(--border-subtle);
+            font-size: 0.8125rem; color: var(--text-primary);
+            vertical-align: middle;
+        }
+        .events-table tbody tr:last-child td { border-bottom: none; }
+        .table-scroll {
+    max-height: calc(100dvh - 280px);
+    min-height: 200px;
+    overflow-y: auto;
+    overflow-x: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+        .summary-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            padding: 1rem 1.25rem;
+            display: flex; flex-direction: column; gap: 0.25rem;
+        }
+        .summary-value {
+            font-size: 1.25rem; font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .summary-label {
+            font-size: 0.6875rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-muted);
+        }
+
+        .refresh-btn {
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-secondary);
+            font-size: 0.8125rem; font-weight: 600;
+            cursor: pointer; transition: all 0.15s ease;
+        }
+        .refresh-btn:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+        .refresh-btn.loading .icon { animation: spin 0.8s linear infinite; }
+        .refresh-btn .icon { transition: transform 0.3s; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes sk { 0%,100%{opacity:.4} 50%{opacity:.8} }
+        .sk { display:inline-block; height:14px; border-radius:4px; background:var(--border-subtle); animation:sk 1.5s ease-in-out infinite; }
+
+        .empty {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 3rem 1rem; color: var(--text-muted); text-align: center; gap: 0.5rem;
+        }
+    </style>
+</head>
+<body class="bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-screen">
+
+    {% import "_macros.html" as ui %}
+{% set actions %}
+{% endset %}
+{% set page_info %}
+        <p style="margin-bottom:0.75rem">A <strong>diary of everything done through this app</strong> — who did what, when, and whether it worked.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li>Starting a service, toggling a cron job, changing firewall rules — it all lands here with a timestamp.</li>
+            <li>Type in the filter boxes to narrow by <strong>action, target, or user</strong>; the <strong>Pause</strong> button freezes the live feed so you can read.</li>
+            <li><strong>CSV</strong> downloads the whole history for your own records.</li>
+        </ul>
+        {% endset %}
+{{ ui.header(
+            title="Activity Log",
+            icon="history",
+            icon_color="var(--accent-purple)",
+            actions=actions,
+            current='/activity',
+            info=page_info,
+        ) }}
+{% set subheader %}
+        <input id="action-input" type="text" placeholder="Filter by action…" class="text-input" style="max-width:200px">
+        <input id="target-input" type="text" placeholder="Filter by target…" class="text-input" style="max-width:200px">
+        <input id="user-input" type="text" placeholder="Filter by user…" class="text-input" style="max-width:160px">
+        <select id="status-select" class="select-input" style="max-width:140px" title="Show only ok or error events">
+            <option value="">All statuses</option>
+            <option value="ok">ok</option>
+            <option value="error">error</option>
+        </select>
+        <select id="since-select" class="select-input" style="max-width:160px" title="Only show events since…">
+            <option value="">Any time</option>
+            <option value="3600">Last hour</option>
+            <option value="86400">Last 24h</option>
+            <option value="604800">Last 7d</option>
+            <option value="2592000">Last 30d</option>
+        </select>
+        <span class="flex-1"></span>
+        <a href="/api/activity/export.csv" class="btn">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">CSV</span>
+        </a>
+        <button id="live-btn" class="refresh-btn" title="Pause live auto-refresh (freezes rows so text can be copied)">
+            <i data-lucide="pause" class="w-3.5 h-3.5 icon"></i>
+            <span class="hidden sm:inline" id="live-btn-label">Live</span>
+        </button>
+    {% endset %}
+    {{ ui.subheader(subheader) }}
+<main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6">
+        <!-- Summary cards -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6 animate-fade-in" id="summary"></div>
+
+        <!-- Table -->
+        <div class="table-wrap animate-fade-in" style="animation-delay:0.1s">
+            <div class="table-scroll">
+                <table class="events-table">
+                    <thead>
+                        <tr>
+                            <th style="width:150px">Time</th>
+                            <th style="width:140px">Action</th>
+                            <th style="width:160px">Target</th>
+                            <th style="width:120px" class="hidden md:table-cell">User</th>
+                            <th style="width:80px">Status</th>
+                            <th style="width:110px" class="hidden sm:table-cell">IP</th>
+                            <th>Detail</th>
+                        </tr>
+                    </thead>
+                    <tbody id="events-tbody">
+                        <tr><td colspan="7" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:35%"></span><span class="sk" style="width:20%;margin-left:1rem"></span><span class="sk" style="width:15%;margin-left:1rem"></span></div></td></tr>
+                        <tr><td colspan="7" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:45%"></span><span class="sk" style="width:15%;margin-left:1rem"></span></div></td></tr>
+                        <tr><td colspan="7" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:30%"></span><span class="sk" style="width:25%;margin-left:1rem"></span></div></td></tr>
+                        <tr><td colspan="7" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:50%"></span><span class="sk" style="width:18%;margin-left:1rem"></span></div></td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div id="events-empty" class="empty" style="display:none">
+                <i data-lucide="inbox" class="w-10 h-10 opacity-40"></i>
+                <p class="text-sm">No activity recorded yet. Action: try adding a service or starting/stopping one.</p>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        lucide.createIcons();
+
+        const filters = { action: '', target: '', status: '', user: '', since: '' };
+        let debounceTimer = null;
+
+        function $(id) { return document.getElementById(id); }
+        function escapeHtml(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        function formatTime(ts) {
+            if (!ts) return '—';
+            return new Date(ts * 1000).toLocaleString();
+        }
+
+        function actionColor(action) {
+            if (action.startsWith('program.')) return 'badge-blue';
+            if (action.startsWith('systemd.')) return 'badge-purple';
+            if (action.startsWith('cron.')) return 'badge-yellow';
+            if (action.startsWith('autostart.')) return 'badge-green';
+            if (action.startsWith('docker.')) return 'badge-cyan';
+            if (action.startsWith('firewall.')) return 'badge-orange';
+            if (action.startsWith('backup.')) return 'badge-blue';
+            if (action.startsWith('ssh.')) return 'badge-purple';
+            return 'badge-gray';
+        }
+
+        function renderEntries(entries) {
+            const tbody = $('events-tbody');
+            const empty = $('events-empty');
+            if (!entries || entries.length === 0) {
+                tbody.innerHTML = '';
+                empty.style.display = 'flex';
+                return;
+            }
+            empty.style.display = 'none';
+            tbody.innerHTML = entries.map(e => {
+                const badge = e.status === 'ok' ? 'badge-green' : 'badge-red';
+                return `<tr>
+                    <td class="text-[var(--text-muted)] text-xs whitespace-nowrap">${formatTime(e.timestamp)}</td>
+                    <td><span class="badge ${actionColor(e.action)}">${escapeHtml(e.action)}</span></td>
+                    <td><code class="font-mono text-xs">${escapeHtml(e.target || '')}</code></td>
+                    <td class="hidden md:table-cell text-[var(--text-secondary)] text-xs">${escapeHtml(e.user || '—')}</td>
+                    <td><span class="badge ${badge}">${escapeHtml(e.status)}</span></td>
+                    <td class="hidden sm:table-cell text-[var(--text-muted)] text-xs">${escapeHtml(e.ip || '—')}</td>
+                    <td class="text-[var(--text-secondary)] text-xs">${escapeHtml(e.detail || '')}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function renderSummary(summary) {
+            const total = summary.reduce((sum, s) => sum + s.n, 0);
+            const top = summary.slice(0, 3);
+            $('summary').innerHTML = `
+                <div class="summary-card">
+                    <div class="summary-value" style="color:var(--accent-blue)">${total}</div>
+                    <div class="summary-label">Total events</div>
+                </div>
+                ${top.map(s => `
+                    <div class="summary-card">
+                        <div class="summary-value" style="color:var(--accent-purple)">${s.n}</div>
+                        <div class="summary-label">${escapeHtml(s.action)}</div>
+                    </div>
+                `).join('')}
+            `;
+        }
+
+        let livePaused = false;
+        $('live-btn').onclick = () => {
+            livePaused = !livePaused;
+            $('live-btn-label').textContent = livePaused ? 'Paused' : 'Live';
+            $('live-btn').title = livePaused ? 'Resume live auto-refresh' : 'Pause live auto-refresh (freezes rows so text can be copied)';
+            if (!livePaused) loadEntries();
+        };
+
+        async function loadEntries() {
+            try {
+                const params = new URLSearchParams();
+                if (filters.action) params.set('action', filters.action);
+                if (filters.target) params.set('target', filters.target);
+                if (filters.user) params.set('user', filters.user);
+                if (filters.status) params.set('status', filters.status);
+                if (filters.since) {
+                    // The dropdown value is seconds-ago; convert to
+                    // a Unix timestamp that the API understands.
+                    const sinceTs = (Date.now() / 1000) - Number(filters.since);
+                    params.set('since', String(sinceTs));
+                }
+                const r = await fetch('/api/activity?' + params.toString());
+                const data = await r.json();
+                renderEntries(data.entries || []);
+                renderSummary(data.summary || []);
+                lucide.createIcons();
+            } catch (e) {
+                console.error('load failed:', e);
+            }
+        }
+
+        $('action-input').addEventListener('input', (e) => {
+            filters.action = e.target.value;
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(loadEntries, 200);
+        });
+        $('target-input').addEventListener('input', (e) => {
+            filters.target = e.target.value;
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(loadEntries, 200);
+        });
+        $('user-input').addEventListener('input', (e) => {
+            filters.user = e.target.value;
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(loadEntries, 200);
+        });
+        $('status-select').addEventListener('change', (e) => {
+            filters.status = e.target.value;
+            loadEntries();
+        });
+        $('since-select').addEventListener('change', (e) => {
+            filters.since = e.target.value;
+            loadEntries();
+        });
+        loadEntries();
+        setInterval(() => { if (!livePaused) loadEntries(); }, 5000);
+    </script>
+</body>
+</html>

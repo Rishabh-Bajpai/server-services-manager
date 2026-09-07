@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Health &amp; Notifications - Server Services Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --border-subtle: #1e1e2a;
+            --border-active: #2d2d3a;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --accent-orange: #f97316;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+        * { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        code, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+        body {
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(ellipse at top left, rgba(16,185,129,0.04) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(239,68,68,0.04) 0%, transparent 50%);
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        @keyframes flash-new { 0% { background: rgba(59, 130, 246, 0.18); } 100% { background: transparent; } }
+
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        .row-flash { animation: flash-new 2s ease-out; }
+
+        .badge {
+            display: inline-flex; align-items: center; gap: 0.25rem;
+            padding: 0.125rem 0.5rem; border-radius: 0.375rem;
+            font-size: 0.6875rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .badge-green { background: rgba(16,185,129,0.12); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.25); }
+        .badge-red { background: rgba(239,68,68,0.12); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.25); }
+        .badge-blue { background: rgba(59,130,246,0.12); color: var(--accent-blue); border: 1px solid rgba(59,130,246,0.25); }
+        .badge-gray { background: rgba(100,116,139,0.12); color: var(--text-secondary); border: 1px solid rgba(100,116,139,0.25); }
+
+        .state-dot {
+            width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+        }
+        .state-dot.healthy { background: var(--accent-green); box-shadow: 0 0 8px rgba(16,185,129,0.6); }
+        .state-dot.unhealthy { background: var(--accent-red); box-shadow: 0 0 8px rgba(239,68,68,0.5); animation: pulse 2s ease-in-out infinite; }
+        .state-dot.unknown { background: var(--text-muted); }
+
+        .table-wrap {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem; overflow-x: auto;
+        }
+        .events-table { width: 100%; min-width: 560px; border-collapse: separate; border-spacing: 0; }
+        .events-table thead th {
+            text-align: left; font-size: 0.6875rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-muted); padding: 0.75rem 1rem;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .events-table tbody td {
+            padding: 0.625rem 1rem;
+            border-bottom: 1px solid var(--border-subtle);
+            font-size: 0.8125rem; color: var(--text-primary);
+            vertical-align: middle;
+        }
+        .events-table tbody tr:last-child td { border-bottom: none; }
+        .table-scroll {
+            max-height: 60dvh; overflow-y: auto; overflow-x: auto;
+            overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+        }
+        .table-scroll .events-table thead th { position: sticky; top: 0; z-index: 2; }
+
+        .summary-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            display: flex; flex-direction: column; gap: 0.25rem;
+        }
+        .summary-value {
+            font-size: 1.75rem; font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .summary-label {
+            font-size: 0.6875rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-muted);
+        }
+
+        #toast-container {
+            position: fixed; top: 1rem; right: 1rem; z-index: 100;
+            display: flex; flex-direction: column; gap: 0.5rem; pointer-events: none;
+        }
+        .toast {
+            padding: 0.75rem 1.25rem; border-radius: 0.75rem;
+            font-size: 0.8125rem; font-weight: 500; pointer-events: auto;
+            animation: toastIn 0.25s ease-out;
+            max-width: 24rem; backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: 0 8px 24px -8px rgba(0,0,0,0.4);
+        }
+        .toast.success { background: rgba(16,185,129,0.92); color: white; }
+        .toast.error { background: rgba(239,68,68,0.92); color: white; }
+        .toast.info { background: rgba(59,130,246,0.92); color: white; }
+        .toast.out { animation: toastOut 0.2s ease-in forwards; }
+        @keyframes toastIn { from { opacity: 0; transform: translateY(-10px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes toastOut { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(-10px) scale(0.95); } }
+
+        .empty {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 3rem 1rem; color: var(--text-muted); text-align: center; gap: 0.5rem;
+        }
+    </style>
+</head>
+<body class="bg-[var(--bg-primary)] text-[var(--text-primary)] min-h-screen">
+
+    {% import "_macros.html" as ui %}
+{% set actions %}
+{% endset %}
+{% set page_info %}
+        <p style="margin-bottom:0.75rem">Are your programs <strong>actually working</strong> — not just running, but answering? This page watches them and tells you when that changes.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li>Each card is one program with a <strong>health check</strong> (a web address, port, or command the manager probes regularly).</li>
+            <li>When something flips between healthy and broken, the manager sends a message via your <strong>notifications</strong> (phone app, webhook, or email).</li>
+            <li>Nothing here yet? Add a <strong>health_check</strong> block to a service in <strong>config.yaml</strong> — the page explains how.</li>
+        </ul>
+        {% endset %}
+{{ ui.header(
+            title="Health & Notifications",
+            icon="bell-ring",
+            icon_color="var(--accent-green)",
+            actions=actions,
+            current='/notifications',
+            info=page_info,
+        ) }}
+{% set subheader %}
+        <div class="relative flex-1 min-w-[12rem]">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"></i>
+            <input id="filter-service" type="text" placeholder="Filter events by service…" autocomplete="off" style="background:var(--bg-secondary);border:1px solid var(--border-subtle);border-radius:0.5rem;padding:0.5rem 0.875rem 0.5rem 2.25rem;color:var(--text-primary);font-size:0.8125rem;outline:none;width:100%">
+        </div>
+        <select id="filter-state" title="Filter by state" style="background:var(--bg-secondary);border:1px solid var(--border-subtle);border-radius:0.5rem;padding:0.5rem 0.75rem;font-size:0.8125rem;color:var(--text-primary);outline:none">
+            <option value="all">All states</option>
+            <option value="healthy">Healthy</option>
+            <option value="unhealthy">Unhealthy</option>
+            <option value="unknown">Unknown</option>
+        </select>
+        <span id="event-count" class="text-xs text-[var(--text-muted)] font-mono whitespace-nowrap px-2"></span>
+{% endset %}
+{{ ui.subheader(subheader) }}
+<main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6 animate-fade-in" id="summary"></div>
+
+        <div class="animate-fade-in mb-4" style="animation-delay:0.05s">
+            <h2 class="text-sm font-bold text-[var(--text-primary)] mb-2 flex items-center gap-2">
+                <i data-lucide="heart-pulse" class="w-4 h-4"></i>Service states
+            </h2>
+            <div class="table-wrap">
+                <table class="events-table">
+                    <thead>
+                        <tr>
+                            <th style="width:30px"></th>
+                            <th>Service</th>
+                            <th>State</th>
+                            <th>Last detail</th>
+                            <th>Last change</th>
+                        </tr>
+                    </thead>
+                    <tbody id="states-tbody"></tbody>
+                </table>
+                <div id="states-empty" class="empty">
+                    <i data-lucide="inbox" class="w-10 h-10 opacity-40"></i>
+                    <p class="text-sm">No monitored services yet. Add a <code class="font-mono text-[var(--accent-green)]">health_check</code> block to a service in <code class="font-mono text-[var(--accent-green)]">config.yaml</code> to start.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="animate-fade-in" style="animation-delay:0.1s">
+            <h2 class="text-sm font-bold text-[var(--text-primary)] mb-2 flex items-center gap-2">
+                <i data-lucide="history" class="w-4 h-4"></i>Recent events
+            </h2>
+            <div class="table-wrap">
+                <div class="table-scroll">
+                    <table class="events-table">
+                        <thead>
+                            <tr>
+                                <th>Service</th>
+                                <th>Event</th>
+                                <th>State</th>
+                                <th>Detail</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="events-tbody"></tbody>
+                    </table>
+                </div>
+                <div id="events-empty" class="empty">
+                    <i data-lucide="inbox" class="w-10 h-10 opacity-40"></i>
+                    <p class="text-sm">No events yet. Add a <code class="font-mono text-[var(--accent-green)]">health_check</code> block to a service in <code class="font-mono text-[var(--accent-green)]">config.yaml</code> to start.</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="toast-container"></div>
+
+    <script>
+        lucide.createIcons();
+        const socket = io({ transports: ['websocket'], upgrade: false });
+
+        function $(id) { return document.getElementById(id); }
+        function escapeHtml(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        function toast(message, type) {
+            const c = $('toast-container');
+            const t = document.createElement('div');
+            t.className = 'toast ' + (type || 'info');
+            t.textContent = message;
+            c.appendChild(t);
+            setTimeout(() => {
+                t.classList.add('out');
+                setTimeout(() => t.remove(), 200);
+            }, 4000);
+        }
+
+        function formatTime(ts) {
+            if (!ts) return '—';
+            return new Date(ts * 1000).toLocaleString();
+        }
+
+        function renderStates(states) {
+            const tbody = $('states-tbody');
+            const empty = $('states-empty');
+            if (!states || states.length === 0) {
+                tbody.innerHTML = '';
+                empty.style.display = 'flex';
+                return;
+            }
+            empty.style.display = 'none';
+            tbody.innerHTML = states.map(s => {
+                const cls = s.last_state === 'healthy' ? 'healthy' : s.last_state === 'unhealthy' ? 'unhealthy' : 'unknown';
+                const stateBadge = s.last_state === 'healthy'
+                    ? '<span class="badge badge-green">healthy</span>'
+                    : s.last_state === 'unhealthy'
+                        ? '<span class="badge badge-red">unhealthy</span>'
+                        : '<span class="badge badge-gray">unknown</span>';
+                return `<tr>
+                    <td><span class="state-dot ${cls}"></span></td>
+                    <td><code class="font-mono font-semibold">${escapeHtml(s.name)}</code></td>
+                    <td>${stateBadge}</td>
+                    <td class="text-[var(--text-secondary)]">${escapeHtml(s.last_check ? s.last_check.detail : '—')}</td>
+                    <td class="text-[var(--text-muted)] text-xs">${formatTime(s.last_change)}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        let lastEvents = [];
+        function eventMatches(e) {
+            const q = ($('filter-service').value || '').toLowerCase();
+            const st = $('filter-state').value || 'all';
+            if (st !== 'all' && (e.state || '') !== st) return false;
+            if (q && !(e.service || '').toLowerCase().includes(q)) return false;
+            return true;
+        }
+        function renderEvents(events) {
+            lastEvents = events || [];
+            const list = lastEvents.filter(eventMatches);
+            const tbody = $('events-tbody');
+            const empty = $('events-empty');
+            $('event-count').textContent =
+                list.length === lastEvents.length
+                    ? `${lastEvents.length} events`
+                    : `${list.length} / ${lastEvents.length} events`;
+            if (!list.length) {
+                tbody.innerHTML = '';
+                empty.style.display = 'flex';
+                return;
+            }
+            empty.style.display = 'none';
+            tbody.innerHTML = list.map(e => {
+                const badge = e.state === 'healthy' ? 'badge-green' : e.state === 'unhealthy' ? 'badge-red' : 'badge-blue';
+                return `<tr>
+                    <td><code class="font-mono font-semibold">${escapeHtml(e.service)}</code></td>
+                    <td><span class="badge ${badge}">${escapeHtml(e.kind)}</span></td>
+                    <td><span class="badge ${badge}">${escapeHtml(e.state)}</span></td>
+                    <td class="text-[var(--text-secondary)] font-mono text-xs">${escapeHtml(e.detail)}</td>
+                    <td class="text-[var(--text-muted)] text-xs whitespace-nowrap">${formatTime(e.timestamp)}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function renderSummary(states, events) {
+            const healthy = (states || []).filter(s => s.last_state === 'healthy').length;
+            const unhealthy = (states || []).filter(s => s.last_state === 'unhealthy').length;
+            const unknown = (states || []).length - healthy - unhealthy;
+            const totalEvents = (events || []).length;
+            const cards = [
+                { label: 'Healthy', value: healthy, color: 'var(--accent-green)' },
+                { label: 'Unhealthy', value: unhealthy, color: 'var(--accent-red)' },
+                { label: 'Unknown', value: unknown, color: 'var(--text-muted)' },
+                { label: 'Total events', value: totalEvents, color: 'var(--accent-blue)' },
+            ];
+            $('summary').innerHTML = cards.map(c => `
+                <div class="summary-card">
+                    <div class="summary-value" style="color:${c.color}">${c.value}</div>
+                    <div class="summary-label">${c.label}</div>
+                </div>
+            `).join('');
+        }
+
+        async function loadState() {
+            try {
+                const r = await fetch('/api/notifications/state');
+                const data = await r.json();
+                renderStates(data.states);
+                renderEvents(data.events);
+                renderSummary(data.states, data.events);
+                lucide.createIcons();
+            } catch (e) {
+                console.error('load state failed:', e);
+            }
+        }
+
+        // Live updates: receive health events and re-fetch state
+        socket.on('health_event', (e) => {
+            const isFail = e.state === 'unhealthy';
+            toast(`${e.service}: ${e.state} — ${e.detail || 'no detail'}`, isFail ? 'error' : 'success');
+            loadState();
+        });
+
+        let filterDebounce = null;
+        $('filter-service').addEventListener('input', () => {
+            clearTimeout(filterDebounce);
+            filterDebounce = setTimeout(() => renderEvents(lastEvents), 150);
+        });
+        $('filter-state').addEventListener('change', () => renderEvents(lastEvents));
+
+        loadState();
+        setInterval(loadState, 5000);
+    </script>
+</body>
+</html>

@@ -6,14 +6,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Server Services Manager</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
     <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
             --bg-primary: #0a0a0f;
@@ -26,6 +26,8 @@
             --accent-red: #ef4444;
             --accent-yellow: #f59e0b;
             --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --accent-orange: #f97316;
             --text-primary: #f1f5f9;
             --text-secondary: #94a3b8;
             --text-muted: #64748b;
@@ -132,13 +134,9 @@
             animation: status-pulse 2s ease-in-out infinite;
         }
 
-        .glass-effect {
-            background: rgba(18, 18, 26, 0.8);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-        }
-
-        .gradient-border {
+        /* Mobile menu tile — looks like the desktop nav pills but
+           laid out in a grid for finger-friendly tapping. */
+.gradient-border {
             position: relative;
         }
 
@@ -160,54 +158,129 @@
             font-size: 12px;
             line-height: 1.6;
         }
+
+        /* Toggle knob — Tailwind's peer-checked on a nested <span> inside
+           <label> doesn't match (peer ~ sibling selector), so the knob
+           would never slide. The label bg peer-checked works, but the
+           inner span needs an explicit sibling rule. */
+        .peer:checked ~ label + span { transform: translateX(1.25rem); }
+        /* Fallback for the boot toggle which uses green when checked */
+        #boot-toggle:checked ~ label { background: var(--accent-green); border-color: var(--accent-green); }
+
+        /* Modals used by this page (Import, Limits, Palette). The shared
+           _macros.html provides .ui-modal-* but this page uses
+           .modal-overlay/.modal-box (palette/import/limits modals).
+           Without these, the palette renders inline and pushes the
+           page content up. */
+        .modal-overlay {
+            position: fixed; inset: 0; z-index: 60;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+            display: none; align-items: center; justify-content: center;
+            padding: 1rem;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-box {
+            background: var(--bg-card); border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem; padding: 1.5rem;
+            max-width: 28rem; width: 90%;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            max-height: 90vh; overflow-y: auto;
+        }
+        .modal-box h2 { font-size: 1.125rem; font-weight: 700; margin-bottom: 0.5rem; }
+        .modal-box p { font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1rem; line-height: 1.5; }
+        .modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem; }
+        .modal-actions .btn-cancel {
+            padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+            font-size: 0.8125rem; font-weight: 600;
+            background: rgba(255,255,255,0.06); color: var(--text-secondary);
+            border: 1px solid transparent; cursor: pointer;
+        }
+        .modal-actions .btn-cancel:hover { background: rgba(255,255,255,0.1); }
+        .modal-actions .btn-primary {
+            padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+            font-size: 0.8125rem; font-weight: 600;
+            background: var(--accent-blue); color: #fff;
+            border: 1px solid var(--accent-blue); cursor: pointer;
+        }
+        .modal-actions .btn-primary:hover { background: #2563eb; }
+        .modal-error { color: var(--accent-red); font-size: 0.75rem; margin-bottom: 0.75rem; }
+        .search-input {
+            width: 100%; background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle); border-radius: 0.5rem;
+            padding: 0.5rem 0.75rem; font-size: 0.875rem;
+            color: var(--text-primary); outline: none;
+        }
+        .search-input:focus { border-color: var(--accent-blue); }
     </style>
 </head>
 
 <body class="bg-[var(--bg-primary)] text-[var(--text-primary)] h-screen overflow-hidden">
     <div id="app" class="flex flex-col h-screen overflow-hidden">
-        <!-- Header -->
-        <header class="flex-none px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border-subtle)] glass-effect z-10">
-            <div class="flex items-center gap-3">
-                <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
-                    <i data-lucide="layout-dashboard" class="w-5 h-5 text-white"></i>
-                </div>
-                <div>
-                    <h1 class="text-lg sm:text-xl font-bold tracking-tight bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">Server Services Manager</h1>
-                    <p class="text-[var(--text-muted)] text-xs font-medium hidden sm:block">Control Center</p>
-                </div>
+        <!-- Header — uses the shared header macro so the nav is
+             identical to every other page in the app. The dashboard
+             also passes through the home-grown "Add Service" /
+             "Import" / "Export" / "Search" / "Connection status"
+             actions because those are dashboard-only. -->
+        {% import "_macros.html" as ui %}
+        {% set actions %}
+        {% endset %}
+        {% set page_info %}
+        <p style="margin-bottom:0.75rem">This is your home base. Each card here is one <strong>program you asked the manager to run</strong> — a script, server, or tool that keeps going in the background.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li><strong>Start / Stop / Restart</strong> control that program. If it crashes, the manager can restart it by itself.</li>
+            <li><strong>Edit</strong> changes what gets run; <strong>Add Service</strong> registers a new one.</li>
+            <li>The <strong>terminal</strong> below the cards is a real shell on this machine, in as many tabs as you like.</li>
+            <li>Press <strong>Ctrl+K</strong> anywhere to jump to anything in the app.</li>
+        </ul>
+        {% endset %}
+        {{ ui.header(
+            title="Dashboard",
+            icon="layout-dashboard",
+            icon_color="var(--accent-blue)",
+            actions=actions,
+            current='/',
+            info=page_info,
+        ) }}
+        {% set subheader %}
+            <button onclick="openImportModal()"
+                class="btn"
+                title="Import services from JSON export">
+                <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+                <span class="hidden 2xl:inline">Import</span>
+            </button>
+            <a href="/api/programs/export"
+                class="btn"
+                title="Export services as JSON">
+                <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                <span class="hidden 2xl:inline">Export</span>
+            </a>
+            <button onclick="openPalette()" class="btn" title="Command palette (Ctrl+K)">
+                <i data-lucide="command" class="w-3.5 h-3.5"></i>
+                <span class="hidden md:inline text-[11px] font-medium opacity-70">Command + K</span>
+            </button>
+            <a href="/docs/" target="_blank" rel="noopener"
+                class="btn"
+                title="OpenAPI / Swagger UI">
+                <i data-lucide="book-open" class="w-3.5 h-3.5"></i>
+                <span class="hidden 2xl:inline">API</span>
+            </a>
+            <span class="flex-1"></span>
+            <button onclick="openModal()" title="Register a new service to manage"
+                class="btn btn-primary">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">Add Service</span>
+            </button>
+            <div id="connection-status"
+                class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20">
+                <span class="w-2 h-2 rounded-full bg-current status-running"></span>
             </div>
-            <div class="flex items-center gap-2 flex-wrap justify-end">
-                <a href="/monitor"
-                    class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-green)]/10 text-[var(--accent-green)] border border-[var(--accent-green)]/20 rounded-lg hover:bg-[var(--accent-green)]/20 transition-all text-sm font-medium">
-                    <i data-lucide="activity" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Monitor</span>
-                </a>
-                <a href="/control"
-                    class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-orange)]/10 text-[var(--accent-orange)] border border-[var(--accent-orange)]/20 rounded-lg hover:bg-[var(--accent-orange)]/20 transition-all text-sm font-medium">
-                    <i data-lucide="gamepad-2" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Control</span>
-                </a>
-                <button onclick="openFileManager()"
-                    class="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-lg hover:bg-white/10 transition-all text-sm font-medium">
-                    <i data-lucide="folder" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Files</span>
-                </button>
-                <button onclick="openModal()"
-                    class="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all text-sm font-medium shadow-lg shadow-blue-500/25">
-                    <i data-lucide="plus" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Add Service</span>
-                </button>
-                <a href="/logout"
-                    class="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20 rounded-lg hover:bg-[var(--accent-red)]/20 transition-all text-sm font-medium">
-                    <i data-lucide="log-out" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Logout</span>
-                </a>
-                <div id="connection-status"
-                    class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-[var(--accent-red)]/10 text-[var(--accent-red)] border border-[var(--accent-red)]/20">
-                    <span class="w-2 h-2 rounded-full bg-current status-running"></span>
-                </div>
-            </div>
-        </header>
+        {% endset %}
+        {{ ui.subheader(subheader) }}
+
+        <!-- Mobile slide-down menu. Mirrors the desktop nav-bar items
+              so phones don't lose access to any of them.
+              The shared header macro (ui-macros.html) provides
+              the same grid, so we don't repeat it here. -->
 
         <!-- Main Content (Split View) -->
         <div class="flex-1 flex flex-col min-h-0 relative">
@@ -225,21 +298,31 @@
                 <div class="w-12 h-1 rounded-full bg-[var(--border-active)] group-hover:bg-[var(--accent-blue)]/50 transition-colors"></div>
             </div>
 
-            <!-- Terminal Pane (Bottom) -->
-            <div id="terminal-pane" class="h-[280px] min-h-[150px] bg-[var(--bg-primary)] flex flex-col p-3 sm:p-6 pt-2">
+            <!-- Terminal Pane (Bottom). shrink-0 so flexbox never
+                 squishes it back once the services pane hits its floor. -->
+            <div id="terminal-pane" class="h-[280px] min-h-[150px] shrink-0 bg-[var(--bg-primary)] flex flex-col p-3 sm:p-6 pt-2">
                 <section class="flex-1 bg-[var(--bg-card)] rounded-2xl border border-[var(--border-subtle)] overflow-hidden flex flex-col shadow-xl">
                     <div class="flex items-center justify-between border-b border-[var(--border-subtle)] px-3 py-2 shrink-0 bg-[var(--bg-secondary)]">
                         <div class="flex items-center gap-1 overflow-x-auto no-scrollbar" id="terminal-tabs">
                             <!-- Tabs injected here -->
                         </div>
-                        <button onclick="createNewTerminal()"
-                            class="p-2 hover:bg-white/5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-all"
-                            title="New Terminal">
-                            <i data-lucide="plus" class="w-4 h-4"></i>
-                        </button>
+                        <div class="flex items-center gap-1 shrink-0">
+                            <button onclick="toggleTerminalMaximize()" id="terminal-maximize-btn"
+                                class="p-2 hover:bg-white/5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-all"
+                                title="Maximize terminal">
+                                <i data-lucide="maximize-2" class="w-4 h-4"></i>
+                            </button>
+                            <button onclick="createNewTerminal()"
+                                class="p-2 hover:bg-white/5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-all"
+                                title="New Terminal">
+                                <i data-lucide="plus" class="w-4 h-4"></i>
+                            </button>
+                        </div>
                     </div>
                     <div id="terminal-container" class="flex-1 bg-[#0a0a0f] relative">
-                        <!-- Terminals injected here -->
+                        <div id="terminal-hint" class="absolute inset-0 flex items-center justify-center text-[var(--text-muted)] text-sm select-none pointer-events-none">
+                            Click <span class="inline-flex items-center justify-center w-5 h-5 rounded bg-white/10 text-xs font-bold mx-1">+</span> to start a terminal
+                        </div>
                     </div>
                 </section>
             </div>
@@ -248,9 +331,9 @@
     </div>
 
     <!-- Modal -->
-    <div id="modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4 animate-fade-in">
+    <div id="modal" onclick="if(event.target===this) closeModal()" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4 animate-fade-in">
         <div class="bg-[var(--bg-card)] text-[var(--text-primary)] rounded-2xl border border-[var(--border-subtle)] shadow-2xl w-full max-w-md p-6 relative animate-slide-up gradient-border">
-            <button onclick="closeModal()" class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-[var(--text-muted)] hover:bg-white/10 hover:text-[var(--text-primary)] transition-all">
+            <button onclick="closeModal()" title="Close without saving" class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-[var(--text-muted)] hover:bg-white/10 hover:text-[var(--text-primary)] transition-all">
                 <i data-lucide="x" class="w-4 h-4"></i>
             </button>
 
@@ -279,16 +362,58 @@
                         class="w-full bg-[var(--bg-secondary)] rounded-xl border border-[var(--border-subtle)] px-4 py-2.5 text-sm font-mono h-24 focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue)]/20 focus:outline-none transition-all placeholder:text-[var(--text-muted)]"></textarea>
                 </div>
                 <div class="flex items-center gap-3 py-2">
-                    <div class="relative">
+                    <div class="relative inline-block w-10 h-5 flex-shrink-0">
                         <input type="checkbox" id="autostart" checked
                             class="sr-only peer">
-                        <label for="autostart" class="w-10 h-5 bg-[var(--bg-secondary)] rounded-full cursor-pointer peer-checked:bg-[var(--accent-blue)] transition-colors border border-[var(--border-subtle)] peer-checked:border-[var(--accent-blue)]">
-                            <span class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></span>
-                        </label>
+                        <label for="autostart" class="absolute inset-0 w-10 h-5 bg-[var(--bg-secondary)] rounded-full cursor-pointer peer-checked:bg-[var(--accent-blue)] transition-colors border border-[var(--border-subtle)] peer-checked:border-[var(--accent-blue)]"></label>
+                        <span class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5 pointer-events-none"></span>
                     </div>
                     <label for="autostart" class="text-sm text-[var(--text-secondary)]">Auto-start on launch</label>
                 </div>
-                <button type="submit"
+                <div class="flex items-center gap-3 py-2" id="boot-toggle-row" style="display:none">
+                    <div class="relative inline-block w-10 h-5 flex-shrink-0">
+                        <input type="checkbox" id="boot-toggle" class="sr-only peer">
+                        <label for="boot-toggle" class="absolute inset-0 w-10 h-5 bg-[var(--bg-secondary)] rounded-full cursor-pointer peer-checked:bg-[var(--accent-green)] transition-colors border border-[var(--border-subtle)] peer-checked:border-[var(--accent-green)]"></label>
+                        <span class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5 pointer-events-none"></span>
+                    </div>
+                    <div class="flex-1">
+                        <label for="boot-toggle" class="text-sm text-[var(--text-secondary)]">Start at boot (systemd)</label>
+                        <p class="text-[10px] text-[var(--text-muted)]">Creates a systemd unit and runs <code class="font-mono">systemctl enable</code>. Requires your password.</p>
+                    </div>
+                </div>
+                <div class="modal-error" id="boot-error" style="display:none;margin-top:-0.25rem;margin-bottom:0.5rem"></div>
+                <div class="flex items-center gap-3 py-2">
+                    <button type="button" id="limits-btn" title="Cap CPU, memory, and I/O for this service"
+                        class="text-xs px-3 py-1.5 rounded-lg bg-[var(--accent-amber)]/10 border border-[var(--accent-amber)]/30 text-[var(--accent-amber)] hover:bg-[var(--accent-amber)]/20 transition-all flex items-center gap-1.5">
+                        <i data-lucide="gauge" class="w-3.5 h-3.5"></i>
+                        Resource Limits
+                    </button>
+                    <span class="text-[10px] text-[var(--text-muted)]">CPU%, memory, I/O weight, nice, etc.</span>
+                </div>
+                <div class="pt-2 border-t border-[var(--border-subtle)] mt-2">
+                    <div class="flex items-center gap-2 mb-2">
+                        <i data-lucide="calendar-clock" class="w-4 h-4 text-[var(--accent-purple)]"></i>
+                        <label class="text-sm font-semibold text-[var(--text-secondary)]">Schedule (optional)</label>
+                    </div>
+                    <p class="text-[10px] text-[var(--text-muted)] mb-2">Leave empty to run as a long-lived service. Set a cron-style expression to make this a one-shot timer that systemd runs on schedule.</p>
+                    <div class="flex gap-2">
+                        <input type="text" id="schedule" placeholder="hourly, daily, *-*-* *:00/15, Mon..Fri 09:00:00..."
+                            class="flex-1 bg-[var(--bg-secondary)] rounded-xl border border-[var(--border-subtle)] px-3 py-2 text-sm font-mono focus:border-[var(--accent-purple)] focus:ring-2 focus:ring-[var(--accent-purple)]/20 focus:outline-none transition-all placeholder:text-[var(--text-muted)]">
+                        <select id="schedule-preset" title="Insert a schedule preset"
+                            onchange="if(this.value){document.getElementById('schedule').value=this.value;this.value='';}"
+                            class="bg-[var(--bg-secondary)] rounded-xl border border-[var(--border-subtle)] px-3 py-2 text-sm focus:border-[var(--accent-purple)] focus:ring-2 focus:ring-[var(--accent-purple)]/20 focus:outline-none transition-all">
+                            <option value="">Presets…</option>
+                            <option value="minutely">Every minute</option>
+                            <option value="hourly">Every hour</option>
+                            <option value="daily">Every day</option>
+                            <option value="weekly">Every week</option>
+                            <option value="monthly">Every month</option>
+                            <option value="yearly">Every year</option>
+                        </select>
+                    </div>
+                    <p class="text-[10px] text-[var(--text-muted)] mt-1">See <a href="https://www.freedesktop.org/software/systemd/man/latest/systemd.time.html" target="_blank" class="underline">systemd.time(7)</a> for the full grammar.</p>
+                </div>
+                <button type="submit" title="Save this service"
                     class="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white py-3 rounded-xl font-semibold hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg shadow-blue-500/25 btn-glow mt-6">
                     Save Service
                 </button>
@@ -296,11 +421,59 @@
         </div>
     </div>
 
+    <!-- Import Modal -->
+    <div class="modal-overlay" id="import-modal" onclick="if(event.target===this) closeImportModal()">
+        <div class="modal-box">
+            <h2>Import services</h2>
+            <p>Upload a JSON export to add (or replace) the configured services. Drag-and-drop a file or pick one below.</p>
+            <input type="file" id="import-file" accept=".json,application/json" class="block w-full text-sm text-[var(--text-secondary)] file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:bg-[var(--bg-secondary)] file:text-[var(--text-primary)] hover:file:bg-[var(--border-subtle)]" />
+            <div class="modal-error" id="import-error" style="display:none;margin-top:-0.25rem;margin-bottom:0.5rem"></div>
+            <div class="mb-3">
+                <label class="text-xs text-[var(--text-muted)]">Mode</label>
+                <select id="import-mode" class="search-input" style="margin-top:0.25rem">
+                    <option value="merge">Merge — add new, overwrite same-named</option>
+                    <option value="replace">Replace — delete all existing first</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeImportModal()" title="Close without importing">Cancel</button>
+                <button class="btn-primary" id="import-execute" onclick="executeImport()" title="Import services from the pasted JSON">Import</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resource Limits Modal -->
+    <div class="modal-overlay" id="limits-modal" onclick="if(event.target===this) closeLimitsModal()">
+        <div class="modal-box" style="max-width:36rem">
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="mb-0 flex items-center gap-2">
+                    <i data-lucide="gauge" class="w-5 h-5 text-[var(--accent-amber)]"></i>
+                    Resource Limits
+                </h2>
+                <button onclick="closeLimitsModal()" title="Close without saving" class="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <p class="text-sm text-[var(--text-secondary)] mb-3">
+                Set systemd-level resource limits for
+                <span id="limits-program-name" class="font-mono font-semibold text-[var(--accent-amber)]"></span>.
+                Leave a field empty to use the system default. Changes take effect on next start.
+            </p>
+            <div id="limits-fields" class="space-y-2 mb-3"></div>
+            <div class="modal-error" id="limits-error" style="display:none;margin-top:-0.25rem;margin-bottom:0.5rem"></div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeLimitsModal()" title="Close without saving">Cancel</button>
+                <button class="btn-cancel" id="limits-clear" style="color:var(--accent-red)" title="Remove all resource limits">Clear all</button>
+                <button class="btn-primary" id="limits-save" onclick="saveLimits()" title="Apply these resource limits">Save</button>
+            </div>
+        </div>
+    </div>
+
     <!-- File Manager Modal -->
-    <div id="file-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+    <div id="file-modal" onclick="if(event.target===this) closeFileModal()" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
         <div
             class="bg-[var(--bg-card)] text-[var(--text-primary)] rounded-2xl border border-[var(--border-subtle)] shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col relative animate-slide-up gradient-border">
-            <button onclick="closeFileManager()" class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-[var(--text-muted)] hover:bg-white/10 hover:text-[var(--text-primary)] transition-all z-10">
+            <button onclick="closeFileManager()" title="Close the file browser" class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-[var(--text-muted)] hover:bg-white/10 hover:text-[var(--text-primary)] transition-all z-10">
                 <i data-lucide="x" class="w-4 h-4"></i>
             </button>
 
@@ -364,46 +537,149 @@
 
         let isResizing = false;
 
+        // The terminal can cover the whole content area: past the
+        // services pane's content floor the pane is hidden and the
+        // terminal takes everything except the resizer bar (which stays
+        // visible so you can always drag back down).
+        // The services pane has a min-h class so it never collapses under
+        // a small terminal. While dragging/maximizing we relax it inline,
+        // otherwise flexbox clamps the pane and the drag hits a ceiling.
+        const SERVICES_MIN_PX = 250;
+        let terminalMaximized = false;
+        let preMaximizeHeight = null;
+
+        function _fitActiveTerminal() {
+            if (typeof activeTerminalId !== 'undefined' && activeTerminalId && terminals[activeTerminalId]) {
+                const session = terminals[activeTerminalId];
+                session.fitAddon.fit();
+                const dims = session.fitAddon.proposeDimensions();
+                if (dims) {
+                    socket.emit('terminal_resize', { id: activeTerminalId, cols: dims.cols, rows: dims.rows });
+                }
+            }
+        }
+
+        function _fullTerminalHeight() {
+            const containerRect = appContainer.getBoundingClientRect();
+            const resizerH = resizer ? resizer.getBoundingClientRect().height : 12;
+            return containerRect.height - resizerH;
+        }
+
+        function _setTerminalHeight(px) {
+            terminalPane.style.height = `${px}px`;
+            // Fit after layout settles (double rAF), so xterm measures
+            // the real width instead of the pre-layout one.
+            requestAnimationFrame(() => requestAnimationFrame(() => _fitActiveTerminal()));
+        }
+
+        function toggleTerminalMaximize() {
+            const containerRect = appContainer.getBoundingClientRect();
+            const btn = document.getElementById('terminal-maximize-btn');
+            if (!terminalMaximized) {
+                preMaximizeHeight = terminalPane.style.height || '';
+                servicesPane.style.minHeight = '0px';
+                servicesPane.style.display = 'none';
+                _setTerminalHeight(_fullTerminalHeight());
+                terminalMaximized = true;
+                if (btn) {
+                    btn.title = 'Restore terminal size';
+                    btn.innerHTML = '<i data-lucide="minimize-2" class="w-4 h-4"></i>';
+                    lucide.createIcons();
+                }
+            } else {
+                servicesPane.style.display = '';
+                if (preMaximizeHeight) terminalPane.style.height = preMaximizeHeight;
+                else terminalPane.style.removeProperty('height');
+                const cRect = appContainer.getBoundingClientRect();
+                const tH = terminalPane.getBoundingClientRect().height;
+                servicesPane.style.minHeight = (cRect.height - tH >= SERVICES_MIN_PX) ? '' : '0px';
+                terminalMaximized = false;
+                if (btn) {
+                    btn.title = 'Maximize terminal';
+                    btn.innerHTML = '<i data-lucide="maximize-2" class="w-4 h-4"></i>';
+                    lucide.createIcons();
+                }
+                requestAnimationFrame(() => requestAnimationFrame(() => _fitActiveTerminal()));
+            }
+        }
+
+        function _doResize(clientY) {
+            const containerRect = appContainer.getBoundingClientRect();
+            const newTerminalHeight = containerRect.bottom - clientY;
+            const MIN_TERMINAL_HEIGHT = 150;
+            // Full coverage: once the services pane hits its content
+            // floor it can't shrink further and flexbox starts squishing
+            // the terminal back — so past that point hide the pane and
+            // let the terminal take everything except the resizer bar
+            // (which stays visible so you can always drag back down).
+            const FULL_H = _fullTerminalHeight();
+            servicesPane.style.minHeight = '0px';
+            if (newTerminalHeight < MIN_TERMINAL_HEIGHT) return;
+            if (terminalMaximized) {
+                terminalMaximized = false;
+                const btn = document.getElementById('terminal-maximize-btn');
+                if (btn) {
+                    btn.title = 'Maximize terminal';
+                    btn.innerHTML = '<i data-lucide="maximize-2" class="w-4 h-4"></i>';
+                    lucide.createIcons();
+                }
+            }
+            if (newTerminalHeight >= FULL_H) {
+                servicesPane.style.display = 'none';
+                _setTerminalHeight(FULL_H);
+            } else {
+                servicesPane.style.display = '';
+                _setTerminalHeight(newTerminalHeight);
+            }
+        }
+        function _endResize() {
+            isResizing = false;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            if (resizer) resizer.classList.remove('bg-blue-600/20');
+            // If the terminal was dragged back down to a size where the
+            // services pane fits naturally, restore the pane fully.
+            // Otherwise keep the tall state so it sticks.
+            const termH = terminalPane.getBoundingClientRect().height;
+            if (termH < _fullTerminalHeight() - 1) {
+                servicesPane.style.display = '';
+                const containerRect = appContainer.getBoundingClientRect();
+                if (containerRect.height - termH >= SERVICES_MIN_PX) {
+                    servicesPane.style.minHeight = '';
+                }
+            }
+            _fitActiveTerminal();
+        }
+
         if (resizer) {
             resizer.addEventListener('mousedown', (e) => {
                 isResizing = true;
                 document.body.style.cursor = 'row-resize';
+                document.body.style.userSelect = 'none';
                 resizer.classList.add('bg-blue-600/20');
-                e.preventDefault(); // Prevent text selection
+                e.preventDefault();
             });
+            resizer.addEventListener('touchstart', (e) => {
+                isResizing = true;
+                document.body.style.userSelect = 'none';
+                resizer.classList.add('bg-blue-600/20');
+                e.preventDefault();
+            }, { passive: false });
 
             document.addEventListener('mousemove', (e) => {
                 if (!isResizing) return;
-
-                // Calculate new height for terminal pane from bottom
-                const containerRect = appContainer.getBoundingClientRect();
-                const newTerminalHeight = containerRect.bottom - e.clientY;
-
-                // Constraints
-                const MIN_TERMINAL_HEIGHT = 150;
-                const MAX_TERMINAL_HEIGHT = containerRect.height - 150; // Keep space for services
-
-                if (newTerminalHeight >= MIN_TERMINAL_HEIGHT && newTerminalHeight <= MAX_TERMINAL_HEIGHT) {
-                    terminalPane.style.height = `${newTerminalHeight}px`;
-                }
+                _doResize(e.clientY);
             });
+            document.addEventListener('touchmove', (e) => {
+                if (!isResizing) return;
+                _doResize(e.touches[0].clientY);
+            }, { passive: false });
 
             document.addEventListener('mouseup', () => {
-                if (isResizing) {
-                    isResizing = false;
-                    document.body.style.cursor = '';
-                    resizer.classList.remove('bg-blue-600/20');
-
-                    // Trigger resize for terminals to refit
-                    if (typeof activeTerminalId !== 'undefined' && activeTerminalId && terminals[activeTerminalId]) {
-                        const session = terminals[activeTerminalId];
-                        session.fitAddon.fit();
-                        const dims = session.fitAddon.proposeDimensions();
-                        if (dims) {
-                            socket.emit('terminal_resize', { id: activeTerminalId, cols: dims.cols, rows: dims.rows });
-                        }
-                    }
-                }
+                if (isResizing) _endResize();
+            });
+            document.addEventListener('touchend', () => {
+                if (isResizing) _endResize();
             });
         }
     </script>
@@ -416,6 +692,10 @@
         const connectionStatus = document.getElementById('connection-status');
         let programsState = {}; // Store local state like auto-scroll per program
 
+        // Mobile menu toggle is provided by the shared _macros.html
+        // header (window.uiToggleMobileMenu). The dashboard uses the
+        // same shared header now, so the menu logic is in one place.
+
         // Terminal State
         let terminals = {}; // { id: { term: Terminal, fitAddon: FitAddon, container: HTMLElement } }
         let activeTerminalId = null;
@@ -424,9 +704,17 @@
         // Icons initialization
         lucide.createIcons();
 
+        let termsRestored = false;
         socket.on('connect', () => {
             connectionStatus.textContent = 'System Online';
             connectionStatus.className = 'px-3 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-500';
+            // Reattach tabs from before a route change (once per page
+            // load). Server-side the shells never died: create is
+            // idempotent and replays missed output via backlog.
+            if (!termsRestored) {
+                termsRestored = true;
+                restoreTerminals();
+            }
         });
 
         socket.on('disconnect', () => {
@@ -446,19 +734,40 @@
             }
         });
 
+        // Missed-output replay for a reattached tab (route change and
+        // back). Same write path as live output.
+        socket.on('terminal_backlog', (msg) => {
+            const session = terminals[msg.id];
+            if (session && msg.data) {
+                session.term.write(msg.data);
+            }
+        });
+
         socket.on('terminal_closed', (msg) => {
             removeTerminal(msg.id);
         });
 
+        // State-change toasts: server pushes a service_event for
+        // every program transition (running -> failed, etc.). The
+        // toast() helper is defined in the <script> block that
+        // renders toasts (below the modal).
+        socket.on('service_event', (msg) => {
+            const sev = msg.severity || 'info';
+            const map = { info: 'success', warning: 'error', critical: 'error' };
+            const cls = map[sev] || 'success';
+            toast(`${msg.service}: ${msg.message}`, cls);
+        });
+
         function renderPrograms(programs) {
             if (programs.length === 0) {
+                if (grid.querySelector('.col-span-full')) return;
                 grid.innerHTML = `
                     <div class="col-span-full flex flex-col items-center pt-20 animate-fade-in">
                         <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center mb-3 border border-[var(--border-subtle)]">
                             <i data-lucide="server" class="w-7 h-7 text-[var(--accent-blue)]"></i>
                         </div>
                         <h3 class="text-base font-semibold text-[var(--text-primary)] mb-1">No services yet</h3>
-                        <button onclick="openModal()" class="mt-3 flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg shadow-blue-500/25 btn-glow">
+                        <button onclick="openModal()" title="Register your first service" class="mt-3 flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg shadow-blue-500/25 btn-glow">
                             <i data-lucide="plus" class="w-4 h-4"></i>
                             Add Service
                         </button>
@@ -533,11 +842,19 @@
             div.innerHTML = `
                 <div class="p-4 border-b border-[var(--border-subtle)] flex items-center justify-between bg-[var(--bg-secondary)]">
                     <div class="flex items-center gap-3">
-                        <button onclick="toggleCollapse('${p.name}')" class="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-[var(--text-muted)] hover:bg-white/10 hover:text-[var(--text-primary)] transition-all">
+                        <button onclick="toggleCollapse('${p.name}')" title="Expand or collapse this card" class="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-[var(--text-muted)] hover:bg-white/10 hover:text-[var(--text-primary)] transition-all">
                             <i data-lucide="${programsState[p.name].collapsed ? 'chevron-right' : 'chevron-down'}" class="w-4 h-4 collapse-icon"></i>
                         </button>
                         <div class="status-indicator w-2.5 h-2.5 rounded-full ${getStatusIndicatorColor(p.status)}"></div>
                         <h3 class="font-semibold text-[var(--text-primary)]">${p.name}</h3>
+                        ${p.schedule ? `<span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--accent-purple)]/15 text-[var(--accent-purple)] border border-[var(--accent-purple)]/30" title="Runs on systemd timer: ${p.schedule}">
+                            <i data-lucide="calendar-clock" class="w-3 h-3 inline-block mr-0.5"></i>${p.schedule}
+                        </span>
+                        <button onclick="triggerScheduled('${p.name}')"
+                            class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--accent-blue)]/10 text-[var(--accent-blue)] border border-[var(--accent-blue)]/30 hover:bg-[var(--accent-blue)]/20 transition-all flex items-center gap-1"
+                            title="Run the scheduled task now">
+                            <i data-lucide="play" class="w-3 h-3"></i>Run now
+                        </button>` : ''}
                     </div>
                     <div class="status-badge px-3 py-1 rounded-full text-xs font-semibold border uppercase tracking-wider">
                         ${p.status}
@@ -563,6 +880,12 @@
                         </div>
                         <span>Restarts: <span class="restart-count font-semibold text-[var(--text-secondary)]">${p.restart_count}</span></span>
                     </span>
+                    ${p.schedule && p.timer ? `<span class="flex items-center gap-2 text-[var(--text-muted)]" title="Next scheduled run">
+                        <div class="w-6 h-6 rounded-md bg-[var(--accent-purple)]/10 flex items-center justify-center">
+                            <i data-lucide="zap" class="w-3 h-3 text-[var(--accent-purple)]"></i>
+                        </div>
+                        <span class="text-[var(--text-secondary)]">${formatNextRun(p.timer.next_run)}</span>
+                    </span>` : ''}
                 </div>
 
                 <div class="terminal-container flex-1 bg-[#0a0a0f] p-4 overflow-y-auto font-mono text-xs terminal-scroll ${programsState[p.name].collapsed ? 'hidden' : ''}">
@@ -736,17 +1059,17 @@
         }
 
         async function deleteService(name) {
-            if (!confirm(`Are you sure you want to delete service "${name}"?`)) return;
+            if (!await uiConfirm(`Delete service "${name}"?`, 'This cannot be undone.', true)) return;
 
             try {
                 const res = await fetch(`/programs/${name}`, { method: 'DELETE' });
                 if (!res.ok) {
                     const err = await res.json();
-                    alert(err.error || 'Failed to delete');
+                    toast(err.error || 'Failed to delete', 'error');
                 }
                 // UI update will happen via websocket
             } catch (err) {
-                alert(err.message);
+                toast(err.message, 'error');
             }
         }
 
@@ -754,17 +1077,60 @@
             await fetch(`/programs/${name}/${action}`, { method: 'POST' });
         }
 
+        // Run a scheduled program immediately (one-shot start via the
+        // systemd timer). Backend: POST /api/programs/<name>/schedule/trigger
+        // needs the sudo password (never the app login password).
+        async function triggerScheduled(name) {
+            const pw = await uiPromptPassword('Trigger scheduled program', `Enter your sudo password (not the app login) to run "${name}" now.`, 'Run');
+            if (!pw) return;
+            try {
+                const res = await fetch(`/api/programs/${encodeURIComponent(name)}/schedule/trigger`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: pw }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    toast(data.error || 'Failed to trigger', 'error');
+                    return;
+                }
+                toast(`${name}: trigger accepted (${data.detail || 'one-shot started'})`, 'success');
+            } catch (e) {
+                toast('Network error: ' + e.message, 'error');
+            }
+        }
+
+        // Render a human-friendly "Next run" label from a timer_state
+        // dict. `next_run` is a UTC ISO string or null. Returns the
+        // empty string for inactive timers (so the chip doesn't render).
+        function formatNextRun(nextRun) {
+            if (!nextRun) return 'schedule inactive';
+            const t = new Date(nextRun);
+            if (isNaN(t.getTime())) return '';
+            const now = Date.now();
+            const diffMs = t.getTime() - now;
+            if (diffMs < 0) return 'overdue';
+            const sec = Math.floor(diffMs / 1000);
+            if (sec < 60) return `in ${sec}s`;
+            const min = Math.floor(sec / 60);
+            if (min < 60) return `in ${min}m`;
+            const hr = Math.floor(min / 60);
+            if (hr < 24) return `in ${hr}h ${min % 60}m`;
+            const day = Math.floor(hr / 24);
+            return `in ${day}d ${hr % 24}h`;
+        }
+
         async function downloadLogs(name) {
             window.open(`/programs/${name}/logs/download`, '_blank');
         }
 
         async function clearLogs(name) {
-            if (!confirm(`Clear all logs for "${name}"?`)) return;
+            if (!await uiConfirm(`Clear all logs for "${name}"?`, 'This will wipe the in-memory buffer and persisted log file.', true)) return;
             try {
                 const res = await fetch(`/programs/${name}/logs`, { method: 'DELETE' });
                 if (!res.ok) {
                     const err = await res.json();
-                    alert(err.error || 'Failed to clear logs');
+                    toast(err.error || 'Failed to clear logs', 'error');
                 } else {
                     const card = document.getElementById(`card-${name}`);
                     if (card) {
@@ -773,7 +1139,7 @@
                     }
                 }
             } catch (err) {
-                alert(err.message);
+                toast(err.message, 'error');
             }
         }
 
@@ -790,11 +1156,208 @@
             document.getElementById('name').disabled = false;
             document.getElementById('original-name').value = '';
             isEditing = false;
+            document.getElementById('boot-toggle-row').style.display = 'none';
+            document.getElementById('boot-error').style.display = 'none';
         }
 
         function closeModal() {
             modal.classList.add('hidden');
             modal.classList.remove('flex');
+        }
+
+        // ----- Import / Export -----
+        function openImportModal() {
+            document.getElementById('import-modal').classList.add('active');
+            document.getElementById('import-error').style.display = 'none';
+            document.getElementById('import-file').value = '';
+        }
+        function closeImportModal() {
+            document.getElementById('import-modal').classList.remove('active');
+        }
+
+        async function executeImport() {
+            const fileInput = document.getElementById('import-file');
+            const mode = document.getElementById('import-mode').value;
+            const errorEl = document.getElementById('import-error');
+            const btn = document.getElementById('import-execute');
+            errorEl.style.display = 'none';
+            if (!fileInput.files || !fileInput.files[0]) {
+                errorEl.textContent = 'Pick a JSON file first.';
+                errorEl.style.display = 'block';
+                return;
+            }
+            if (mode === 'replace' && !await uiConfirm('Replace all services?', 'Replace will DELETE all existing services. Continue?', true)) {
+                return;
+            }
+            btn.disabled = true;
+            btn.textContent = 'Importing…';
+            try {
+                const text = await fileInput.files[0].text();
+                let data;
+                try { data = JSON.parse(text); }
+                catch (e) {
+                    errorEl.textContent = 'Invalid JSON: ' + e.message;
+                    errorEl.style.display = 'block';
+                    return;
+                }
+                const r = await fetch(`/api/programs/import?mode=${mode}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                });
+                const out = await r.json();
+                if (!r.ok) {
+                    errorEl.textContent = out.error || 'Failed';
+                    errorEl.style.display = 'block';
+                    return;
+                }
+                toast(`Imported ${out.added} (skipped ${out.skipped})`, 'success');
+                closeImportModal();
+                // Reload programs
+                if (typeof loadPrograms === 'function') loadPrograms();
+            } catch (e) {
+                errorEl.textContent = 'Network error: ' + e.message;
+                errorEl.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Import';
+            }
+        }
+
+        // ---- Resource limits ----
+        let _limitsProgramName = '';
+        let _limitsFields = [];
+
+        async function openLimitsModal() {
+            const name = document.getElementById('name').value;
+            const originalName = document.getElementById('original-name').value || name;
+            if (!originalName) {
+                toast('Save the program first, then set limits.', 'info');
+                return;
+            }
+            _limitsProgramName = originalName;
+            document.getElementById('limits-program-name').textContent = originalName;
+            document.getElementById('limits-error').style.display = 'none';
+            const r = await fetch(`/api/programs/${encodeURIComponent(originalName)}/limits`);
+            const data = await r.json();
+            _limitsFields = data.fields || [];
+            const current = data.limits || {};
+            const html = _limitsFields.map(f => `
+                <div class="grid grid-cols-2 gap-2 items-center">
+                    <label class="text-sm text-[var(--text-secondary)]" for="lim-${f.field}">${f.label}</label>
+                    <div>
+                        <input id="lim-${f.field}" data-field="${f.field}" type="text"
+                            value="${(current[f.field] || '').replace(/"/g, '&quot;')}"
+                            placeholder="${f.hint}"
+                            class="search-input w-full">
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('limits-fields').innerHTML = html;
+            document.getElementById('limits-modal').classList.add('open');
+            lucide.createIcons();
+        }
+
+        function closeLimitsModal() {
+            document.getElementById('limits-modal').classList.remove('open');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const clear = document.getElementById('limits-clear');
+            if (clear) {
+                clear.onclick = async () => {
+                    if (!await uiConfirm('Remove resource limits?', 'Remove all resource limits for this service?', true)) return;
+                    // User drop-ins (--user) never need sudo: no password.
+                    const r = await fetch(`/api/programs/${encodeURIComponent(_limitsProgramName)}/limits`, {
+                        method: 'DELETE',
+                    });
+                    const out = await r.json();
+                    if (out.ok) {
+                        toast('Resource limits cleared', 'success');
+                        closeLimitsModal();
+                    } else {
+                        const err = document.getElementById('limits-error');
+                        err.textContent = out.error || 'Failed';
+                        err.style.display = 'block';
+                    }
+                };
+            }
+        });
+
+        async function saveLimits() {
+            const btn = document.getElementById('limits-save');
+            btn.disabled = true;
+            btn.textContent = 'Saving…';
+            document.getElementById('limits-error').style.display = 'none';
+            const limits = {};
+            document.querySelectorAll('#limits-fields input[data-field]').forEach(inp => {
+                limits[inp.dataset.field] = inp.value.trim();
+            });
+            // User drop-ins (--user) never need sudo: no password.
+            try {
+                const r = await fetch(`/api/programs/${encodeURIComponent(_limitsProgramName)}/limits`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ limits }),
+                });
+                const out = await r.json();
+                if (out.ok) {
+                    toast('Resource limits applied', 'success');
+                    closeLimitsModal();
+                } else {
+                    const err = document.getElementById('limits-error');
+                    err.textContent = out.error || 'Failed';
+                    err.style.display = 'block';
+                }
+            } catch (e) {
+                const err = document.getElementById('limits-error');
+                err.textContent = 'Network error: ' + e.message;
+                err.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Save';
+            }
+        }
+
+        async function toggleBoot() {
+            const checkbox = document.getElementById('boot-toggle');
+            const name = document.getElementById('name').value;
+            const originalName = document.getElementById('original-name').value || name;
+            const errorEl = document.getElementById('boot-error');
+            errorEl.style.display = 'none';
+            const enabled = checkbox.checked;
+            // Revert visual until the user provides a password
+            checkbox.checked = !enabled;
+            const password = await uiPromptPassword(
+                enabled ? 'Enable at boot' : 'Disable at boot',
+                `Enter your sudo password (not the app login) to ${enabled ? 'enable' : 'disable'} "${originalName}" at boot.`,
+                enabled ? 'Enable' : 'Disable'
+            );
+            if (!password) {
+                return;  // user cancelled
+            }
+            try {
+                const res = await fetch(`/api/programs/${encodeURIComponent(originalName)}/autostart`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled, password }),
+                });
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    if (data.code === 'permission') {
+                        errorEl.textContent = data.error || 'Wrong password';
+                    } else {
+                        errorEl.textContent = data.error || 'Failed';
+                    }
+                    errorEl.style.display = 'block';
+                    return;
+                }
+                checkbox.checked = enabled;
+                toast(`Boot ${enabled ? 'enabled' : 'disabled'} for ${originalName}`, 'success');
+            } catch (e) {
+                errorEl.textContent = 'Network error: ' + e.message;
+                errorEl.style.display = 'block';
+            }
         }
 
         async function editService(name) {
@@ -820,7 +1383,7 @@
             // Quick fix: I'll implement GET /programs/<name> in app.py
             const pRes = await fetch(`/programs/${name}/config`);
             if (!pRes.ok) {
-                alert("Could not fetch program details");
+                toast("Could not fetch program details", 'error');
                 return;
             }
             const p = await pRes.json();
@@ -836,11 +1399,33 @@
             document.getElementById('cwd').value = p.cwd;
             document.getElementById('autostart').checked = p.autostart;
 
+            // Wire boot toggle
+            document.getElementById('boot-toggle').onchange = toggleBoot;
+
+            // Wire limits button
+            document.getElementById('limits-btn').onclick = openLimitsModal;
+
+            // Show boot toggle for existing services
+            document.getElementById('boot-toggle-row').style.display = 'flex';
+            try {
+                const bRes = await fetch(`/api/programs/${encodeURIComponent(name)}/autostart`);
+                if (bRes.ok) {
+                    const bdata = await bRes.json();
+                    document.getElementById('boot-toggle').checked = !!bdata.autostart;
+                }
+            } catch (e) {
+                document.getElementById('boot-toggle').checked = false;
+            }
+            document.getElementById('boot-error').style.display = 'none';
+
             // Env
             const envStr = Object.entries(p.environment || {})
                 .map(([k, v]) => `${k}=${v}`)
                 .join('\n');
             document.getElementById('environment').value = envStr;
+
+            // Schedule
+            document.getElementById('schedule').value = p.schedule || '';
 
             isEditing = true;
         }
@@ -859,6 +1444,7 @@
                 command: document.getElementById('command').value,
                 cwd: document.getElementById('cwd').value,
                 autostart: document.getElementById('autostart').checked,
+                schedule: document.getElementById('schedule').value.trim(),
                 environment: envDict
             };
 
@@ -875,22 +1461,62 @@
 
                 if (!res.ok) {
                     const err = await res.json();
-                    alert(err.error || 'Failed to save');
+                    toast(err.error || 'Failed to save', 'error');
                 } else {
+                    // If a schedule is set, write the systemd user units
+                    // too. User timers (--user) never need sudo, so no
+                    // password is sent here.
+                    if (data.schedule) {
+                        const schedRes = await fetch(`/api/programs/${data.name}/schedule`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ schedule: data.schedule, enable: true }),
+                        });
+                        if (!schedRes.ok) {
+                            const err = await schedRes.json();
+                            toast('Service saved, but schedule failed: ' + (err.error || 'unknown'), 'error');
+                        }
+                    } else if (isEditing) {
+                        // User cleared a previous schedule — remove units
+                        await fetch(`/api/programs/${data.name}/schedule`, { method: 'DELETE' });
+                    }
                     closeModal();
                 }
             } catch (err) {
-                alert(err.message);
+                toast(err.message, 'error');
             }
         };
     </script>
     <script>
         // Terminal Logic
 
+        // Open tab ids survive route changes in this tab (sessionStorage):
+        // the shell keeps running server-side, and re-emitting
+        // terminal_create reattaches (idempotent) with backlog replay.
+        function saveTermIds() {
+            try {
+                sessionStorage.setItem('ssm-terminals',
+                    JSON.stringify(Object.keys(terminals).slice(-10)));
+            } catch (e) { /* private mode */ }
+        }
+        function restoreTerminals() {
+            let ids = [];
+            try { ids = JSON.parse(sessionStorage.getItem('ssm-terminals') || '[]'); } catch (e) {}
+            ids.filter(id => typeof id === 'string' && !terminals[id]).forEach(id => {
+                terminalCount++;
+                attachTerminal(id, `Terminal ${terminalCount}`);
+            });
+        }
+
         function createNewTerminal() {
             terminalCount++;
             const id = `term-${Date.now()}`;
             const name = `Terminal ${terminalCount}`;
+            attachTerminal(id, name);
+            saveTermIds();
+        }
+
+        function attachTerminal(id, name) {
 
             // Create Tab
             const tab = document.createElement('button');
@@ -936,6 +1562,7 @@
 
             // Store session
             terminals[id] = { term, fitAddon, container, tab };
+            document.getElementById('terminal-hint').classList.add('hidden');
 
             // Handle Input
             term.onData(data => {
@@ -972,15 +1599,24 @@
                 session.tab.classList.remove('bg-white/5', 'text-[var(--text-muted)]', 'border-transparent');
                 session.tab.classList.add('bg-[var(--accent-blue)]/10', 'text-[var(--accent-blue)]', 'border-[var(--accent-blue)]/30');
 
-                // Fit terminal
-                requestAnimationFrame(() => {
+                // Fit terminal after layout settles (double rAF). A single
+                // rAF can fire before the unhidden container has its real
+                // width, leaving xterm cropped until the next manual resize.
+                const fitAndNotify = () => {
                     session.fitAddon.fit();
                     const dims = session.fitAddon.proposeDimensions();
                     if (dims) {
                         socket.emit('terminal_resize', { id, cols: dims.cols, rows: dims.rows });
                     }
+                };
+                requestAnimationFrame(() => requestAnimationFrame(() => {
+                    fitAndNotify();
                     session.term.focus();
-                });
+                }));
+                // Fallback: re-fit once layout/fonts are fully settled.
+                setTimeout(() => {
+                    if (activeTerminalId === id && terminals[id]) fitAndNotify();
+                }, 150);
             }
         }
 
@@ -999,6 +1635,7 @@
             session.term.dispose();
 
             delete terminals[id];
+            saveTermIds();
 
             if (activeTerminalId === id) {
                 activeTerminalId = null;
@@ -1007,6 +1644,9 @@
                 if (keys.length > 0) {
                     switchTab(keys[keys.length - 1]);
                 }
+            }
+            if (Object.keys(terminals).length === 0) {
+                document.getElementById('terminal-hint').classList.remove('hidden');
             }
         }
 
@@ -1054,7 +1694,7 @@
                 renderFiles(data.files);
             } catch (err) {
                 console.error(err);
-                alert(err.message);
+                toast(err.message, 'error');
             }
         }
 
@@ -1145,7 +1785,7 @@
                 fetchFiles(currentPath);
 
             } catch (err) {
-                alert(err.message);
+                toast(err.message, 'error');
             } finally {
                 input.value = ''; // Reset
             }
@@ -1156,6 +1796,233 @@
             window.open(`/api/files/download?path=${encodeURIComponent(path)}`, '_blank');
         }
     </script>
+
+    <!-- Command palette modal -->
+    <div class="modal-overlay" id="palette-modal" style="z-index:80;align-items:flex-start;padding-top:10vh">
+        <div class="modal-box" style="max-width:36rem;padding:0;background:var(--bg-card)">
+            <div class="flex items-center gap-2 px-4 py-3 border-b border-[var(--border-subtle)]">
+                <i data-lucide="search" class="w-4 h-4 text-[var(--text-muted)]"></i>
+                <input id="palette-input" type="text" placeholder="Type a command, page, or service…" class="flex-1 bg-transparent border-0 outline-none text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)]" autocomplete="off">
+                <kbd class="text-[10px] text-[var(--text-muted)] font-mono">esc</kbd>
+            </div>
+            <div id="palette-results" style="max-height:50vh;overflow-y:auto"></div>
+            <div class="px-4 py-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-[10px] text-[var(--text-muted)]">
+                <span><kbd class="font-mono">↑↓</kbd> navigate · <kbd class="font-mono">↵</kbd> select · <kbd class="font-mono">esc</kbd> close</span>
+                <span id="palette-count"></span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            const paletteModal = document.getElementById('palette-modal');
+            const paletteInput = document.getElementById('palette-input');
+            const paletteResults = document.getElementById('palette-results');
+            const paletteCount = document.getElementById('palette-count');
+            let selectedIdx = 0;
+            let currentResults = [];
+
+            function openPalette() {
+                paletteModal.classList.add('active');
+                paletteInput.value = '';
+                paletteInput.focus();
+                runSearch('');
+            }
+            function closePalette() {
+                paletteModal.classList.remove('active');
+            }
+            window.openPalette = openPalette;
+            window.closePalette = closePalette;
+
+            // Keyboard shortcut: Ctrl+K or Cmd+K
+            document.addEventListener('keydown', (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                    e.preventDefault();
+                    if (paletteModal.classList.contains('active')) closePalette();
+                    else openPalette();
+                } else if (e.key === 'Escape' && paletteModal.classList.contains('active')) {
+                    closePalette();
+                } else if (paletteModal.classList.contains('active') && e.key === 'Enter') {
+                    e.preventDefault();
+                    runSelected();
+                } else if (paletteModal.classList.contains('active') && e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    moveSelection(1);
+                } else if (paletteModal.classList.contains('active') && e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    moveSelection(-1);
+                }
+            });
+
+            // Click outside to close
+            paletteModal.addEventListener('click', (e) => {
+                if (e.target === paletteModal) closePalette();
+            });
+
+            let searchTimer = null;
+            paletteInput.addEventListener('input', (e) => {
+                clearTimeout(searchTimer);
+                searchTimer = setTimeout(() => runSearch(e.target.value), 100);
+            });
+
+            function escapeHtml(s) {
+                return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            }
+
+            function kindColor(kind) {
+                if (kind === 'page') return 'badge-blue';
+                if (kind === 'program') return 'badge-green';
+                if (kind === 'system_service') return 'badge-purple';
+                if (kind === 'control') return 'badge-yellow';
+                return 'badge-gray';
+            }
+
+            async function runSearch(q) {
+                try {
+                    const r = await fetch(`/api/palette/search?q=${encodeURIComponent(q)}`);
+                    const data = await r.json();
+                    currentResults = data.results || [];
+                    selectedIdx = 0;
+                    renderResults();
+                } catch (e) {
+                    paletteResults.innerHTML = '<div class="p-4 text-sm text-[var(--text-muted)] text-center">Failed to load.</div>';
+                }
+            }
+
+            function renderResults() {
+                paletteCount.textContent = `${currentResults.length} item${currentResults.length === 1 ? '' : 's'}`;
+                if (currentResults.length === 0) {
+                    paletteResults.innerHTML = '<div class="p-4 text-sm text-[var(--text-muted)] text-center">No matches.</div>';
+                    return;
+                }
+                paletteResults.innerHTML = currentResults.map((r, i) => `
+                    <div class="palette-item flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${i === selectedIdx ? 'bg-[var(--accent-purple)]/15 border-l-2 border-[var(--accent-purple)]' : 'hover:bg-white/5 border-l-2 border-transparent'}" data-idx="${i}">
+                        <span class="badge ${kindColor(r.kind)}">${escapeHtml(r.kind)}</span>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm text-[var(--text-primary)] font-medium truncate">${escapeHtml(r.label)}</div>
+                            ${r.description ? `<div class="text-xs text-[var(--text-muted)] truncate">${escapeHtml(r.description)}</div>` : ''}
+                        </div>
+                    </div>
+                `).join('');
+                paletteResults.querySelectorAll('.palette-item').forEach((el) => {
+                    el.addEventListener('click', () => {
+                        selectedIdx = parseInt(el.dataset.idx, 10);
+                        runSelected();
+                    });
+                    el.addEventListener('mouseenter', () => {
+                        selectedIdx = parseInt(el.dataset.idx, 10);
+                        renderResults();
+                    });
+                });
+            }
+
+            function moveSelection(delta) {
+                if (!currentResults.length) return;
+                selectedIdx = (selectedIdx + delta + currentResults.length) % currentResults.length;
+                renderResults();
+            }
+
+            async function runSelected() {
+                const item = currentResults[selectedIdx];
+                if (!item) return;
+                const run = item.run || {};
+                if (run.type === 'navigate') {
+                    window.location.href = run.url;
+                } else if (run.type === 'action') {
+                    try {
+                        const r = await fetch(run.url, { method: run.method || 'POST' });
+                        if (r.ok) toast(`${item.label} ok`, 'success');
+                        else {
+                            const d = await r.json().catch(() => ({}));
+                            toast(d.error || 'Failed', 'error');
+                        }
+                    } catch (e) { toast('Network error: ' + e.message, 'error'); }
+                } else if (run.type === 'action_with_auth') {
+                    const pw = await uiPromptPassword('Authentication required', `Enter your app login password (not sudo) for "${item.label}".`, 'Confirm');
+                    if (!pw) return;
+                    try {
+                        const body = run.body ? JSON.stringify(run.body) : null;
+                        const r = await fetch(run.url, {
+                            method: run.method || 'POST',
+                            headers: body ? { 'Content-Type': 'application/json' } : {},
+                            body: body,
+                        });
+                        if (r.ok) {
+                            toast(`${item.label} ok`, 'success');
+                            closePalette();
+                        } else {
+                            const d = await r.json().catch(() => ({}));
+                            toast(d.error || 'Failed', 'error');
+                        }
+                    } catch (e) { toast('Network error: ' + e.message, 'error'); }
+                }
+            }
+        })();
+    </script>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed top-4 right-4 z-100 flex flex-col gap-2 pointer-events-none"></div>
+
+    <script>
+        // Toast helper used by SocketIO service_event listener and
+        // other long-lived code paths. The container lives in the
+        // DOM above; we just append a styled chip and animate it in.
+        (function() {
+            const style = document.createElement('style');
+            style.textContent = `
+                #toast-container .toast {
+                    background: var(--bg-card);
+                    border: 1px solid var(--border-subtle);
+                    border-left: 3px solid var(--accent-blue);
+                    border-radius: 0.5rem;
+                    padding: 0.75rem 1rem;
+                    font-size: 0.8125rem;
+                    font-weight: 500;
+                    color: var(--text-primary);
+                    pointer-events: auto;
+                    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+                    animation: fadeIn 0.2s ease-out;
+                    max-width: 24rem;
+                    word-break: break-word;
+                }
+                #toast-container .toast.success { border-left-color: var(--accent-green); }
+                #toast-container .toast.error   { border-left-color: var(--accent-red); }
+                #toast-container .toast.info    { border-left-color: var(--accent-blue); }
+                #toast-container .toast.out     { opacity: 0; transition: opacity 0.2s ease; }
+            `;
+            document.head.appendChild(style);
+        })();
+
+        function toast(message, type) {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            const el = document.createElement('div');
+            el.className = 'toast ' + (type || 'info');
+            el.textContent = message;
+            container.appendChild(el);
+            setTimeout(() => {
+                el.classList.add('out');
+                setTimeout(() => el.remove(), 200);
+            }, 3000);
+        }
+    </script>
+<script>
+
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const ids = [['modal','closeModal'], ['import-modal','closeImportModal'], ['limits-modal','closeLimitsModal'], ['file-modal','closeFileModal']];
+    for (const [id, fn] of ids) {
+        const el = document.getElementById(id);
+        if (el && (!el.classList.contains('hidden') && el.style.display !== 'none' || el.classList.contains('open') || el.classList.contains('active') || el.classList.contains('flex'))) {
+            if (typeof window[fn] === 'function') window[fn]();
+            // fallback hide
+            el.classList.add('hidden'); el.classList.remove('flex','open','active');
+            break;
+        }
+    }
+});
+
+</script>
 </body>
 
 </html>

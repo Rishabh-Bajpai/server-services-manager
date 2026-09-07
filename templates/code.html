@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VS Code - Server Services Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --border-subtle: #1e1e2a;
+            --border-active: #2d2d3a;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-purple: #8b5cf6;
+            --accent-orange: #f97316;
+            --accent-cyan: #06b6d4;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+        * { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        code, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+        body {
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(ellipse at top left, rgba(59, 130, 246, 0.05) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(139, 92, 246, 0.05) 0%, transparent 50%);
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+        .panel-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+        }
+        .btn {
+            display: inline-flex; align-items: center; gap: 0.375rem;
+            padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+            font-size: 0.8125rem; font-weight: 600;
+            background: var(--bg-secondary); border: 1px solid var(--border-subtle);
+            color: var(--text-primary); cursor: pointer;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+        }
+        .btn:hover { background: var(--border-subtle); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--accent-blue); color: #061a30; border-color: var(--accent-blue); }
+        .btn-primary:hover { background: #60a5fa; }
+        .text-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.5rem 0.875rem;
+            color: var(--text-primary);
+            font-size: 0.8125rem; outline: none; width: 100%;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .text-input:focus { border-color: var(--accent-blue); }
+        .badge {
+            display: inline-flex; align-items: center; gap: 0.25rem;
+            padding: 0.125rem 0.5rem; border-radius: 0.375rem;
+            font-size: 0.6875rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .badge-green { background: rgba(16,185,129,0.12); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.25); }
+        .badge-red { background: rgba(239,68,68,0.12); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.25); }
+        .badge-gray { background: rgba(100,116,139,0.12); color: var(--text-secondary); border: 1px solid rgba(100,116,139,0.25); }
+        .empty-state {
+            padding: 2rem 1rem; text-align: center;
+            color: var(--text-muted); font-size: 0.875rem;
+        }
+        #code-frame {
+            width: 100%;
+            border: 0;
+            border-radius: 0.5rem;
+            background: #1e1e1e;
+            flex: 1 1 auto;
+            min-height: 0;
+        }
+        /* Level 2 (wide): only the main header remains — the page
+           subheader is hidden and content goes full-bleed. */
+        .code-wide .ui-subheader { display: none; }
+        /* Level 3 (browser fullscreen) targets the card, so the app
+           header is excluded automatically by the Fullscreen API. */
+        #code-card:fullscreen { margin: 0; border-radius: 0; height: 100dvh; }
+        #code-card { position: relative; }
+        /* Floating way back: lives INSIDE the card so it renders in
+           all three levels — including browser fullscreen, where only
+           the card's subtree is visible. Translucent until hovered. */
+        #float-bar {
+            position: absolute; top: 0.5rem; right: 0.5rem; z-index: 30;
+            display: none; align-items: center; gap: 0.25rem;
+            background: rgba(10, 10, 15, 0.75);
+            border: 1px solid var(--border-active);
+            border-radius: 0.5rem; padding: 0.25rem;
+            backdrop-filter: blur(4px); opacity: 0.65;
+            transition: opacity 0.15s ease;
+        }
+        #float-bar:hover { opacity: 1; }
+        #float-bar .lvl-btn { border-radius: 0.375rem; }
+        .lvl-btn { padding: 0.375rem 0.625rem; font-size: 0.75rem; font-weight: 600; }
+        .lvl-on { background: var(--accent-blue) !important; color: #fff !important; }
+        .lvl-off { background: var(--bg-secondary); color: var(--text-secondary); }
+        .lvl-off:hover { color: var(--text-primary); }
+    </style>
+</head>
+<body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
+    {% import "_macros.html" as ui %}
+    {% set actions %}
+    {% endset %}
+    {% set page_info %}
+        <p style="margin-bottom:0.75rem">A <strong>complete code editor running in your browser</strong> — the same VS Code many developers use daily, editing files directly on this machine.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li>It logs in with <strong>the same password</strong> as this app (synced automatically), and can open Word/Excel-style documents too.</li>
+            <li><strong>Normal / Wide / Full</strong> give the editor more room; F11 is true fullscreen, Esc steps back out.</li>
+            <li>Real editing wants a <strong>keyboard and a wide screen</strong> — on a phone this page says so instead of pretending otherwise.</li>
+        </ul>
+        {% endset %}
+    {{ ui.header(
+        title="VS Code",
+        icon="code",
+        icon_color="var(--accent-blue)",
+        actions=actions,
+        current='/code',
+        info=page_info,
+    ) }}
+    {% set subheader %}
+        <div class="flex items-center gap-1.5 flex-wrap w-full">
+            <span id="code-status" class="badge badge-gray">checking…</span>
+            <button class="btn" id="btn-code-start" onclick="codeAction('start')" title="Start the code-server program">
+                <i data-lucide="play" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">Start</span>
+            </button>
+            <button class="btn" id="btn-code-restart" onclick="codeAction('restart')" title="Restart the code-server program">
+                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">Restart</span>
+            </button>
+            <button class="btn" id="btn-code-stop" onclick="codeAction('stop')" title="Stop the code-server program">
+                <i data-lucide="square" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">Stop</span>
+            </button>
+            <span class="w-px h-6 bg-[var(--border-subtle)] mx-1 hidden md:inline-block"></span>
+            <div class="relative w-44 sm:w-64">
+                <input id="code-path" class="text-input" placeholder="Folder (home-relative)…" title="Open a folder from $HOME in VS Code">
+            </div>
+            <button class="btn btn-primary" onclick="openFolderInput()" title="Open the folder above in VS Code">
+                <i data-lucide="folder-open" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">Open</span>
+            </button>
+            <span class="flex-1"></span>
+            <div class="inline-flex rounded-lg border border-[var(--border-subtle)] overflow-hidden flex-shrink-0" title="View level: normal / wide (header only) / browser fullscreen">
+                <button class="lvl-btn lvl-on" id="lvl-1" onclick="setLevel(1)" title="Normal: VS Code inside the page">Normal</button>
+                <button class="lvl-btn lvl-off" id="lvl-2" onclick="setLevel(2)" title="Wide: VS Code fills the app under the main header">Wide</button>
+                <button class="lvl-btn lvl-off" id="lvl-3" onclick="setLevel(3)" title="Fullscreen: VS Code covers the whole browser (Esc to exit)">Full</button>
+            </div>
+            <a class="btn" id="code-popout" href="#" target="_blank" rel="noopener" title="Open VS Code in a new tab">
+                <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">Pop out</span>
+            </a>
+        </div>
+    {% endset %}
+    {{ ui.subheader(subheader) }}
+    {{ ui.desktop_notice('code', 'VS Code needs a keyboard and a wide screen — for the best view, use a computer. On this device it works for quick peeks only.') }}
+
+    <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6">
+        <section class="panel-card p-3 flex flex-col" id="code-card" style="min-height:60dvh">
+            <div id="code-offline">
+                <div class="empty-state" id="code-offline-text">Checking VS Code Server…</div>
+            </div>
+            <iframe id="code-frame" title="VS Code" style="display:none"></iframe>
+            <div id="float-bar" title="View level (Esc goes back)">
+                <button class="lvl-btn lvl-on" id="flvl-1" onclick="setLevel(1)" title="Normal view">Normal</button>
+                <button class="lvl-btn lvl-off" id="flvl-2" onclick="setLevel(2)" title="Wide view">Wide</button>
+                <button class="lvl-btn lvl-off" id="flvl-3" onclick="setLevel(3)" title="Browser fullscreen (F11)">Full</button>
+            </div>
+        </section>
+        <p class="text-[11px] text-[var(--text-muted)] mt-2" id="code-note">
+            Full VS Code (code-server) with the Office Viewer extension for
+            <span class="font-mono">.docx / .xlsx / .pptx</span>. First visit asks for the
+            code-server password (synced from the app password by
+            <span class="font-mono">install-code-server.sh</span>). Large-file uploads still belong in
+            <a class="text-[var(--accent-blue)] underline" href="/files">/files</a> —
+            code-server's drag/drop upload corrupts 90&nbsp;MB+ files.
+        </p>
+    </main>
+
+    <script>
+        let codeBase = null;   // e.g. http://host:8600
+        let codeTimer = null;
+
+        function api(url, opts = {}) {
+            return fetch(url, {
+                credentials: 'same-origin',
+                ...opts,
+                headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+            }).then(r => r.json().then(j => ({ status: r.status, ok: r.ok, data: j })));
+        }
+
+        function setBadge(state, text) {
+            const b = document.getElementById('code-status');
+            b.className = 'badge ' + (state === 'on' ? 'badge-green' : state === 'off' ? 'badge-red' : 'badge-gray');
+            b.textContent = text;
+        }
+
+        // Size the iframe to the viewport: measured offset from the
+        // top of the frame to the viewport bottom, minus a margin.
+        // No fixed pixel caps — survives header/subheader changes.
+        function fitFrame() {
+            const f = document.getElementById('code-frame');
+            if (!f || f.style.display === 'none') return;
+            const top = f.getBoundingClientRect().top;
+            const h = Math.max(480, Math.floor(window.innerHeight - top - 24));
+            f.style.height = h + 'px';
+        }
+        window.addEventListener('resize', fitFrame);
+
+        function folderUrl(folder) {
+            return codeBase + '/' + (folder ? '?folder=' + encodeURIComponent(folder) : '');
+        }
+
+        function showFrame(url) {
+            const f = document.getElementById('code-frame');
+            document.getElementById('code-offline').style.display = 'none';
+            f.style.display = 'block';
+            if (f.dataset.src !== url) {
+                f.dataset.src = url;
+                f.src = url;
+            }
+            document.getElementById('code-popout').href = url;
+            fitFrame();
+        }
+
+        function showOffline(html) {
+            document.getElementById('code-frame').style.display = 'none';
+            const off = document.getElementById('code-offline');
+            off.style.display = '';
+            document.getElementById('code-offline-text').innerHTML = html;
+        }
+
+        async function refreshStatus() {
+            const params = new URLSearchParams(window.location.search);
+            const rel = params.get('path') || '';
+            const q = rel ? '?path=' + encodeURIComponent(rel) : '';
+            const { status, data } = await api('/api/code/status' + q);
+            if (status >= 400) {
+                setBadge('off', 'error');
+                showOffline('Could not reach the app backend (HTTP ' + status + ').');
+                return;
+            }
+            if (!data.installed) {
+                setBadge('off', 'not installed');
+                showOffline('code-server is not installed on this host.<br>Run <span class="font-mono">bash install-code-server.sh</span> in the app directory, restart the app, and reload.');
+                return;
+            }
+            codeBase = 'http://' + data.host + ':' + data.port;
+            if (data.running) {
+                setBadge('on', 'running');
+                showFrame(folderUrl(data.folder));
+                if (codeTimer) { clearInterval(codeTimer); codeTimer = null; }
+            } else {
+                setBadge('off', 'stopped');
+                showOffline('VS Code Server is installed but not running.<br><br><button class="btn btn-primary" onclick="codeAction(\'start\')" title="Start the VS Code server">Start VS Code</button>');
+                lucide.createIcons();
+            }
+        }
+
+        async function codeAction(action) {
+            setBadge('', action + '…');
+            await api('/programs/code-server/' + action, { method: 'POST', body: '{}' });
+            // Poll until the managed program reports running, then attach.
+            if (codeTimer) clearInterval(codeTimer);
+            codeTimer = setInterval(refreshStatus, 3000);
+            setTimeout(refreshStatus, 1500);
+        }
+
+        function openFolderInput() {
+            const v = document.getElementById('code-path').value.trim();
+            const u = new URL(window.location.href);
+            if (v) u.searchParams.set('path', v);
+            else u.searchParams.delete('path');
+            window.location.href = u.toString();
+        }
+        document.getElementById('code-path').addEventListener('keydown', e => {
+            if (e.key === 'Enter') openFolderInput();
+        });
+
+        // ---- view levels: 1 normal / 2 wide / 3 browser fullscreen ----
+        let level = 1;
+        let preFullLevel = 1;
+        const MAIN_ORIG = document.querySelector('main').className;
+
+        function paintLevels() {
+            // Both button sets: the subheader control and the floating
+            // way-back bar (the subheader is hidden in Wide/Full).
+            for (const n of [1, 2, 3]) {
+                for (const prefix of ['lvl-', 'flvl-']) {
+                    const b = document.getElementById(prefix + n);
+                    if (!b) continue;
+                    b.classList.toggle('lvl-on', n === level);
+                    b.classList.toggle('lvl-off', n !== level);
+                }
+            }
+            // The float bar is the only way back once the subheader
+            // is gone — show it in Wide and Full, hide in Normal.
+            document.getElementById('float-bar').style.display =
+                level >= 2 ? 'flex' : 'none';
+        }
+
+        function setLevel(n) {
+            if (n === 3) {
+                // Fullscreen API needs the user gesture — this click is it.
+                preFullLevel = level >= 3 ? 1 : level;
+                const card = document.getElementById('code-card');
+                try {
+                    const p = (card.requestFullscreen || card.webkitRequestFullscreen || (() => Promise.reject())).call(card);
+                    if (p && p.catch) p.catch(() => setLevel(2));
+                } catch (e) { setLevel(2); return; }
+            } else if (document.fullscreenElement) {
+                document.exitFullscreen().catch(() => {});
+            }
+            level = n;
+            try { localStorage.setItem('ssm-code-level', String(n === 3 ? preFullLevel : n)); } catch (e) {}
+            document.body.classList.toggle('code-wide', n >= 2);
+            const main = document.querySelector('main');
+            const note = document.getElementById('code-note');
+            if (n >= 2) {
+                main.className = 'w-full px-2 py-2';
+                if (note) note.style.display = 'none';
+            } else {
+                main.className = MAIN_ORIG;
+                if (note) note.style.display = '';
+            }
+            paintLevels();
+            fitFrame();
+        }
+
+        // Esc (or any native exit) drops back to the pre-fullscreen level.
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement && level === 3) setLevel(preFullLevel);
+        });
+
+        // Keyboard way back: F11 toggles browser fullscreen, Esc steps
+        // Wide back to Normal. Skipped while typing in a field — and
+        // keystrokes focused inside the VS Code iframe never reach us,
+        // so normal IDE shortcuts there are unaffected.
+        document.addEventListener('keydown', e => {
+            const tag = (document.activeElement && document.activeElement.tagName) || '';
+            if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag)) return;
+            if (e.key === 'F11') {
+                e.preventDefault();
+                if (level === 3 && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+                else setLevel(3);
+            } else if (e.key === 'Escape' && level === 2) {
+                setLevel(1);
+            }
+        });
+
+        // This page is same-origin safe to embed: code-server sends no
+        // X-Frame-Options / frame-ancestors, and same-site (same host,
+        // different port) keeps its password cookie working in-frame.
+        lucide.createIcons();
+        try {
+            const saved = parseInt(localStorage.getItem('ssm-code-level') || '1', 10);
+            if (saved === 2) setLevel(2);  // 3 needs a fresh gesture; 2 is the closest
+        } catch (e) {}
+        refreshStatus();
+    </script>
+</body>
+</html>

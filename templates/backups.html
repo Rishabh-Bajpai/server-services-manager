@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backups - Server Services Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #16161f;
+            --border-subtle: #1e1e2a;
+            --border-active: #2d2d3a;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --accent-orange: #f97316;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+        }
+        * { font-family: 'Space Grotesk', system-ui, sans-serif; }
+        code, .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace !important; }
+        body {
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(ellipse at top left, rgba(59, 130, 246, 0.04) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(16, 185, 129, 0.04) 0%, transparent 50%);
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        .badge {
+            display: inline-flex; align-items: center; gap: 0.25rem;
+            padding: 0.125rem 0.5rem; border-radius: 0.375rem;
+            font-size: 0.6875rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .badge-green { background: rgba(16,185,129,0.12); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.25); }
+        .badge-red { background: rgba(239,68,68,0.12); color: var(--accent-red); border: 1px solid rgba(239,68,68,0.25); }
+        .badge-blue { background: rgba(59,130,246,0.12); color: var(--accent-blue); border: 1px solid rgba(59,130,246,0.25); }
+        .badge-yellow { background: rgba(245,158,11,0.12); color: var(--accent-yellow); border: 1px solid rgba(245,158,11,0.25); }
+        .badge-purple { background: rgba(139,92,246,0.12); color: var(--accent-purple); border: 1px solid rgba(139,92,246,0.25); }
+        .badge-gray { background: rgba(100,116,139,0.12); color: var(--text-secondary); border: 1px solid rgba(100,116,139,0.25); }
+        .panel-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+        }
+        .btn {
+            display: inline-flex; align-items: center; gap: 0.375rem;
+            padding: 0.5rem 0.875rem; border-radius: 0.5rem;
+            font-size: 0.8125rem; font-weight: 600;
+            background: var(--bg-secondary); border: 1px solid var(--border-subtle);
+            color: var(--text-primary); cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .btn:hover { background: var(--border-subtle); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--accent-blue); color: #061a30; border-color: var(--accent-blue); }
+        .btn-primary:hover { background: #60a5fa; }
+        .btn-success { background: rgba(16,185,129,0.15); color: var(--accent-green); border-color: rgba(16,185,129,0.3); }
+        .btn-success:hover { background: rgba(16,185,129,0.25); }
+        .btn-danger { background: rgba(239,68,68,0.15); color: var(--accent-red); border-color: rgba(239,68,68,0.3); }
+        .btn-danger:hover { background: rgba(239,68,68,0.25); }
+        .select-input, .text-input {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.5rem 0.875rem;
+            color: var(--text-primary);
+            font-size: 0.8125rem; outline: none; width: 100%;
+        }
+        .select-input:focus, .text-input:focus { border-color: var(--accent-blue); }
+        /* Offset measured live: table top sits ~213px below the
+           viewport top, so this ends the table ~47px above the
+           bottom edge. */
+        .table-wrap {
+            overflow-x: auto;
+            overflow-y: auto;
+            max-height: calc(100dvh - 260px);
+            overscroll-behavior: contain;
+        }
+        .data-table { width: 100%; min-width: 640px; table-layout: fixed; border-collapse: collapse; }
+        .data-table th {
+            text-align: left; font-size: 0.6875rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.05em;
+            color: var(--text-muted); padding: 0.625rem 0.875rem;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-subtle);
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+        .data-table td {
+            padding: 0.625rem 0.875rem;
+            border-bottom: 1px solid var(--border-subtle);
+            font-size: 0.8125rem; color: var(--text-primary);
+            vertical-align: middle;
+        }
+        .data-table tbody tr:hover td { background: rgba(255,255,255,0.02); }
+        .modal-backdrop {
+            position: fixed; inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 50;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .modal-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            max-width: 32rem;
+            width: 90%;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .empty-state {
+            text-align: center; padding: 3rem 1.5rem;
+            color: var(--text-muted);
+        }
+        .toast-container {
+            position: fixed; top: 1rem; right: 1rem;
+            z-index: 100; display: flex; flex-direction: column; gap: 0.5rem;
+        }
+        .toast {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem; font-size: 0.8125rem;
+            color: var(--text-primary);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            animation: fadeIn 0.2s ease-out;
+        }
+        .toast.success { border-left: 3px solid var(--accent-green); }
+        .toast.error { border-left: 3px solid var(--accent-red); }
+        .toast.info { border-left: 3px solid var(--accent-blue); }
+        .row-flash { animation: fadeIn 0.4s ease-out; }
+        @keyframes sk { 0%,100%{opacity:.4} 50%{opacity:.8} }
+        .sk { display:inline-block; height:14px; border-radius:4px; background:var(--border-subtle); animation:sk 1.5s ease-in-out infinite; }
+    </style>
+</head>
+<body class="text-[var(--text-primary)] min-h-screen bg-[var(--bg-primary)]">
+    {% import "_macros.html" as ui %}
+    {% set actions %}
+    {% endset %}
+    {% set page_info %}
+        <p style="margin-bottom:0.75rem">Automatic <strong>safety copies</strong> of your folders and databases, stored on this machine's own disk.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li>Each job copies a folder (or database dump) <strong>on a schedule</strong> — daily, hourly, whatever you pick.</li>
+            <li><strong>Retention</strong> is how many old copies to keep; older ones are deleted automatically so the disk doesn't fill up.</li>
+            <li>The <strong>How to restore</strong> guide at the top explains getting your files back when you need them.</li>
+        </ul>
+        {% endset %}
+    {{ ui.header(
+        title="Backups",
+        icon="archive",
+        icon_color="var(--accent-blue)",
+        badge_html='<span class="badge badge-blue">local disk</span>',
+        actions=actions,
+        current='/backups',
+        info=page_info,
+    ) }}
+    {% set subheader %}
+        <button id="live-btn" class="btn" onclick="toggleLive()" title="Pause live auto-refresh (freezes rows so clicks don't shift)">
+            <i data-lucide="pause" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline" id="live-btn-label">Live</span>
+        </button>
+        <button class="btn btn-primary" onclick="openCreate()" title="Schedule a new backup job">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">New backup</span>
+        </button>
+    {% endset %}
+    {{ ui.subheader(subheader) }}
+
+    <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6 space-y-4">
+        <section class="panel-card">
+            <div class="p-4 border-b border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] space-y-2">
+                <div>Local-disk backups via systemd timers. Each job runs as a oneshot
+                service (tar / mysqldump / pg_dump) on its schedule and prunes
+                old archives beyond the retention count.</div>
+                <details class="text-xs">
+                    <summary class="cursor-pointer text-[var(--accent-blue)] hover:underline font-medium">How to restore from an archive</summary>
+                    <div class="mt-2 space-y-1 text-[var(--text-muted)] leading-relaxed">
+                        <p>Archives are stored in <code class="font-mono">~/.server-services-manager/backups/&lt;job-name&gt;/</code>.</p>
+                        <p><strong>Directory (tar):</strong> <code class="font-mono">tar -xzf &lt;archive&gt;.tar.gz -C /target/restore/path</code></p>
+                        <p><strong>MySQL:</strong> <code class="font-mono">zcat &lt;archive&gt;.sql.gz | mysql -u root -p &lt;database&gt;</code></p>
+                        <p><strong>PostgreSQL:</strong> <code class="font-mono">zcat &lt;archive&gt;.sql.gz | psql -U postgres &lt;database&gt;</code></p>
+                    </div>
+                </details>
+            </div>
+            <div class="table-wrap">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 22%">Name</th>
+                            <th style="width: 12%">Type</th>
+                            <th style="width: 20%">Source</th>
+                            <th style="width: 20%">Destination</th>
+                            <th style="width: 8%">Schedule</th>
+                            <th style="width: 6%">Keep</th>
+                            <th style="width: 8%">Status</th>
+                            <th style="width: 4rem" class="text-right">—</th>
+                        </tr>
+                    </thead>
+                    <tbody id="jobs-tbody">
+                        <tr><td colspan="8" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:20%"></span><span class="sk" style="width:10%;margin-left:1rem"></span><span class="sk" style="width:25%;margin-left:1rem"></span><span class="sk" style="width:15%;margin-left:1rem"></span></div></td></tr>
+                        <tr><td colspan="8" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:15%"></span><span class="sk" style="width:12%;margin-left:1rem"></span><span class="sk" style="width:20%;margin-left:1rem"></span><span class="sk" style="width:18%;margin-left:1rem"></span></div></td></tr>
+                        <tr><td colspan="8" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:25%"></span><span class="sk" style="width:8%;margin-left:1rem"></span><span class="sk" style="width:15%;margin-left:1rem"></span></div></td></tr>
+                        <tr><td colspan="8" class="p-0"><div style="padding:0.625rem 0.875rem"><span class="sk" style="width:10%"></span><span class="sk" style="width:15%;margin-left:1rem"></span><span class="sk" style="width:22%;margin-left:1rem"></span></div></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <!-- Create modal -->
+    <div id="create-modal" onclick="if(event.target===this) closeCreate()" class="modal-backdrop hidden">
+        <div class="modal-card">
+            <h3 class="text-lg font-semibold mb-3">New backup job</h3>
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block mb-1 text-[var(--text-muted)]">Name (id)</label>
+                    <input id="f-name" type="text" class="text-input" placeholder="e.g. weekly-www">
+                </div>
+                <div>
+                    <label class="block mb-1 text-[var(--text-muted)]">Type</label>
+                    <select id="f-type" class="select-input" onchange="onTypeChange()">
+                        <option value="directory">Directory (tar.gz)</option>
+                        <option value="mysql">MySQL database</option>
+                        <option value="postgres">PostgreSQL database</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block mb-1 text-[var(--text-muted)]" id="f-source-label">Source path</label>
+                    <input id="f-source" type="text" class="text-input" placeholder="/var/www">
+                </div>
+                <div>
+                    <label class="block mb-1 text-[var(--text-muted)]">Destination directory</label>
+                    <input id="f-dest" type="text" class="text-input" placeholder="/var/backups">
+                </div>
+                <div>
+                    <label class="block mb-1 text-[var(--text-muted)]">Schedule (OnCalendar)</label>
+                    <select id="f-schedule-preset" class="select-input" onchange="onPresetChange()">
+                        <option value="daily">daily (midnight)</option>
+                        <option value="hourly">hourly</option>
+                        <option value="weekly">weekly (Monday)</option>
+                        <option value="monthly">monthly (1st)</option>
+                        <option value="*:0/15">every 15 minutes</option>
+                        <option value="custom">custom…</option>
+                    </select>
+                    <input id="f-schedule" type="text" class="text-input mt-1 hidden" placeholder="Mon..Fri 09:00:00">
+                </div>
+                <div>
+                    <label class="block mb-1 text-[var(--text-muted)]">Retention (most-recent N kept)</label>
+                    <input id="f-retention" type="number" class="text-input" value="7" min="1" max="365">
+                </div>
+                <div>
+                    <label class="block mb-1 text-[var(--text-muted)]">Sudo password (to enable the timer now)</label>
+                    <input id="f-password" type="password" class="text-input" placeholder="sudo password, optional">
+                </div>
+            </div>
+            <div class="flex gap-2 justify-end mt-4">
+                <button class="btn" onclick="closeCreate()" title="Close without creating">Cancel</button>
+                <button class="btn btn-primary" onclick="submitCreate()" title="Create this backup job">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Run / Delete confirm modal -->
+    <div id="confirm-modal" onclick="if(event.target===this) closeConfirm()" class="modal-backdrop hidden">
+        <div class="modal-card">
+            <h3 class="text-lg font-semibold mb-2" id="confirm-title">Confirm</h3>
+            <p class="text-sm text-[var(--text-secondary)] mb-4" id="confirm-body"></p>
+            <div id="confirm-password-wrap" class="hidden">
+                <label class="block mb-1 text-xs text-[var(--text-muted)]">Sudo password</label>
+                <input id="confirm-password" type="password" class="text-input" placeholder="sudo password (not app login)">
+            </div>
+            <div class="flex gap-2 justify-end mt-4">
+                <button class="btn" onclick="closeConfirm()" title="Close without doing anything">Cancel</button>
+                <button class="btn btn-primary" id="confirm-action" onclick="submitConfirm()" title="Go ahead">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toasts" class="toast-container"></div>
+
+    <script>
+    let jobs = [];
+    let confirmCallback = null;
+
+    function toast(message, kind) {
+        kind = kind || 'info';
+        const el = document.createElement('div');
+        el.className = 'toast ' + kind;
+        el.textContent = message;
+        document.getElementById('toasts').appendChild(el);
+        setTimeout(() => el.remove(), 4000);
+    }
+    function escAttr(s) { return String(s == null ? '' : s).replace(/[<>"&]/g, c => ({'<':'&lt;','>':'&gt;','"':'&quot;','&':'&amp;'}[c])); }
+    function api(path, opts) {
+        return fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts || {}))
+            .then(r => r.json().then(data => ({ ok: r.ok, status: r.status, data })));
+    }
+    function typeBadge(t) {
+        if (t === 'directory') return 'badge-blue';
+        if (t === 'mysql') return 'badge-yellow';
+        if (t === 'postgres') return 'badge-purple';
+        return 'badge-gray';
+    }
+    function onTypeChange() {
+        const t = document.getElementById('f-type').value;
+        const label = document.getElementById('f-source-label');
+        const src = document.getElementById('f-source');
+        if (t === 'directory') {
+            label.textContent = 'Source path';
+            src.placeholder = '/var/www';
+        } else if (t === 'mysql') {
+            label.textContent = 'Database name (mysqldump)';
+            src.placeholder = 'app_db';
+        } else if (t === 'postgres') {
+            label.textContent = 'Database name (pg_dump)';
+            src.placeholder = 'app_db';
+        }
+    }
+    function onPresetChange() {
+        const v = document.getElementById('f-schedule-preset').value;
+        const inp = document.getElementById('f-schedule');
+        if (v === 'custom') {
+            inp.classList.remove('hidden');
+        } else {
+            inp.classList.add('hidden');
+            inp.value = v;
+        }
+    }
+
+    // Badge and buttons follow the LIVE timer state when the status
+    // fetch succeeded; metadata is only the fallback. A job created
+    // without a password was never actually enabled, and only the
+    // live state tells the truth about drift.
+    function liveEnabled(j) {
+        if (j.timer && typeof j.timer.enabled === 'boolean') return j.timer.enabled;
+        return !!j.enabled;
+    }
+    function render() {
+        const tbody = document.getElementById('jobs-tbody');
+        if (!jobs.length) {
+            tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state">No backup jobs yet. Click "New backup" to create one.</div></td></tr>';
+            lucide.createIcons();
+            return;
+        }
+        tbody.innerHTML = jobs.map(j => {
+            const on = liveEnabled(j);
+            const statusBadge = on
+                ? '<span class="badge badge-green">enabled</span>'
+                : '<span class="badge badge-gray">disabled</span>';
+            const t = j.timer || {};
+            const nextRun = t.next_run ? formatNextRun(t.next_run) : '';
+            const lastRun = t.last_run ? formatLastRun(t.last_run) : '';
+            const timerInfo = on && (nextRun || lastRun)
+                ? `<div class="text-[10px] text-[var(--text-muted)] mt-0.5 leading-tight">
+                    ${nextRun ? `<span title="Next scheduled run">${escAttr(nextRun)}</span>` : ''}
+                    ${nextRun && lastRun ? '<br>' : ''}
+                    ${lastRun ? `<span title="Last run">last: ${escAttr(lastRun)}</span>` : ''}
+                </div>`
+                : '';
+            return `<tr>
+                <td>
+                    <div class="font-semibold">${escAttr(j.name)}</div>
+                </td>
+                <td><span class="badge ${typeBadge(j.type)}">${escAttr(j.type)}</span></td>
+                <td class="font-mono text-xs break-all" title="${escAttr(j.source)}">${escAttr(j.source)}</td>
+                <td class="font-mono text-xs break-all" title="${escAttr(j.destination)}">${escAttr(j.destination)}</td>
+                <td class="font-mono text-xs">${escAttr(j.schedule)}</td>
+                <td class="font-mono text-xs">${escAttr(j.retention)}</td>
+                <td>${statusBadge}${timerInfo}</td>
+                <td class="text-right whitespace-nowrap">
+                    <button class="btn" style="padding:0.25rem 0.5rem" onclick="runJob('${escAttr(j.name)}')" title="Run now">
+                        <i data-lucide="play" class="w-3 h-3"></i>
+                    </button>
+                    ${on
+                        ? `<button class="btn" style="padding:0.25rem 0.5rem" onclick="toggleJob('${escAttr(j.name)}', false)" title="Disable"><i data-lucide="pause" class="w-3 h-3"></i></button>`
+                        : `<button class="btn btn-success" style="padding:0.25rem 0.5rem" onclick="toggleJob('${escAttr(j.name)}', true)" title="Enable"><i data-lucide="play-circle" class="w-3 h-3"></i></button>`}
+                    <button class="btn btn-danger" style="padding:0.25rem 0.5rem" onclick="confirmDelete('${escAttr(j.name)}')" title="Delete">
+                        <i data-lucide="trash-2" class="w-3 h-3"></i>
+                    </button>
+                </td>
+            </tr>`;
+        }).join('');
+        lucide.createIcons();
+    }
+
+    function formatNextRun(nextRun) {
+        // ``next_run`` is an ISO 8601 string from systemd, not a Unix
+        // timestamp. Parse and return a friendly relative label.
+        if (!nextRun) return '';
+        const t = new Date(nextRun);
+        if (isNaN(t.getTime())) return '';
+        const now = Date.now();
+        const diffMs = t.getTime() - now;
+        if (diffMs < 0) return 'overdue';
+        const sec = Math.floor(diffMs / 1000);
+        if (sec < 60) return `in ${sec}s`;
+        const min = Math.floor(sec / 60);
+        if (min < 60) return `in ${min}m`;
+        const hr = Math.floor(min / 60);
+        if (hr < 24) return `in ${hr}h ${min % 60}m`;
+        const day = Math.floor(hr / 24);
+        return `in ${day}d ${hr % 24}h`;
+    }
+
+    function formatLastRun(lastRun) {
+        // ``last_run`` is an ISO 8601 string from the journal. Show the
+        // relative time so users can quickly see "ran 4h ago".
+        if (!lastRun) return '';
+        const t = new Date(lastRun);
+        if (isNaN(t.getTime())) return '';
+        const now = Date.now();
+        const diffMs = now - t.getTime();
+        if (diffMs < 0) return 'just now';
+        const sec = Math.floor(diffMs / 1000);
+        if (sec < 60) return `${sec}s ago`;
+        const min = Math.floor(sec / 60);
+        if (min < 60) return `${min}m ago`;
+        const hr = Math.floor(min / 60);
+        if (hr < 24) return `${hr}h ago`;
+        const day = Math.floor(hr / 24);
+        if (day < 30) return `${day}d ago`;
+        const month = Math.floor(day / 30);
+        return `${month}mo ago`;
+    }
+
+    let livePaused = false;
+    function toggleLive() {
+        livePaused = !livePaused;
+        document.getElementById('live-btn-label').textContent = livePaused ? 'Paused' : 'Live';
+        document.getElementById('live-btn').title = livePaused
+            ? 'Resume live auto-refresh'
+            : 'Pause live auto-refresh (freezes rows so clicks don\'t shift)';
+        if (!livePaused) load();
+    }
+
+    let loadSeq = 0;
+    function load() {
+        const mySeq = ++loadSeq;
+        api('/api/backups').then(async ({ data }) => {
+            if (mySeq !== loadSeq) return; // superseded by a newer load
+            jobs = data.jobs || [];
+            // Fetch timer state for each job in parallel so the
+            // table can show "Next run: in 4h 23m" / "last: 2h ago".
+            // A single network blip on one timer shouldn't block the
+            // whole table, so we swallow per-job errors.
+            await Promise.all(jobs.map(async (j) => {
+                try {
+                    const res = await api('/api/backups/' + encodeURIComponent(j.name) + '/status');
+                    if (res.ok) j.timer = res.data.timer || {};
+                } catch (e) { /* leave j.timer undefined */ }
+            }));
+            if (mySeq !== loadSeq) return;
+            render();
+        }).catch(err => {
+            toast('failed to load backups: ' + (err && err.message ? err.message : err), 'error');
+            document.getElementById('jobs-tbody').innerHTML =
+                '<tr><td colspan="8"><div class="empty-state">Could not reach the server. Click New backup or wait for the next refresh.</div></td></tr>';
+        });
+    }
+
+    // NB: modals need the 'open' class too — the shared header
+    // macro emits `.modal-backdrop { display: none }` after this
+    // page's styles, so hidden-only toggling leaves them invisible.
+    function showModal(id) {
+        const el = document.getElementById(id);
+        el.classList.remove('hidden');
+        el.classList.add('open');
+    }
+    function hideModal(id) {
+        const el = document.getElementById(id);
+        el.classList.add('hidden');
+        el.classList.remove('open');
+    }
+    function openCreate() {
+        showModal('create-modal');
+    }
+    function closeCreate() {
+        hideModal('create-modal');
+        document.getElementById('f-password').value = '';
+    }
+    function submitCreate() {
+        const preset = document.getElementById('f-schedule-preset').value;
+        const custom = document.getElementById('f-schedule').value;
+        const password = document.getElementById('f-password').value;
+        document.getElementById('f-password').value = '';
+        const body = {
+            name: document.getElementById('f-name').value.trim(),
+            type: document.getElementById('f-type').value,
+            source: document.getElementById('f-source').value.trim(),
+            destination: document.getElementById('f-dest').value.trim(),
+            schedule: preset === 'custom' ? custom : preset,
+            retention: parseInt(document.getElementById('f-retention').value, 10) || 7,
+            password: password,
+        };
+        if (!body.name) { toast('name is required', 'error'); return; }
+        if (!body.schedule) { toast('schedule is required', 'error'); return; }
+        const btns = document.querySelectorAll('#create-modal .btn-primary');
+        btns.forEach(b => b.disabled = true);
+        api('/api/backups', { method: 'POST', body: JSON.stringify(body) })
+            .then(({ ok, data }) => {
+                if (!ok) { toast(data.error || 'create failed', 'error'); return; }
+                if (data.warning) toast('created: ' + data.warning, 'info');
+                else toast('backup job created', 'success');
+                closeCreate();
+                load();
+            })
+            .catch(err => toast('failed: ' + (err && err.message ? err.message : err), 'error'))
+            .finally(() => btns.forEach(b => b.disabled = false));
+    }
+
+    async function toggleJob(name, enable) {
+        const url = enable ? '/api/backups/' + name + '/enable' : '/api/backups/' + name + '/disable';
+        const pw = await uiPromptPassword(
+            (enable ? 'Enable' : 'Disable') + ' backup job',
+            `Enter your sudo password (not the app login) to ${enable ? 'enable' : 'disable'} "${name}".`,
+            enable ? 'Enable' : 'Disable'
+        );
+        if (!pw) return;
+        api(url, { method: 'POST', body: JSON.stringify({ password: pw }) })
+            .then(({ ok, data }) => {
+                if (!ok) { toast(data.error || 'failed', 'error'); return; }
+                toast((enable ? 'enabled ' : 'disabled ') + name, 'success');
+                load();
+            })
+            .catch(err => toast('failed: ' + (err && err.message ? err.message : err), 'error'));
+    }
+    async function runJob(name) {
+        const pw = await uiPromptPassword('Run backup now', `Enter your sudo password (not the app login) to run "${name}" now.`, 'Run');
+        if (!pw) return;
+        api('/api/backups/' + name + '/run', { method: 'POST', body: JSON.stringify({ password: pw }) })
+            .then(({ ok, data }) => {
+                if (!ok) { toast(data.error || 'failed', 'error'); return; }
+                toast('started ' + name, 'success');
+            })
+            .catch(err => toast('failed: ' + (err && err.message ? err.message : err), 'error'));
+    }
+    function confirmDelete(name) {
+        document.getElementById('confirm-title').textContent = 'Delete backup job?';
+        document.getElementById('confirm-body').textContent = `Permanently remove "${name}" and disable its timer?`;
+        document.getElementById('confirm-password-wrap').classList.add('hidden');
+        document.getElementById('confirm-action').textContent = 'Delete';
+        document.getElementById('confirm-action').className = 'btn btn-danger';
+        confirmCallback = () => {
+            api('/api/backups/' + encodeURIComponent(name), { method: 'DELETE' })
+                .then(({ ok, data }) => {
+                    if (!ok) { toast(data.error || 'delete failed', 'error'); return; }
+                    if (data.warning) toast('deleted ' + name + ': ' + data.warning, 'info');
+                    else toast('deleted ' + name, 'success');
+                    closeConfirm();
+                    load();
+                })
+                .catch(err => toast('failed: ' + (err && err.message ? err.message : err), 'error'));
+        };
+        showModal('confirm-modal');
+    }
+    function closeConfirm() {
+        hideModal('confirm-modal');
+        confirmCallback = null;
+    }
+    function submitConfirm() {
+        if (confirmCallback) confirmCallback();
+    }
+
+    lucide.createIcons();
+    load();
+    setInterval(() => { if (!livePaused) load(); }, 30000);
+    </script>
+<script>
+
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const c = document.getElementById('create-modal');
+    const k = document.getElementById('confirm-modal');
+    if (c && !c.classList.contains('hidden')) { if(typeof closeCreate==='function') closeCreate(); return; }
+    if (k && !k.classList.contains('hidden')) { if(typeof closeConfirm==='function') closeConfirm(); return; }
+});
+
+</script>
+</body>
+</html>
