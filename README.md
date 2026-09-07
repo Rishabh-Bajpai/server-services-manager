@@ -132,19 +132,29 @@ journalctl --user -u server-services-manager -f
 
 ### Desktop
 
-| Dashboard | System Monitor | Control Panel | System Services |
-|-----------|---------------|---------------|-----------------|
-| ![Desktop](resources/dashboard-desktop.png) | ![Monitor](resources/monitor-desktop.png) | ![Control](resources/control-desktop.png) | ![System](resources/system-services-desktop.png) |
+<p align="center">
+  <img src="resources/dashboard-desktop.png" alt="Dashboard" width="24%"/>
+  <img src="resources/monitor-desktop.png" alt="System Monitor" width="24%"/>
+  <img src="resources/control-desktop.png" alt="Control Panel" width="24%"/>
+  <img src="resources/system-services-desktop.png" alt="System Services" width="24%"/>
+</p>
 
-| Cron Jobs | Notifications | Activity | Command Palette |
-|-----------|---------------|----------|-----------------|
-| ![Cron](resources/cron-desktop.png) | ![Notifications](resources/notifications-desktop.png) | ![Activity](resources/activity-desktop.png) | ![Palette](resources/palette-desktop.png) |
+<p align="center">
+  <img src="resources/cron-desktop.png" alt="Cron Jobs" width="24%"/>
+  <img src="resources/notifications-desktop.png" alt="Notifications" width="24%"/>
+  <img src="resources/activity-desktop.png" alt="Activity" width="24%"/>
+  <img src="resources/palette-desktop.png" alt="Command Palette" width="24%"/>
+</p>
 
 ### Mobile
 
-| Dashboard | System Monitor | Control Panel | System Services | Cron Jobs |
-|-----------|---------------|---------------|-----------------|-----------|
-| ![Dashboard Mobile](resources/dashboard-mobile.png) | ![Monitor Mobile](resources/monitor-mobile.png) | ![Control Mobile](resources/control-mobile.png) | ![System Mobile](resources/system-services-mobile.png) | ![Cron Mobile](resources/cron-mobile.png) |
+<p align="center">
+  <img src="resources/dashboard-mobile.png" alt="Dashboard Mobile" width="19%"/>
+  <img src="resources/monitor-mobile.png" alt="Monitor Mobile" width="19%"/>
+  <img src="resources/control-mobile.png" alt="Control Mobile" width="19%"/>
+  <img src="resources/system-services-mobile.png" alt="System Mobile" width="19%"/>
+  <img src="resources/cron-mobile.png" alt="Cron Mobile" width="19%"/>
+</p>
 
 ## Configuration
 
