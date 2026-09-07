@@ -224,12 +224,22 @@
         {% import "_macros.html" as ui %}
         {% set actions %}
         {% endset %}
+        {% set page_info %}
+        <p style="margin-bottom:0.75rem">This is your home base. Each card here is one <strong>program you asked the manager to run</strong> — a script, server, or tool that keeps going in the background.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li><strong>Start / Stop / Restart</strong> control that program. If it crashes, the manager can restart it by itself.</li>
+            <li><strong>Edit</strong> changes what gets run; <strong>Add Service</strong> registers a new one.</li>
+            <li>The <strong>terminal</strong> below the cards is a real shell on this machine, in as many tabs as you like.</li>
+            <li>Press <strong>Ctrl+K</strong> anywhere to jump to anything in the app.</li>
+        </ul>
+        {% endset %}
         {{ ui.header(
             title="Dashboard",
             icon="layout-dashboard",
             icon_color="var(--accent-blue)",
             actions=actions,
             current='/',
+            info=page_info,
         ) }}
         {% set subheader %}
             <button onclick="openImportModal()"

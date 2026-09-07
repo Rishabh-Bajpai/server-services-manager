@@ -109,12 +109,21 @@
                 <span class="hidden sm:inline">Connected</span>
             </span>
 {% endset %}
+{% set page_info %}
+        <p style="margin-bottom:0.75rem">A live health overview of <strong>this machine</strong> — the computer the manager runs on, not the programs it manages.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li><strong>CPU, memory, disks, and network</strong> update every couple of seconds with short history charts.</li>
+            <li><strong>Top processes</strong> shows what's eating resources right now; click a column to sort, and <strong>Pause</strong> freezes the list so you can read it.</li>
+            <li>Numbers here come straight from the operating system, so they always match tools like <strong>top</strong>.</li>
+        </ul>
+        {% endset %}
 {{ ui.header(
             title="System Monitor",
             icon="activity",
             icon_color="var(--accent-green)",
             actions=actions,
             current='/monitor',
+            info=page_info,
         ) }}
 <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6">
         <!-- Top Row: System Info + CPU -->

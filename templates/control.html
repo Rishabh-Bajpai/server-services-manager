@@ -235,12 +235,21 @@
     {% import "_macros.html" as ui %}
 {% set actions %}
 {% endset %}
+{% set page_info %}
+        <p style="margin-bottom:0.75rem">Big friendly buttons for <strong>common jobs on this machine</strong> — things you'd otherwise type in a terminal.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li><strong>Power</strong> buttons (lock, reboot, shutdown…) affect the whole machine. The dangerous ones ask for your password first.</li>
+            <li><strong>System and Network</strong> buttons run quick checks like disk usage or your IP address and show the result below.</li>
+            <li>Your own buttons can be added in <strong>config.yaml</strong> under <strong>commands</strong> — they appear here automatically.</li>
+        </ul>
+        {% endset %}
 {{ ui.header(
             title="Control Panel",
             icon="gamepad-2",
             icon_color="var(--accent-red)",
             actions=actions,
             current='/control',
+            info=page_info,
         ) }}
 <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6">
         <!-- Power Section -->

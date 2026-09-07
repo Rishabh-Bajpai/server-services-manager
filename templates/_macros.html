@@ -45,7 +45,7 @@
    .ui-nav-pill / .ui-nav-tile so they can't collide with
    anything else. The {% raw %} wrapper is required so Jinja's
    lexer doesn't choke on the {{ }} inside the JS. #}
-{% macro header(title, icon, icon_color, badge_id=None, badge_html='', actions='', current='') %}<link rel="icon" type="image/svg+xml" href="/favicon.ico">{% raw %}<style>
+{% macro header(title, icon, icon_color, badge_id=None, badge_html='', actions='', current='', info='') %}<link rel="icon" type="image/svg+xml" href="/favicon.ico">{% raw %}<style>
     .ui-nav-pill {
         display: inline-flex; align-items: center; gap: 0.375rem;
         padding: 0.375rem 0.75rem;
@@ -419,6 +419,35 @@
      window.uiAlert = function(title, desc) {
         return window.uiConfirm(title, desc, false).then(function() {});
     };
+    // Per-page "what is this?" explainer. Each page stores its copy
+    // in a hidden #ui-page-info div (rendered by the header macro
+    // from the page's `info=` argument); this shows it in the shared
+    // modal with a single OK button. Content is author-written
+    // static HTML from the template — never user data.
+    window.uiShowInfo = function() {
+        return new Promise(function(resolve) {
+            var overlay = document.getElementById('ui-modal');
+            var src = document.getElementById('ui-page-info');
+            if (!overlay || !src) { resolve(false); return; }
+            var title = overlay.getAttribute('data-page-title')
+                || document.title.replace(/ - Server Services Manager$/, '');
+            overlay.querySelector('.ui-modal-title').textContent = title;
+            overlay.querySelector('.ui-modal-desc').innerHTML = src.innerHTML;
+            var pwd = overlay.querySelector('#ui-modal-password');
+            if (pwd) pwd.style.display = 'none';
+            var actions = overlay.querySelector('.ui-modal-actions');
+            actions.innerHTML = '';
+            var okBtn = document.createElement('button');
+            okBtn.className = 'ui-btn ui-btn-primary';
+            okBtn.textContent = 'Got it';
+            okBtn.onclick = function() { overlay.classList.remove('open'); resolve(true); };
+            actions.appendChild(okBtn);
+            overlay._resolve = resolve;
+            overlay._cancelValue = true;
+            overlay.classList.add('open');
+            okBtn.focus();
+        });
+    };
     // Shared password prompt modal (replaces native window.prompt()
     // for sudo/app-password entry so the UX matches every page).
     // Resolves with the typed password, or null if cancelled/closed.
@@ -537,6 +566,11 @@
             </a>
         </div>
         <div class="flex items-center gap-2 shrink-0">
+            {% if info %}
+            <button onclick="uiShowInfo()" class="p-2 -m-1 rounded-lg hover:bg-white/5 text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer" style="touch-action:manipulation;min-width:36px;min-height:36px;display:inline-flex;align-items:center;justify-content:center" title="What is this page?" aria-label="About this page">
+                <i data-lucide="info" class="w-5 h-5"></i>
+            </button>
+            {% endif %}
             {{ actions|safe }}
         </div>
         </div>
@@ -554,6 +588,7 @@
         </div>
     </div>
 </header>
+{% if info %}<div id="ui-page-info" style="display:none">{{ info|safe }}</div>{% endif %}
 {% endmacro %}
 
 

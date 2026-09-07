@@ -369,12 +369,21 @@
     {% import "_macros.html" as ui %}
 {% set actions %}
 {% endset %}
+{% set page_info %}
+        <p style="margin-bottom:0.75rem">Every background piece of the operating system — services, timers, sockets — in one searchable list. These are <strong>the machine's own programs</strong>, separate from the ones on your Dashboard.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li>Click a row to open details: status, what it depends on, its settings file, and <strong>live logs</strong>.</li>
+            <li><strong>Start / stop / restart</strong> and on/off-at-boot switches work here. Changing things asks for your password — looking never does.</li>
+            <li>Ticking checkboxes selects several units so you can act on all of them at once.</li>
+        </ul>
+        {% endset %}
 {{ ui.header(
             title="System Services",
             icon="server-cog",
             icon_color="var(--accent-purple)",
             actions=actions,
             current='/system-services',
+            info=page_info,
         ) }}
 {% set subheader %}
         <div id="type-tabs" class="flex flex-wrap items-center gap-1.5">
