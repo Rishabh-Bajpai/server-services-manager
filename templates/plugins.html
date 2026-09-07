@@ -103,7 +103,16 @@
             actions=actions,
             current='/plugins',
         ) }}
-<main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+{% set subheader %}
+    <span class="text-xs text-[var(--text-muted)]">Python files that run inside the app with full access — this page shows what is installed and whether each one loads.</span>
+    <span class="flex-1"></span>
+    <button onclick="load()" class="btn" title="Re-discover from disk (read-only)">
+        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+        <span class="hidden sm:inline">Refresh</span>
+    </button>
+{% endset %}
+{{ ui.subheader(subheader) }}
+<main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6 space-y-4">
             <section class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div class="status-card">
                     <div class="label">Discovered</div>
@@ -120,17 +129,12 @@
             </section>
 
             <section class="panel-card p-4">
-                <div class="flex items-center justify-between mb-3">
-                    <div>
-                        <div class="text-sm font-semibold">Discovered plugins</div>
-                        <div class="text-xs text-[var(--text-muted)]">
-                            One <code class="font-mono text-[var(--text-secondary)]">.py</code> file per plugin in the directory above.
-                            The server picks them up at startup — restart after adding.
-                        </div>
+                <div class="mb-3">
+                    <div class="text-sm font-semibold">Discovered plugins</div>
+                    <div class="text-xs text-[var(--text-muted)]">
+                        One <code class="font-mono text-[var(--text-secondary)]">.py</code> file per plugin in the directory above.
+                        The server picks them up at startup — restart after adding.
                     </div>
-                    <button onclick="load()" class="btn" title="Re-discover from disk (read-only)">
-                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Refresh
-                    </button>
                 </div>
                 <div id="plugin-list" class="space-y-2 max-h-[min(560px,calc(100dvh-280px))] overflow-y-auto overflow-x-hidden overscroll-contain pr-1">
                     <div class="empty-state">Loading…</div>
