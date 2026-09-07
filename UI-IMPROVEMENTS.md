@@ -1637,12 +1637,17 @@ editor and became the file manager:
   jump for text files (shown only for `kind === 'text'`).
   Text stays read-only in preview; no silent
   last-write-wins conflicts with the IDE anymore.
-- **Height overflow fixed:** tree/list/preview panels used
-  a hardcoded `calc(100dvh - 300px)` that overflowed the
-  page. `fitPanels()` now measures each panel's real top
-  to the viewport bottom on load, resize, and late layout
-  shifts. Measured live: all panels end 16px above the
-  viewport bottom (704/720).
+- **Height overflow fixed (twice):** per-panel measured
+  max-heights still overshot by ~99px — columns start at
+  different tops and the grid row stretches to the tallest,
+  so the audit (body 819 vs viewport 720) proved measuring
+  panels individually can never work. Now the grid gets one
+  measured height and flexbox shares it (`minmax(0, 1fr)`
+  row track — without it the fixed-height grid leaves free
+  space undistributed — flex-column cards, `flex:1` inner
+  scrollers, stacked layout below lg). Measured live: body
+  == viewport (720/720, zero page scroll), all columns end
+  16px above the bottom, tree/list scroll internally.
 
 **Verified live** (zero JS errors, `node --check` clean).
 Full suite: 882 passed; secrets clean.

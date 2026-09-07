@@ -93,11 +93,30 @@
             overflow-x: auto;
         }
         .tree-scroll, .items-scroll {
-            /* Fallback cap; fitPanels() sets the exact measured
-               max-height on load + resize so panels never overflow
-               the viewport (the old fixed 300px offset did). */
+            /* Fallback cap for narrow screens (no fixed grid height
+               there — the page scrolls naturally). On desktop the
+               flex rules below take over. */
             max-height: calc(100dvh - 300px);
         }
+        /* Desktop: the grid gets one measured height (viewport minus
+           its on-screen top) and every column shares it via flexbox.
+           Per-panel max-heights can't work — columns start at
+           different tops and the grid row stretches to the tallest
+           one, so the page always overshot by ~100px. */
+        #main-grid { align-items: stretch; grid-template-rows: minmax(0, 1fr); }
+        #tree-panel, #preview-panel, #list-card {
+            display: flex; flex-direction: column;
+            min-height: 0; overflow: hidden;
+        }
+        #center-col { display: flex; flex-direction: column; min-height: 0; }
+        #list-card { flex: 1 1 auto; }
+        #tree, #items-scroll, #preview-pane {
+            flex: 1 1 auto !important;
+            min-height: 0;
+            max-height: none !important;
+        }
+        #tree { overflow-y: auto; }
+        #items-scroll { overflow: auto; }
         .tree-scroll { overflow-y: auto; }
         .items-scroll { overflow: auto; position: relative; }
         .tree {
@@ -381,7 +400,7 @@
     {% endset %}
     {{ ui.subheader(subheader) }}
 
-    <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 py-6">
+    <main class="w-[90%] max-w-[1760px] mx-auto px-4 sm:px-6 pt-6 pb-2">
         <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4" id="main-grid">
             <aside class="panel-card p-3" id="tree-panel">
                 <div class="flex items-center justify-between mb-2">
@@ -400,14 +419,14 @@
                 </div>
             </aside>
 
-            <div class="space-y-3 min-w-0">
+            <div class="space-y-3 min-w-0" id="center-col">
                 <section class="panel-card p-3">
                     <div id="breadcrumb" class="crumb-bar">
                         <span class="empty-state py-1">~</span>
                     </div>
                 </section>
 
-                <section class="panel-card">
+                <section class="panel-card" id="list-card">
                     <div class="p-4 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2 flex-wrap">
                         <h2 class="text-sm font-semibold flex items-center gap-2">
                             <i data-lucide="list" class="w-4 h-4 text-[var(--accent-yellow)]"></i>
@@ -1925,15 +1944,18 @@
             showCtx(e.clientX, e.clientY, 'bg');
         });
 
-        // Measure each scroll panel from its real on-screen top to
-        // the viewport bottom (minus margin). Fixed offsets drift
-        // whenever header content changes and overflow the page.
+        // One measured height for the whole grid (its on-screen top
+        // to the viewport bottom, minus margin); flexbox divides it
+        // among columns. Below lg the cards stack, so no fixed
+        // height there — the page scrolls naturally instead.
+        const WIDE_Q = window.matchMedia('(min-width: 1024px)');
         function fitPanels() {
-            for (const sel of ['.tree-scroll', '.items-scroll', '#preview-pane']) {
-                document.querySelectorAll(sel).forEach(el => {
-                    const top = el.getBoundingClientRect().top;
-                    el.style.maxHeight = Math.max(200, Math.floor(window.innerHeight - top - 16)) + 'px';
-                });
+            const grid = document.getElementById('main-grid');
+            if (WIDE_Q.matches) {
+                const top = grid.getBoundingClientRect().top;
+                grid.style.height = Math.max(300, Math.floor(window.innerHeight - top - 16)) + 'px';
+            } else {
+                grid.style.height = '';
             }
         }
         window.addEventListener('resize', fitPanels);
