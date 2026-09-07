@@ -481,10 +481,19 @@
         <div class="ui-modal-actions"></div>
     </div>
 </div>
-<header class="border-b border-[var(--border-subtle)] bg-[var(--bg-card)]/60 backdrop-blur-md sticky top-0 z-30 h-14">
+<header class="border-b border-[var(--border-subtle)] bg-[var(--bg-card)] sticky top-0 z-30 h-14">
+    {# NOTE: solid bg, not bg-[var(--bg-card)]/60. The Tailwind CDN emits
+       an invalid color for opacity modifiers on var() colors, which
+       computed to fully transparent — page content showed through the
+       sticky header and the mobile menu was unreadable. #}
     <div class="max-w-7xl mx-auto px-4 sm:px-6 h-full flex items-center justify-between gap-3">
         <div class="flex items-center gap-3 shrink-0 min-w-0">
-            <button onclick="uiToggleMobileMenu()" onTouchStart="uiToggleMobileMenu()" class="xl:hidden p-1.5 -ml-1 rounded-lg hover:bg-white/5 text-[var(--text-secondary)]" title="Menu" aria-label="Toggle menu" id="ui-menu-btn">
+            <button onclick="uiToggleMobileMenu()" class="xl:hidden p-2 -ml-2 rounded-lg hover:bg-white/5 text-[var(--text-secondary)] cursor-pointer" style="touch-action:manipulation;min-width:40px;min-height:40px;display:inline-flex;align-items:center;justify-content:center" title="Menu" aria-label="Toggle menu" id="ui-menu-btn">
+                {# NOTE: no ontouchstart here on purpose. HTML lowercases
+                   onTouchStart into a real touchstart listener, so a tap
+                   fired the toggle twice (touchstart opens, synthesized
+                   click closes) and the menu only stayed open on
+                   long-press. onclick alone is correct on mobile. #}
                 <i data-lucide="menu" class="w-5 h-5"></i>
             </button>
             <a href="/" class="flex items-center gap-2 shrink-0" title="Server Services Manager">
@@ -532,7 +541,7 @@
         </div>
         </div>
     {# Mobile slide-down menu (mirrors the desktop nav) #}
-    <div id="ui-mobile-menu" class="xl:hidden hidden border-t border-[var(--border-subtle)] bg-[var(--bg-card)]/95 backdrop-blur-md px-4 py-3 animate-fade-in">
+    <div id="ui-mobile-menu" class="xl:hidden hidden border-t border-[var(--border-subtle)] bg-[var(--bg-card)] px-4 py-3 animate-fade-in">
         <div class="grid grid-cols-3 sm:grid-cols-4 gap-2">
             {{ _ui_nav_primary(current, mobile=True) }}
             {{ _ui_nav_more_items(current, mobile=True) }}
@@ -566,7 +575,7 @@
    The strip wraps on narrow screens and its inputs/buttons use the
    shared component classes, so it looks the same everywhere. #}
 {% macro subheader(children='') %}
-<header class="ui-subheader sticky top-14 z-20 border-b border-[var(--border-subtle)] bg-[var(--bg-card)]/60 backdrop-blur-md">
+<header class="ui-subheader sticky top-14 z-20 border-b border-[var(--border-subtle)] bg-[var(--bg-card)]">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex flex-wrap items-center gap-2">
         {{ children|safe }}
     </div>
@@ -581,6 +590,45 @@
     .ui-subheader .tab-button,
     .ui-subheader .tab-btn { flex-shrink: 0; }
 </style>
+{% endmacro %}
+
+
+{# Dismissible "best on desktop" banner for routes that are
+   inherently desktop-class (e.g. the VS Code iframe, which needs
+   keyboard + precision pointer). Shown only on narrow screens,
+   dismissible per page (localStorage), desktop never sees it.
+
+   Usage:  {{ ui.desktop_notice('code', 'VS Code needs a keyboard and a wide screen. For the best view, use a computer — this page stays usable for quick peeks.') }} #}
+{% macro desktop_notice(page, text) %}
+<div class="ui-desktop-notice hidden" data-desktop-notice="{{ page }}"
+     style="background:rgba(245,158,11,0.08);border-bottom:1px solid rgba(245,158,11,0.3);">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-2 flex items-start gap-2 text-xs text-[var(--text-secondary)]">
+        <i data-lucide="monitor-smartphone" class="w-4 h-4 flex-shrink-0 mt-px text-[var(--accent-yellow)]"></i>
+        <span class="flex-1 leading-relaxed">{{ text }}</span>
+        <button onclick="uiDismissDesktopNotice('{{ page }}')" class="flex-shrink-0 p-1 -m-1 rounded hover:bg-white/5 text-[var(--text-muted)]" title="Dismiss" aria-label="Dismiss">
+            <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+    </div>
+</div>
+{% raw %}<script>
+    window.uiDismissDesktopNotice = function(page) {
+        try { localStorage.setItem('ssm-desktop-notice-' + page, '1'); } catch (e) {}
+        var el = document.querySelector('[data-desktop-notice="' + page + '"]');
+        if (el) el.classList.add('hidden');
+    };
+    (function() {
+        document.querySelectorAll('[data-desktop-notice]').forEach(function(el) {
+            var page = el.getAttribute('data-desktop-notice');
+            var dismissed = false;
+            try { dismissed = localStorage.getItem('ssm-desktop-notice-' + page) === '1'; } catch (e) {}
+            // Narrow screens only (below the lg breakpoint); desktop never sees it.
+            if (!dismissed && window.matchMedia('(max-width: 1023px)').matches) {
+                el.classList.remove('hidden');
+            }
+        });
+        if (window.lucide) lucide.createIcons();
+    })();
+</script>{% endraw %}
 {% endmacro %}
 
 
