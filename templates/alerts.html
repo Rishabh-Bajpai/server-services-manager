@@ -180,6 +180,14 @@
     {% import "_macros.html" as ui %}
     {% set actions %}
     {% endset %}
+    {% set page_info %}
+        <p style="margin-bottom:0.75rem">Every message the manager has <strong>sent you</strong> — about sick programs or services changing state — lands here with a delivery receipt.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li>Each row shows <strong>which channel</strong> carried it (phone app, webhook, email), <strong>whether it arrived</strong>, and how long it took.</li>
+            <li>Use the time buttons and filters to narrow down, and the <strong>per-channel stats</strong> to spot a channel that keeps failing.</li>
+            <li>Think of it as the difference between "the manager shouted" and "somebody heard" — this page proves the second part.</li>
+        </ul>
+        {% endset %}
     {{ ui.header(
         title="Alert History",
         icon="megaphone",
@@ -187,6 +195,7 @@
         badge_html='<span class="badge badge-yellow">notification log</span>',
         actions=actions,
         current='/alerts',
+        info=page_info,
     ) }}
     {% set subheader %}
         <div class="flex gap-1">

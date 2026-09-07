@@ -243,12 +243,21 @@
     {% import "_macros.html" as ui %}
 {% set actions %}
 {% endset %}
+{% set page_info %}
+        <p style="margin-bottom:0.75rem">Cron is the machine's <strong>alarm clock</strong>: a list of commands that run on a schedule (every 5 minutes, nightly, Mondays…). This page shows those entries.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li>The <strong>schedule</strong> column (like <strong>*/5 * * * *</strong>) means minute / hour / day / month / weekday — hover the validator to test your own.</li>
+            <li>The switch turns an entry <strong>on or off</strong> without deleting it. Changing system entries asks for your password.</li>
+            <li>Your personal scheduled tasks live on the <strong>Dashboard</strong> instead — this page is for system-level jobs.</li>
+        </ul>
+        {% endset %}
 {{ ui.header(
             title="Cron Jobs",
             icon="calendar-clock",
             icon_color="var(--accent-yellow)",
             actions=actions,
             current='/cron',
+            info=page_info,
         ) }}
 {% set subheader %}
         <div id="source-tabs" class="flex flex-wrap items-center gap-1.5">

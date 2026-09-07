@@ -139,12 +139,21 @@
     {% import "_macros.html" as ui %}
 {% set actions %}
 {% endset %}
+{% set page_info %}
+        <p style="margin-bottom:0.75rem">Are your programs <strong>actually working</strong> — not just running, but answering? This page watches them and tells you when that changes.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li>Each card is one program with a <strong>health check</strong> (a web address, port, or command the manager probes regularly).</li>
+            <li>When something flips between healthy and broken, the manager sends a message via your <strong>notifications</strong> (phone app, webhook, or email).</li>
+            <li>Nothing here yet? Add a <strong>health_check</strong> block to a service in <strong>config.yaml</strong> — the page explains how.</li>
+        </ul>
+        {% endset %}
 {{ ui.header(
             title="Health & Notifications",
             icon="bell-ring",
             icon_color="var(--accent-green)",
             actions=actions,
             current='/notifications',
+            info=page_info,
         ) }}
 {% set subheader %}
         <div class="relative flex-1 min-w-[12rem]">

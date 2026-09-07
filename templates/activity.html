@@ -154,12 +154,21 @@
     {% import "_macros.html" as ui %}
 {% set actions %}
 {% endset %}
+{% set page_info %}
+        <p style="margin-bottom:0.75rem">A <strong>diary of everything done through this app</strong> — who did what, when, and whether it worked.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li>Starting a service, toggling a cron job, changing firewall rules — it all lands here with a timestamp.</li>
+            <li>Type in the filter boxes to narrow by <strong>action, target, or user</strong>; the <strong>Pause</strong> button freezes the live feed so you can read.</li>
+            <li><strong>CSV</strong> downloads the whole history for your own records.</li>
+        </ul>
+        {% endset %}
 {{ ui.header(
             title="Activity Log",
             icon="history",
             icon_color="var(--accent-purple)",
             actions=actions,
             current='/activity',
+            info=page_info,
         ) }}
 {% set subheader %}
         <input id="action-input" type="text" placeholder="Filter by action…" class="text-input" style="max-width:200px">

@@ -253,6 +253,14 @@
     {% import "_macros.html" as ui %}
     {% set actions %}
     {% endset %}
+    {% set page_info %}
+        <p style="margin-bottom:0.75rem">Keeps the machine's <strong>installed software up to date</strong>, like a phone's app-update screen but for the server.</p>
+        <ul style="list-style:disc;padding-left:1.25rem;display:grid;gap:0.375rem">
+            <li><strong>Updates</strong> lists what's available (security fixes are flagged); tick some and <strong>Install</strong> to apply them in the background.</li>
+            <li><strong>Lookup</strong> searches for a specific package; <strong>History</strong> shows what was installed before.</li>
+            <li>Refreshing the list and installing need <strong>admin rights</strong>, so those actions ask for your password.</li>
+        </ul>
+        {% endset %}
     {{ ui.header(
         title="Package Updates",
         icon="package",
@@ -260,6 +268,7 @@
         badge_id="manager-badge",
         actions=actions,
         current='/packages',
+        info=page_info,
     ) }}
     {% set subheader %}
         <button class="tab-button active" data-tab="updates" onclick="switchTab('updates')">
