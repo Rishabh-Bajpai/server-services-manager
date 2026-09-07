@@ -1,0 +1,62 @@
+# Server Services Manager — example configuration.
+#
+# Copy to config.yaml and edit, or add everything through the web UI
+# (dashboard "Add Service", control-panel commands, /notifications):
+#
+#   cp config.example.yaml config.yaml
+#
+# The schema is lenient: unknown fields are accepted, and everything
+# here is optional — the manager starts fine with an empty file.
+# Programs need an absolute `command` (or one found on $PATH) and an
+# existing `cwd`. See README.md for the full reference.
+
+programs:
+  - name: my-app
+    command: python3 my_app.py
+    cwd: /home/YOU/my_app
+    autostart: false
+    schedule: ""                # optional systemd timer, e.g. "hourly", "Mon..Fri 09:00:00"
+    environment:
+      MY_VAR: value
+    health_check:               # optional: http | tcp | cmd probe
+      type: http
+      target: http://localhost:8080/health
+      interval: 30
+      timeout: 5
+
+  # - name: backup-docs
+  #   command: /usr/local/bin/backup-docs.sh
+  #   cwd: /tmp
+  #   schedule: "daily"
+
+commands:
+  - id: my-update
+    name: "Update System"
+    command: "sudo apt update && sudo apt upgrade -y"
+    icon: refresh-cw
+    auth: true                  # ask for the password before running
+    description: "Update all apt packages"
+
+notifications:
+  - type: ntfy
+    topic: my-alerts
+    # server: https://ntfy.sh   # default; self-hosted also works
+    # priority: default          # min | low | default | high | max
+
+  # - type: webhook
+  #   url: https://example.com/hook
+  #   headers:
+  #     Authorization: Bearer CHANGE-ME
+
+  # - type: telegram
+  #   bot_token: CHANGE-ME
+  #   chat_id: CHANGE-ME
+
+  # - type: email
+  #   host: smtp.example.com
+  #   port: 587
+  #   username: you@example.com
+  #   password: CHANGE-ME
+  #   from_addr: ssm@example.com
+  #   to: [you@example.com]
+  #   use_tls: true
